@@ -2,6 +2,7 @@
   "expo": {
     "name": "Helix",
     "slug": "helix",
+    "owner": "saltymo",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -41,6 +42,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "37ad6fea-d1cd-48e5-97b9-8368b2226cef"
+      }
     }
   }
 }
