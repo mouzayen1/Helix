@@ -1,39 +1,31 @@
-// Today / Home — spec §10.1
-// Greeting, today's protocol, active cycle progress bar, quick actions, insight card.
-import { useRouter } from 'expo-router';
+// Today — spec v2.0 §10 "Today — home". Real data, no mocks.
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HCard, HMetric, HSectionHeader } from '../../components/Primitives';
 import {
   IconBolt,
   IconBook,
+  IconChart,
   IconCheck,
-  IconFlame,
+  IconChevronRight,
+  IconClock,
+  IconCog,
   IconSyringe,
 } from '../../components/Icons';
+import { HCard, HSectionHeader } from '../../components/Primitives';
+import {
+  getActiveCycle,
+  listActiveVials,
+  listDoses,
+  type Cycle,
+  type Dose,
+  type Vial,
+} from '../../lib/db';
+import { findPeptide } from '../../lib/peptides';
+import { useProfile } from '../../lib/profile-context';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
-
-type ScheduledDose = {
-  id: string;
-  name: string;
-  dose: string;
-  time: string;
-  color: string;
-  done: boolean;
-};
-
-const TODAY: ScheduledDose[] = [
-  { id: 'bpc157', name: 'BPC-157', dose: '250 mcg', time: '8:00 AM', color: '#0A8E83', done: true },
-  {
-    id: 'ipamor',
-    name: 'Ipamorelin + CJC-1295',
-    dose: '200 mcg',
-    time: '10:30 PM',
-    color: '#7A4FC9',
-    done: false,
-  },
-];
 
 function formatHeaderDate(d: Date) {
   return d
@@ -42,234 +34,390 @@ function formatHeaderDate(d: Date) {
     .replace(',', ' ·');
 }
 
-export default function HomeScreen() {
+function daysBetween(a: Date, b: Date) {
+  return Math.floor((b.getTime() - a.getTime()) / 864e5);
+}
+
+function greet(d: Date) {
+  const h = d.getHours();
+  if (h < 5) return 'Late night,';
+  if (h < 12) return 'Good morning,';
+  if (h < 18) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
+export default function TodayScreen() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { profile } = useProfile();
 
-  const quickActions = [
-    { label: 'Reconstitute', sub: 'BAC calculator', Icon: IconBolt, dest: '/reconstitute' },
-    { label: 'Site rotation', sub: 'Next: R.Abdomen', Icon: IconSyringe, dest: '/' },
-    { label: 'Journal entry', sub: 'How do you feel?', Icon: IconBook, dest: '/' },
-    { label: 'Learn', sub: '3 new articles', Icon: IconBook, dest: '/library' },
-  ] as const;
+  const [cycle, setCycle] = useState<Cycle | null>(null);
+  const [vials, setVials] = useState<Vial[]>([]);
+  const [todayDoses, setTodayDoses] = useState<Dose[]>([]);
+
+  const refresh = useCallback(async () => {
+    const [c, v] = await Promise.all([getActiveCycle(), listActiveVials()]);
+    setCycle(c);
+    setVials(v);
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const ds = await listDoses({ from: midnight.toISOString(), limit: 20 });
+    setTodayDoses(ds);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
+
+  const displayName = profile?.display_name?.trim() || 'there';
+
+  const cycleView = useMemo(() => {
+    if (!cycle) return null;
+    const start = new Date(cycle.starts_on);
+    const end = new Date(cycle.ends_on);
+    const today = new Date();
+    const total = Math.max(1, daysBetween(start, end));
+    const day = Math.min(total, Math.max(0, daysBetween(start, today)));
+    const pct = Math.round((day / total) * 100);
+    return { day, total, pct, remaining: total - day };
+  }, [cycle]);
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
       contentContainerStyle={{
-        paddingTop: insets.top + 12,
-        paddingBottom: 120,
+        paddingTop: insets.top + space.md,
+        paddingBottom: 140,
       }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Greeting */}
-      <View style={{ paddingHorizontal: space.xl }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: 12,
-                color: t.ink3,
-                letterSpacing: 1.2,
-                fontFamily: font.sansSemi,
-              }}
-            >
-              {formatHeaderDate(new Date())}
-            </Text>
-            <Text
-              style={{
-                fontSize: 32,
-                fontFamily: font.sansBold,
-                color: t.ink,
-                letterSpacing: -0.8,
-                marginTop: 4,
-                lineHeight: 38,
-              }}
-            >
-              Good morning,{'\n'}Alex.
-            </Text>
-          </View>
-          <View
+      {/* Header */}
+      <View
+        style={{
+          paddingHorizontal: space.xl,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: t.surfaceAlt,
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontSize: 11,
+              color: t.ink3,
+              letterSpacing: 1.2,
+              fontFamily: font.sansSemi,
             }}
           >
-            <Text style={{ fontFamily: font.sansSemi, color: t.ink2 }}>A</Text>
-          </View>
+            {formatHeaderDate(new Date())}
+          </Text>
+          <Text
+            style={{
+              fontSize: 28,
+              fontFamily: font.sansBold,
+              color: t.ink,
+              letterSpacing: -0.6,
+              marginTop: 4,
+              lineHeight: 32,
+            }}
+          >
+            {greet(new Date())} {displayName}.
+          </Text>
         </View>
+        <Pressable
+          onPress={() => router.push('/settings')}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: t.surfaceAlt,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          hitSlop={6}
+        >
+          <IconCog size={18} color={t.ink2} />
+        </Pressable>
       </View>
 
-      {/* Today's protocol */}
-      <View style={{ paddingHorizontal: space.xl, marginTop: space.xxl }}>
-        <HCard style={{ padding: space.xl, borderRadius: radius.xl }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: space.md,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1.2,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                }}
-              >
-                Today's protocol
-              </Text>
-              <View
-                style={{
-                  paddingVertical: 2,
-                  paddingHorizontal: 7,
-                  borderRadius: 4,
-                  backgroundColor: t.accentSoft,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 10,
-                    fontFamily: font.sansSemi,
-                    color: t.accentInk,
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  WEEK 4 / 8
-                </Text>
-              </View>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <IconFlame size={14} color={t.warn} />
-              <Text style={{ fontSize: 13, fontFamily: font.monoSemi, color: t.warn }}>23</Text>
-            </View>
-          </View>
-
-          {TODAY.map((d, i) => (
-            <View
-              key={d.id}
+      {/* Cycle + scheduled doses */}
+      {cycle && cycleView ? (
+        <>
+          <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+            <Pressable
+              onPress={() => router.push(`/cycle/${cycle.id}` as any)}
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 14,
-                paddingVertical: 14,
-                borderTopWidth: i === 0 ? 0 : 1,
-                borderTopColor: t.line,
+                backgroundColor: t.surface,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: t.line,
+                padding: space.lg,
               }}
             >
               <View
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  backgroundColor: d.color + '22',
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  marginBottom: space.md,
                 }}
               >
-                <IconSyringe size={18} color={d.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>
-                  {d.name}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: t.ink3,
-                    fontFamily: font.mono,
-                    marginTop: 2,
-                  }}
-                >
-                  {d.dose} · {d.time} · SubQ
-                </Text>
-              </View>
-              {d.done ? (
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontFamily: font.sansSemi,
+                      letterSpacing: 1.2,
+                      color: t.ink3,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Active cycle
+                  </Text>
+                  <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink, marginTop: 2 }}>
+                    {cycle.name}
+                  </Text>
+                </View>
                 <View
                   style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: t.accent,
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                    backgroundColor: t.accentSoft,
                   }}
                 >
-                  <IconCheck size={12} color="#fff" />
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontFamily: font.sansSemi,
+                      color: t.accentInk,
+                      letterSpacing: 0.5,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {cycle.phase}
+                  </Text>
                 </View>
-              ) : (
-                <Pressable
-                  onPress={() => router.push('/log-dose')}
-                  style={{
-                    paddingVertical: 7,
-                    paddingHorizontal: 14,
-                    borderRadius: radius.pill,
-                    backgroundColor: t.ink,
-                  }}
-                >
-                  <Text style={{ fontSize: 12, fontFamily: font.sansSemi, color: t.bg }}>Log</Text>
-                </Pressable>
-              )}
-            </View>
-          ))}
-        </HCard>
-      </View>
-
-      {/* Cycle progress */}
-      <HSectionHeader title="Active cycle" action="Details" />
-      <View style={{ paddingHorizontal: space.xl }}>
-        <HCard style={{ borderRadius: radius.xl }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'flex-end',
-              marginBottom: 10,
-            }}
-          >
-            <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>
-              Healing Stack
-            </Text>
-            <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>Day 24 / 56</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 2, marginBottom: space.sm }}>
+                {Array.from({ length: Math.min(cycleView.total, 56) }).map((_, i) => {
+                  const scaledI = Math.floor((i * cycleView.total) / Math.min(cycleView.total, 56));
+                  return (
+                    <View
+                      key={i}
+                      style={{
+                        flex: 1,
+                        height: 16,
+                        borderRadius: 2,
+                        backgroundColor: scaledI < cycleView.day ? t.accent : t.surfaceAlt,
+                        opacity: scaledI < cycleView.day ? 0.55 + i / 100 : 1,
+                      }}
+                    />
+                  );
+                })}
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: t.ink2, fontSize: 13, fontFamily: font.mono }}>
+                  Day {cycleView.day} / {cycleView.total}
+                </Text>
+                <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
+                  {cycleView.pct}% complete · {cycleView.remaining}d left
+                </Text>
+              </View>
+            </Pressable>
           </View>
-
-          <View style={{ flexDirection: 'row', gap: 2, marginBottom: 14 }}>
-            {Array.from({ length: 56 }).map((_, i) => (
-              <View
-                key={i}
+        </>
+      ) : (
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+          <HCard>
+            <Text
+              style={{
+                fontSize: 11,
+                fontFamily: font.sansSemi,
+                letterSpacing: 1.2,
+                color: t.ink3,
+                textTransform: 'uppercase',
+                marginBottom: space.sm,
+              }}
+            >
+              No active cycle
+            </Text>
+            <Text style={{ fontSize: 15, color: t.ink2, lineHeight: 22, marginBottom: space.md }}>
+              Start a cycle to see your protocol here each day, or log individual doses
+              without a cycle.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: space.sm }}>
+              <Pressable
+                onPress={() => router.push('/cycle/new')}
                 style={{
                   flex: 1,
-                  height: 22,
-                  borderRadius: 2,
-                  backgroundColor: i < 24 ? t.accent : t.surfaceAlt,
-                  opacity: i < 24 ? Math.min(1, 0.55 + i / 40) : 1,
+                  padding: space.md,
+                  borderRadius: radius.md,
+                  backgroundColor: t.ink,
+                  alignItems: 'center',
                 }}
-              />
-            ))}
-          </View>
+              >
+                <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
+                  Start a cycle
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/log-dose')}
+                style={{
+                  flex: 1,
+                  padding: space.md,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: t.lineStrong,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
+                  Log a dose
+                </Text>
+              </Pressable>
+            </View>
+          </HCard>
+        </View>
+      )}
 
-          <View style={{ flexDirection: 'row', gap: 20 }}>
-            <HMetric value="57" unit="%" label="Complete" />
-            <HMetric value="32" unit="d" label="Remaining" />
-            <HMetric value="48" unit="dose" label="Total logged" />
+      {/* Today's doses */}
+      {todayDoses.length > 0 ? (
+        <>
+          <HSectionHeader title="Today" />
+          <View style={{ paddingHorizontal: space.xl, gap: 8 }}>
+            {todayDoses.map((d) => {
+              const p = findPeptide(d.peptide_id);
+              return (
+                <View
+                  key={d.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: space.md,
+                    backgroundColor: t.surface,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: t.line,
+                    padding: space.md,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      backgroundColor: (p?.color ?? t.accent) + '24',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <IconCheck size={14} color={p?.color ?? t.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
+                      {p?.name ?? d.peptide_id}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono, marginTop: 2 }}>
+                      {d.amount_mcg} mcg · {d.route}
+                      {d.site ? ` · ${d.site}` : ''} ·{' '}
+                      {new Date(d.taken_at).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
           </View>
-        </HCard>
-      </View>
+        </>
+      ) : null}
+
+      {/* Active vials */}
+      {vials.length > 0 ? (
+        <>
+          <HSectionHeader title="Active vials" />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: space.xl, gap: 10 }}
+          >
+            {vials.map((v) => {
+              const p = findPeptide(v.peptide_id);
+              const remainingPct = Math.round((v.remaining_mg / v.strength_mg) * 100);
+              const expiresAt = v.expires_at ? new Date(v.expires_at) : null;
+              const daysToExpiry = expiresAt
+                ? Math.floor((expiresAt.getTime() - Date.now()) / 864e5)
+                : null;
+              const expSoon = daysToExpiry !== null && daysToExpiry <= 3;
+              return (
+                <View
+                  key={v.id}
+                  style={{
+                    minWidth: 200,
+                    backgroundColor: t.surface,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: t.line,
+                    padding: space.md,
+                    gap: space.sm,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: p?.color ?? t.accent,
+                      }}
+                    />
+                    <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
+                      {p?.name ?? v.peptide_id}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 20, fontFamily: font.monoSemi, color: t.ink }}>
+                    {v.remaining_mg.toFixed(2)}
+                    <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.sansMed }}>
+                      {' '}
+                      / {v.strength_mg} mg
+                    </Text>
+                  </Text>
+                  <View style={{ height: 4, backgroundColor: t.surfaceAlt, borderRadius: 2 }}>
+                    <View
+                      style={{
+                        width: `${Math.max(2, remainingPct)}%`,
+                        height: 4,
+                        backgroundColor: remainingPct < 20 ? t.warn : t.accent,
+                        borderRadius: 2,
+                      }}
+                    />
+                  </View>
+                  {daysToExpiry !== null ? (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: expSoon ? t.warn : t.ink3,
+                        fontFamily: font.sansMed,
+                      }}
+                    >
+                      {daysToExpiry <= 0
+                        ? 'Expired'
+                        : daysToExpiry === 1
+                          ? 'Expires tomorrow'
+                          : `${daysToExpiry} days left`}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </>
+      ) : null}
 
       {/* Quick actions */}
       <HSectionHeader title="Quick actions" />
@@ -281,17 +429,42 @@ export default function HomeScreen() {
           gap: 10,
         }}
       >
-        {quickActions.map((q) => (
+        {[
+          {
+            label: 'Reconstitute',
+            sub: 'Set up a new vial',
+            Icon: IconBolt,
+            onPress: () => router.push('/reconstitute'),
+          },
+          {
+            label: 'Site rotation',
+            sub: 'Pick next injection site',
+            Icon: IconSyringe,
+            onPress: () => router.push('/injection-sites'),
+          },
+          {
+            label: 'Journal entry',
+            sub: 'How do you feel?',
+            Icon: IconBook,
+            onPress: () => router.push('/journal-entry'),
+          },
+          {
+            label: 'Log metric',
+            sub: 'Weight, HR, sleep, labs',
+            Icon: IconChart,
+            onPress: () => router.push('/log-metric'),
+          },
+        ].map((q) => (
           <Pressable
             key={q.label}
-            onPress={() => router.push(q.dest as any)}
+            onPress={q.onPress}
             style={{
               width: '48.5%',
               backgroundColor: t.surface,
-              borderRadius: radius.lg,
+              borderRadius: radius.md,
               borderWidth: 1,
               borderColor: t.line,
-              padding: 14,
+              padding: space.md,
             }}
           >
             <View
@@ -302,12 +475,12 @@ export default function HomeScreen() {
                 backgroundColor: t.surfaceAlt,
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: 10,
+                marginBottom: space.sm,
               }}
             >
               <q.Icon size={16} color={t.ink2} />
             </View>
-            <Text style={{ fontSize: 13, fontFamily: font.sansSemi, color: t.ink }}>
+            <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
               {q.label}
             </Text>
             <Text style={{ fontSize: 11, color: t.ink3, marginTop: 2 }}>{q.sub}</Text>
@@ -315,53 +488,23 @@ export default function HomeScreen() {
         ))}
       </View>
 
-      {/* Insight */}
-      <HSectionHeader title="Insight" />
-      <View style={{ paddingHorizontal: space.xl }}>
-        <View
-          style={{
-            backgroundColor: t.ink,
-            borderRadius: radius.xl,
-            padding: 20,
-            overflow: 'hidden',
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              letterSpacing: 1.2,
-              color: t.bg,
-              opacity: 0.6,
-              fontFamily: font.sansSemi,
-              textTransform: 'uppercase',
-            }}
-          >
-            Pattern detected
-          </Text>
-          <Text
-            style={{
-              fontSize: 18,
-              color: t.bg,
-              fontFamily: font.sansSemi,
-              marginTop: 8,
-              lineHeight: 24,
-              letterSpacing: -0.2,
-            }}
-          >
-            Sleep quality ↑ 18% on days you dose Ipamorelin before 10 PM.
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              color: t.bg,
-              opacity: 0.7,
-              marginTop: 12,
-              fontFamily: font.mono,
-            }}
-          >
-            n = 14 nights · p &lt; 0.05
-          </Text>
-        </View>
+      {/* Disclaimer footer */}
+      <View
+        style={{
+          marginTop: space.xl,
+          marginHorizontal: space.xl,
+          padding: space.md,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: t.warn + '40',
+          backgroundColor: t.warnSoft + '60',
+        }}
+      >
+        <Text style={{ color: t.ink2, fontSize: 12, lineHeight: 18 }}>
+          Helix is an educational / research tracking tool. Not medical advice.
+          Dosing ranges in the Library reflect published research protocols and are
+          not recommendations.
+        </Text>
       </View>
     </ScrollView>
   );

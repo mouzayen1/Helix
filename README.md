@@ -1,50 +1,117 @@
 # Helix
 
-Peptide research & tracking app — Android demo build. Phase 1 of
-the [Helix Build Specification](docs/helix-spec.md) (local-only
-SQLite, no backend, no accounts).
+A research-forward peptide education and tracking app. This is the
+working Android demo build following the Helix Build Specification
+v2.0 — Phase 1 local-only (no backend, no accounts).
+
+## What's in this build
+
+**Fully interactive, no mock data.** A fresh user runs the onboarding,
+enters their own data, and uses the app end-to-end.
+
+### Screens
+- **Welcome** — pre-auth splash.
+- **Onboarding** — age gate, safety acknowledgement, unit / theme
+  preferences, choose-path.
+- **Today** — greeting, active cycle bar, today's logged doses,
+  active vials strip, quick actions, footer disclaimer.
+- **Library** — full 42-peptide catalog with live search, class chips,
+  saved section.
+- **Peptide Detail** — sequence, quick facts, suggested reconstitution,
+  research-use banner, Overview / Dosing / Research / Notes tabs, full
+  mechanism, peer-reviewed citations with PubMed links, save/un-save.
+- **Stacks** — active cycle card, curated templates (Healing / GH-opt /
+  Fat-loss), saved stacks, past cycles.
+- **Cycle Planner** — name, duration, phase, per-peptide protocol rows
+  (dose / freq / time-of-day). Generates the active cycle.
+- **Cycle Detail** — progress bar, protocol list, end-cycle action.
+- **Stack Builder** — named stack with goal, synergy score heuristic,
+  peptide rows.
+- **Progress** — metric tiles (weight / HR / sleep / IGF-1 / glucose
+  / BP / waist / body fat), journal preview, insight placeholder.
+- **Metric Time-Series** — SVG line chart, min/avg/max/delta stats,
+  per-reading history with delete.
+- **Journal Entry** — mood 1–5, energy / sleep-quality / libido /
+  recovery 0–10 sliders, sleep hours stepper, tag multi-select, notes.
+  Upserts by date.
+- **Log Dose (modal)** — peptide picker, dose stepper, auto-computed
+  volume-in-units from active vial, suggested injection site, route
+  chips, time, note. Writes to SQLite, decrements vial remaining_mg,
+  appends site log.
+- **Reconstitute (modal)** — strength presets, BAC water + target dose
+  steppers, live concentration / units-per-dose / total-doses, visual
+  syringe. Saves a vial row.
+- **Log Metric (modal)** — kind picker, value input, note.
+- **Injection Sites (modal)** — anatomical SVG body map with 8-zone
+  rotation coloring (green / amber / red by recency), accent-pulse
+  suggestion, full zone list.
+- **Settings** — appearance (theme / accent), units (lb/kg, units/mL),
+  privacy (notifications, biometric lock), data (export JSON / CSV,
+  delete all).
+- **Export** — CSV + JSON export via expo-sharing.
+- **Delete all data** — type-to-confirm destructive flow.
+
+### Peptide catalog (42 monographs)
+BPC-157, TB-500, Thymosin β4, GHK-Cu, Pentadeca Arginate, KPV, Thymosin
+α-1, LL-37, Ipamorelin, CJC-1295 (no DAC), CJC-1295 DAC, Sermorelin,
+Tesamorelin, Hexarelin, GHRP-2, GHRP-6, MK-677, Semaglutide,
+Tirzepatide, Retatrutide, Liraglutide, Cagrilintide, AOD-9604,
+5-Amino-1MQ, MOTS-c, Selank, Semax, Cerebrolysin, Dihexa, Epitalon,
+SS-31 (Elamipretide), NAD+, FOXO4-DRI, Humanin, PT-141, Melanotan II,
+Kisspeptin-10, Oxytocin, DSIP, IGF-1 LR3, IGF-1 DES, PEG-MGF.
+
+Each entry has: sequence, formula, MW, half-life, route, research
+dose range, frequency, suggested reconstitution, research summary,
+numbered mechanism paragraphs, common stack partners, notes, and
+peer-reviewed citations with PubMed/PMC links.
 
 ## Stack
 
-- Expo SDK 54 + React Native 0.81
-- TypeScript
-- expo-router (file-based nav)
-- expo-sqlite (local storage)
-- react-native-svg (icons, charts, body map)
-- Zustand (state)
-- Inter + IBM Plex Mono (via `@expo-google-fonts/*`)
+- Expo SDK 54 + React Native 0.81 + TypeScript (strict)
+- expo-router (file-based navigation)
+- expo-sqlite (local persistence)
+- expo-notifications (local dose reminders, opt-in)
+- expo-file-system + expo-sharing (export)
+- react-native-svg (body map, metric charts, icons)
+- Inter + IBM Plex Mono (via @expo-google-fonts)
 
-## Screens in this build
+## Data model (local SQLite)
 
-- `(tabs)/index.tsx` — Today (greeting, protocol, cycle bar, quick actions, insight)
-- `(tabs)/library.tsx` — Peptide encyclopedia with category filter
-- `(tabs)/progress.tsx` — Placeholder (Phase 2)
-- `(tabs)/me.tsx` — Placeholder (Phase 2)
-- `peptide/[id].tsx` — Peptide detail
-- `log-dose.tsx` — Modal dose logger (writes to SQLite)
-- `reconstitute.tsx` — Reconstitution calculator
+`profile` · `peptides` · `saved_peptides` · `vials` · `doses` ·
+`cycles` · `stacks` · `journal_entries` · `metrics` ·
+`injection_sites_log`. Mirrors the Supabase schema in spec §05 for
+lossless migration when cloud sync ships in Phase 2.
 
-## Running
+## Compliance
+
+Centralised disclaimer copy in `lib/disclaimers.ts`. Age gate,
+safety acknowledgement, research-only framing, no imperative dosing
+language, no vendor links.
+
+## Running on Android
 
 ```bash
 # Install
 npm install
 
-# Dev via Expo Go (scan QR)
+# Dev via Expo Go
+npx expo login
 npx expo start
+# scan QR with Expo Go on Android
 
-# Production APK via EAS
+# Or produce an installable APK via EAS
 eas build --platform android --profile preview
 ```
 
-## Data model
+## What's next
 
-See `lib/db.ts`. Three tables for Phase 1:
-`peptides` (seeded with 6 from `lib/peptides.ts`), `vials`, `doses`.
+Still on the roadmap for launch (spec §04 phases 2–3):
 
-## Next phases
+- **Phase 2** — Supabase auth, cloud sync with outbox + conflict
+  resolution, push notifications, biometric lock, migration from
+  local to cloud.
+- **Phase 3** — 7-chapter Learn path, subscription paywall via
+  RevenueCat, landing page with privacy policy and ToS on a real
+  domain, App Store / Play Store submission packages.
 
-See spec §04. Phase 2 adds Supabase/Firebase auth + cloud sync,
-injection-site map, cycle planner, journal, stack builder. Phase 3
-expands the peptide catalog to 40+ with citations and ships to
-stores.
+See `docs/helix_build_spec_v2.pdf` for the full specification.

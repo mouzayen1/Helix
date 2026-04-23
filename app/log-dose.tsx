@@ -1,50 +1,92 @@
-// Log dose — spec §10.4
-// Modal. Peptide selector, dose scrubber, site/route, time, note, confirm.
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+// Log dose — spec v2.0 §10. Modal. Real writes to SQLite.
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronRight, IconClock, IconClose } from '../components/Icons';
 import { HCodeAvatar } from '../components/Primitives';
-import { insertDose } from '../lib/db';
-import { PEPTIDES } from '../lib/peptides';
+import {
+  getActiveVial,
+  listActiveVials,
+  logDose,
+  siteSuggestion,
+  INJECTION_SITES,
+  type Vial,
+} from '../lib/db';
+import { PEPTIDES, findPeptide } from '../lib/peptides';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 
-const DOSE_MIN = 50;
-const DOSE_MAX = 500;
-const DOSE_STEP = 25;
+const ROUTES = ['SubQ', 'IM', 'Oral', 'Topical', 'Intranasal'] as const;
+type Route = (typeof ROUTES)[number];
 
 export default function LogDoseModal() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [peptideId, setPeptideId] = useState('bpc157');
-  const [amountMcg, setAmountMcg] = useState(250);
-  const [site] = useState('R. Abdomen');
-  const [route] = useState('Subcutaneous');
+  const [showPeptidePicker, setShowPeptidePicker] = useState(false);
+  const [showSitePicker, setShowSitePicker] = useState(false);
+  const [peptideId, setPeptideId] = useState<string>('');
+  const [amountMcg, setAmountMcg] = useState(100);
+  const [route, setRoute] = useState<Route>('SubQ');
+  const [site, setSite] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [vial, setVial] = useState<Vial | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const peptide = PEPTIDES.find((p) => p.id === peptideId) ?? PEPTIDES[0];
+  const peptide = peptideId ? findPeptide(peptideId) : null;
 
-  const ticks = Array.from(
-    { length: (DOSE_MAX - DOSE_MIN) / DOSE_STEP + 1 },
-    (_, i) => DOSE_MIN + i * DOSE_STEP
+  // Load the most recent active vial as the default peptide
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const [vs, sug] = await Promise.all([listActiveVials(), siteSuggestion()]);
+        if (vs.length && !peptideId) {
+          setPeptideId(vs[0].peptide_id);
+          setVial(vs[0]);
+        } else if (!peptideId && PEPTIDES.length) {
+          setPeptideId(PEPTIDES[0].id);
+        }
+        if (!site) setSite(sug.site);
+      })();
+    }, [])
   );
-  const activeTickIndex = ticks.indexOf(amountMcg);
+
+  // When peptide changes, load its active vial
+  useEffect(() => {
+    if (!peptideId) return;
+    getActiveVial(peptideId).then(setVial);
+  }, [peptideId]);
+
+  const volumeUnits = useMemo(() => {
+    if (!vial) return null;
+    const volume_ml = amountMcg / (vial.concentration * 1000);
+    const units = volume_ml * 100;
+    return { units, volume_ml };
+  }, [vial, amountMcg]);
+
+  const vialInsufficient = !!vial && amountMcg / 1000 > vial.remaining_mg;
 
   const save = async () => {
+    if (!peptideId || saving) return;
+    setSaving(true);
     try {
-      await insertDose({
+      await logDose({
         peptide_id: peptideId,
+        vial_id: vial?.id ?? null,
         amount_mcg: amountMcg,
-        site,
+        volume_units: volumeUnits?.units,
         route,
+        site,
+        taken_at: new Date().toISOString(),
+        note: note.trim() || undefined,
       });
+      router.back();
     } catch (err) {
-      console.warn('insert failed', err);
+      console.warn('log dose failed', err);
+      setSaving(false);
     }
-    router.back();
   };
 
   return (
@@ -55,8 +97,8 @@ export default function LogDoseModal() {
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: insets.top + 12,
-          paddingBottom: 12,
+          paddingTop: insets.top + space.md,
+          paddingBottom: space.md,
           paddingHorizontal: space.xl,
         }}
       >
@@ -64,22 +106,35 @@ export default function LogDoseModal() {
           <IconClose size={16} color={t.ink3} />
         </Pressable>
         <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>Log dose</Text>
-        <Pressable onPress={save} hitSlop={10}>
-          <Text style={{ fontSize: 13, color: t.accent, fontFamily: font.sansSemi }}>Save</Text>
+        <Pressable
+          onPress={save}
+          disabled={saving || vialInsufficient || !peptideId}
+          hitSlop={10}
+        >
+          <Text
+            style={{
+              fontSize: 14,
+              color: saving || vialInsufficient || !peptideId ? t.ink3 : t.accent,
+              fontFamily: font.sansSemi,
+            }}
+          >
+            Save
+          </Text>
         </Pressable>
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
       >
         {/* Peptide selector */}
         <View style={{ paddingHorizontal: space.xl }}>
-          <View
+          <Pressable
+            onPress={() => setShowPeptidePicker(!showPeptidePicker)}
             style={{
               backgroundColor: t.surface,
-              borderRadius: radius.xl,
-              padding: 18,
+              borderRadius: radius.lg,
+              padding: space.lg,
               borderWidth: 1,
               borderColor: t.line,
               flexDirection: 'row',
@@ -87,21 +142,74 @@ export default function LogDoseModal() {
               gap: 14,
             }}
           >
-            <HCodeAvatar id={peptide.name.split('-')[0]} color={peptide.color} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
-                {peptide.name}
-              </Text>
-              <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
-                {peptide.formula}
-              </Text>
-            </View>
+            {peptide ? (
+              <>
+                <HCodeAvatar id={peptide.name.replace(/[^A-Za-z]/g, '').slice(0, 3)} color={peptide.color} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontFamily: font.sansSemi, color: t.ink }}>
+                    {peptide.name}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
+                    {peptide.formula}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <Text style={{ flex: 1, color: t.ink3, fontSize: 14 }}>Select peptide</Text>
+            )}
             <IconChevronRight size={14} color={t.ink3} />
-          </View>
+          </Pressable>
         </View>
 
-        {/* Dose picker */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: 24 }}>
+        {showPeptidePicker ? (
+          <View
+            style={{
+              marginHorizontal: space.xl,
+              marginTop: 4,
+              maxHeight: 260,
+              backgroundColor: t.surface,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: t.line,
+            }}
+          >
+            <ScrollView>
+              {PEPTIDES.map((p) => (
+                <Pressable
+                  key={p.id}
+                  onPress={() => {
+                    setPeptideId(p.id);
+                    setShowPeptidePicker(false);
+                  }}
+                  style={{
+                    padding: space.md,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: t.line,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: p.color,
+                    }}
+                  />
+                  <Text style={{ flex: 1, color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
+                    {p.name}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: t.ink3 }}>{p.class.split('/')[0].trim()}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {/* Dose */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.xl }}>
           <Text
             style={{
               fontSize: 11,
@@ -117,9 +225,9 @@ export default function LogDoseModal() {
           <View
             style={{
               backgroundColor: t.surface,
-              borderRadius: radius.xl,
-              paddingVertical: 24,
-              paddingHorizontal: 20,
+              borderRadius: radius.lg,
+              paddingVertical: space.xl,
+              paddingHorizontal: space.lg,
               borderWidth: 1,
               borderColor: t.line,
               alignItems: 'center',
@@ -149,14 +257,11 @@ export default function LogDoseModal() {
               </Text>
             </View>
 
-            {/* +/- picker — simplified for MVP. Spec uses a scrub ruler. */}
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 18 }}>
-              {[-50, -25, +25, +50].map((delta) => (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
+              {[-100, -25, +25, +100].map((delta) => (
                 <Pressable
                   key={delta}
-                  onPress={() =>
-                    setAmountMcg((v) => Math.max(DOSE_MIN, Math.min(DOSE_MAX, v + delta)))
-                  }
+                  onPress={() => setAmountMcg((v) => Math.max(1, v + delta))}
                   style={{
                     paddingVertical: 8,
                     paddingHorizontal: 14,
@@ -164,90 +269,87 @@ export default function LogDoseModal() {
                     backgroundColor: t.surfaceAlt,
                   }}
                 >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontFamily: font.monoSemi,
-                      color: t.ink,
-                    }}
-                  >
+                  <Text style={{ fontSize: 13, fontFamily: font.monoSemi, color: t.ink }}>
                     {delta > 0 ? `+${delta}` : delta}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
-            {/* Tick row — visual reference */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'flex-end',
-                justifyContent: 'space-between',
-                height: 24,
-                width: '100%',
-                marginTop: 20,
-              }}
-            >
-              {ticks.map((_, i) => {
-                const big = i % 4 === 0;
-                return (
-                  <View
-                    key={i}
-                    style={{
-                      width: 1,
-                      height: big ? 16 : 8,
-                      backgroundColor: i === activeTickIndex ? t.accent : t.ink3,
-                      opacity: i === activeTickIndex ? 1 : 0.4,
-                    }}
-                  />
-                );
-              })}
-            </View>
-
-            <View
-              style={{
-                marginTop: 14,
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                backgroundColor: t.surfaceAlt,
-                borderRadius: 10,
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                width: '100%',
-              }}
-            >
-              <Text style={{ fontSize: 11, color: t.ink3, letterSpacing: 0.3 }}>
-                Vial remaining
-              </Text>
+            {volumeUnits ? (
               <Text
                 style={{
+                  marginTop: space.md,
                   fontSize: 12,
-                  fontFamily: font.monoSemi,
-                  color: t.ink,
+                  color: t.ink3,
+                  fontFamily: font.mono,
                 }}
               >
-                4.25 / 5.00 mg
+                ≈ {volumeUnits.units.toFixed(1)} units · {volumeUnits.volume_ml.toFixed(2)} mL
               </Text>
-            </View>
+            ) : null}
+
+            {vial ? (
+              <View
+                style={{
+                  marginTop: space.md,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  backgroundColor: vialInsufficient ? t.dangerSoft : t.surfaceAlt,
+                  borderRadius: 10,
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '100%',
+                }}
+              >
+                <Text style={{ fontSize: 11, color: t.ink3, letterSpacing: 0.3 }}>
+                  {vialInsufficient ? 'NOT ENOUGH IN VIAL' : 'Vial remaining'}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontFamily: font.monoSemi,
+                    color: vialInsufficient ? t.danger : t.ink,
+                  }}
+                >
+                  {vial.remaining_mg.toFixed(2)} / {vial.strength_mg} mg
+                </Text>
+              </View>
+            ) : (
+              <View
+                style={{
+                  marginTop: space.md,
+                  width: '100%',
+                  padding: space.md,
+                  borderRadius: radius.md,
+                  backgroundColor: t.warnSoft + '80',
+                  borderWidth: 1,
+                  borderColor: t.warn + '40',
+                }}
+              >
+                <Text style={{ fontSize: 12, color: t.ink2, marginBottom: 6 }}>
+                  No active vial for {peptide?.name ?? 'this peptide'}.
+                </Text>
+                <Pressable onPress={() => router.replace('/reconstitute')}>
+                  <Text style={{ fontSize: 13, color: t.accent, fontFamily: font.sansSemi }}>
+                    Reconstitute a new vial →
+                  </Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
 
         {/* Site + Route */}
-        <View
-          style={{
-            paddingHorizontal: space.xl,
-            marginTop: 20,
-            flexDirection: 'row',
-            gap: 10,
-          }}
-        >
-          <View
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md, flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={() => setShowSitePicker(!showSitePicker)}
             style={{
               flex: 1,
               backgroundColor: t.surface,
               borderRadius: radius.md,
-              padding: 14,
+              padding: space.md,
               borderWidth: 1,
               borderColor: t.line,
             }}
@@ -255,7 +357,7 @@ export default function LogDoseModal() {
             <Text
               style={{
                 fontSize: 10,
-                letterSpacing: 1.1,
+                letterSpacing: 0.8,
                 color: t.ink3,
                 fontFamily: font.sansSemi,
                 textTransform: 'uppercase',
@@ -265,22 +367,22 @@ export default function LogDoseModal() {
             </Text>
             <Text
               style={{
-                fontSize: 16,
+                fontSize: 15,
                 fontFamily: font.sansSemi,
                 color: t.ink,
                 marginTop: 6,
               }}
             >
-              {site}
+              {site ?? '—'}
             </Text>
             <Text style={{ fontSize: 11, color: t.accent, marginTop: 2 }}>Suggested</Text>
-          </View>
+          </Pressable>
           <View
             style={{
               flex: 1,
               backgroundColor: t.surface,
               borderRadius: radius.md,
-              padding: 14,
+              padding: space.md,
               borderWidth: 1,
               borderColor: t.line,
             }}
@@ -288,35 +390,102 @@ export default function LogDoseModal() {
             <Text
               style={{
                 fontSize: 10,
-                letterSpacing: 1.1,
+                letterSpacing: 0.8,
                 color: t.ink3,
                 fontFamily: font.sansSemi,
                 textTransform: 'uppercase',
+                marginBottom: 6,
               }}
             >
               Route
             </Text>
-            <Text
-              style={{
-                fontSize: 16,
-                fontFamily: font.sansSemi,
-                color: t.ink,
-                marginTop: 6,
-              }}
-            >
-              {route}
-            </Text>
-            <Text style={{ fontSize: 11, color: t.ink3, marginTop: 2 }}>Default</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+              {ROUTES.slice(0, 3).map((r) => {
+                const active = r === route;
+                return (
+                  <Pressable
+                    key={r}
+                    onPress={() => setRoute(r)}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: radius.pill,
+                      backgroundColor: active ? t.ink : 'transparent',
+                      borderWidth: 1,
+                      borderColor: active ? t.ink : t.line,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: active ? t.bg : t.ink2,
+                        fontFamily: font.sansMed,
+                      }}
+                    >
+                      {r}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
 
+        {showSitePicker ? (
+          <View
+            style={{
+              marginHorizontal: space.xl,
+              marginTop: 4,
+              padding: space.md,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: t.line,
+              backgroundColor: t.surface,
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: 6,
+            }}
+          >
+            {INJECTION_SITES.map((s) => {
+              const active = s === site;
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => {
+                    setSite(s);
+                    setShowSitePicker(false);
+                  }}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? t.accent : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? t.accent : t.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: active ? '#fff' : t.ink2,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
+                    {s}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
         {/* Time */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: 20 }}>
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
           <View
             style={{
               backgroundColor: t.surface,
               borderRadius: radius.md,
-              padding: 14,
+              padding: space.md,
               borderWidth: 1,
               borderColor: t.line,
               flexDirection: 'row',
@@ -325,32 +494,78 @@ export default function LogDoseModal() {
             }}
           >
             <IconClock size={16} color={t.ink3} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, color: t.ink }}>
-                Now —{' '}
-                {new Date().toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            <Text style={{ fontSize: 12, color: t.accent, fontFamily: font.sansSemi }}>Edit</Text>
+            <Text style={{ flex: 1, fontSize: 14, color: t.ink }}>
+              Now —{' '}
+              {new Date().toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+              })}
+            </Text>
+          </View>
+        </View>
+
+        {/* Note */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+          <View
+            style={{
+              backgroundColor: t.surface,
+              borderRadius: radius.md,
+              padding: space.md,
+              borderWidth: 1,
+              borderColor: t.line,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                letterSpacing: 0.8,
+                color: t.ink3,
+                fontFamily: font.sansSemi,
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
+              Note (optional)
+            </Text>
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder="How do you feel? Side effects, observations…"
+              placeholderTextColor={t.ink4}
+              multiline
+              style={{
+                color: t.ink,
+                fontSize: 14,
+                minHeight: 40,
+                padding: 0,
+                textAlignVertical: 'top',
+              }}
+            />
           </View>
         </View>
 
         {/* Confirm */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: 28 }}>
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.xl }}>
           <Pressable
             onPress={save}
+            disabled={saving || vialInsufficient || !peptideId}
             style={{
-              padding: 16,
-              borderRadius: radius.md,
-              backgroundColor: t.ink,
+              padding: space.lg,
+              borderRadius: radius.lg,
+              backgroundColor:
+                saving || vialInsufficient || !peptideId ? t.surfaceAlt : t.ink,
               alignItems: 'center',
             }}
           >
-            <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.bg }}>
-              Confirm dose
+            <Text
+              style={{
+                fontSize: 15,
+                fontFamily: font.sansSemi,
+                color:
+                  saving || vialInsufficient || !peptideId ? t.ink3 : t.bg,
+              }}
+            >
+              {saving ? 'Logging…' : 'Log dose'}
             </Text>
           </Pressable>
         </View>
