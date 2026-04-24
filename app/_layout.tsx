@@ -9,6 +9,7 @@ import { IBMPlexMono_400Regular, IBMPlexMono_600SemiBold } from '@expo-google-fo
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -98,6 +99,24 @@ export default function RootLayout() {
         console.error('DB init failed', err);
         setDbReady(true);
       });
+  }, []);
+
+  // OTA updates check on launch. Only runs in release builds — dev builds
+  // skip this (expo-updates is a no-op in __DEV__). Silent-fails on network
+  // errors so it never blocks startup.
+  useEffect(() => {
+    if (__DEV__) return;
+    (async () => {
+      try {
+        const result = await Updates.checkForUpdateAsync();
+        if (result.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch {
+        // offline or update server unreachable — ignore
+      }
+    })();
   }, []);
 
   useEffect(() => {
