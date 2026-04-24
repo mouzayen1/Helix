@@ -28,7 +28,7 @@ export default function AgeGate() {
       }}
     >
       <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 1 OF 4
+        STEP 1 OF 5
       </Text>
 
       <View style={{ flex: 1, justifyContent: 'center', gap: space.lg }}>

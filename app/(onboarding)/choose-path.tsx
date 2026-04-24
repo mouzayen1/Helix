@@ -29,7 +29,7 @@ export default function ChoosePath() {
       }}
     >
       <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 4 OF 4
+        STEP 5 OF 5
       </Text>
 
       <Text

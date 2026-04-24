@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useProfile } from '../../lib/profile-context';
-import { TERMS_VERSION } from '../../lib/disclaimers';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
 
@@ -26,10 +25,8 @@ export default function Acknowledge() {
     const now = new Date().toISOString();
     await update({
       disclaimer_accepted_at: now,
-      terms_version: TERMS_VERSION,
-      terms_accepted_at: now,
     });
-    router.push('/(onboarding)/preferences');
+    router.push('/(onboarding)/terms');
   };
 
   return (
@@ -43,7 +40,7 @@ export default function Acknowledge() {
       }}
     >
       <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 2 OF 4
+        STEP 2 OF 5
       </Text>
 
       <View style={{ flex: 1, gap: space.xl, paddingTop: space.xl }}>

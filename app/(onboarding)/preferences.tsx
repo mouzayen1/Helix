@@ -110,7 +110,7 @@ export default function Preferences() {
       }}
     >
       <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 3 OF 4
+        STEP 4 OF 5
       </Text>
 
       <Text
