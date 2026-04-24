@@ -1,63 +1,133 @@
-// Log dose — spec v2.0 §10. Modal. Real writes to SQLite.
-import { useFocusEffect, useRouter } from 'expo-router';
+// Log dose — spec v2.0 §10 + extras.
+// Sections: Your vials (top) + All peptides (below). Tap non-vial -> recon.
+// Typed dose input + smart preset chips from peptide's research range.
+// Prefill dose from active cycle's today protocol when peptide matches.
+// Site card opens /injection-sites modal.
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronRight, IconClock, IconClose } from '../components/Icons';
-import { HCodeAvatar } from '../components/Primitives';
+import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import {
+  getActiveCycle,
   getActiveVial,
+  INJECTION_SITES,
   listActiveVials,
   logDose,
   siteSuggestion,
-  INJECTION_SITES,
+  type Cycle,
   type Vial,
 } from '../lib/db';
-import { PEPTIDES, findPeptide } from '../lib/peptides';
+import { findPeptide, PEPTIDES } from '../lib/peptides';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 
 const ROUTES = ['SubQ', 'IM', 'Oral', 'Topical', 'Intranasal'] as const;
 type Route = (typeof ROUTES)[number];
 
+// Parse a peptide's research dose like "200–500 mcg/day" to numeric range.
+function parseDoseRange(dose: string): { lo: number; mid: number; hi: number } {
+  const nums = [...dose.matchAll(/(\d+(?:\.\d+)?)/g)].map((m) => parseFloat(m[1]));
+  if (nums.length === 0) return { lo: 100, mid: 250, hi: 500 };
+  // If values are in mg (look for 'mg' immediately before or after), convert to mcg.
+  const mgMatch = /\d\s*(?:–|-)\s*\d(?:\.\d+)?\s*mg/.test(dose);
+  const factor = mgMatch ? 1000 : 1;
+  const vals = nums.map((n) => n * factor);
+  if (vals.length === 1) {
+    return { lo: Math.round(vals[0] * 0.5), mid: vals[0], hi: Math.round(vals[0] * 1.5) };
+  }
+  const lo = vals[0];
+  const hi = vals[vals.length - 1];
+  const mid = Math.round((lo + hi) / 2);
+  return { lo: Math.round(lo), mid, hi: Math.round(hi) };
+}
+
 export default function LogDoseModal() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { peptideId: initialId, prefillDoseMcg } = useLocalSearchParams<{
+    peptideId?: string;
+    prefillDoseMcg?: string;
+  }>();
 
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
-  const [showSitePicker, setShowSitePicker] = useState(false);
-  const [peptideId, setPeptideId] = useState<string>('');
+  const [peptideId, setPeptideId] = useState<string>(initialId || '');
   const [amountMcg, setAmountMcg] = useState(100);
+  const [amountText, setAmountText] = useState('100');
   const [route, setRoute] = useState<Route>('SubQ');
   const [site, setSite] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [vial, setVial] = useState<Vial | null>(null);
+  const [vials, setVials] = useState<Vial[]>([]);
+  const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [saving, setSaving] = useState(false);
 
   const peptide = peptideId ? findPeptide(peptideId) : null;
 
-  // Load the most recent active vial as the default peptide
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [vs, sug] = await Promise.all([listActiveVials(), siteSuggestion()]);
-        if (vs.length && !peptideId) {
-          setPeptideId(vs[0].peptide_id);
-          setVial(vs[0]);
-        } else if (!peptideId && PEPTIDES.length) {
-          setPeptideId(PEPTIDES[0].id);
+        const [vs, sug, c] = await Promise.all([
+          listActiveVials(),
+          siteSuggestion(),
+          getActiveCycle(),
+        ]);
+        setVials(vs);
+        setActiveCycle(c);
+        if (!peptideId) {
+          // Default: first vial's peptide if any, else first peptide in catalog.
+          if (vs.length) {
+            setPeptideId(vs[0].peptide_id);
+            setVial(vs[0]);
+          } else if (PEPTIDES.length) {
+            setPeptideId(PEPTIDES[0].id);
+          }
         }
         if (!site) setSite(sug.site);
       })();
     }, [])
   );
 
-  // When peptide changes, load its active vial
   useEffect(() => {
     if (!peptideId) return;
     getActiveVial(peptideId).then(setVial);
   }, [peptideId]);
+
+  // Prefill dose from active cycle's today protocol, or from query param.
+  useEffect(() => {
+    if (!peptideId) return;
+    if (prefillDoseMcg) {
+      const n = parseFloat(prefillDoseMcg);
+      if (!isNaN(n) && n > 0) {
+        setAmountMcg(n);
+        setAmountText(String(n));
+        return;
+      }
+    }
+    if (activeCycle) {
+      try {
+        const protocol = JSON.parse(activeCycle.protocol_json || '[]') as {
+          peptide_id: string;
+          dose_mcg: number;
+        }[];
+        const match = protocol.find((row) => row.peptide_id === peptideId);
+        if (match) {
+          setAmountMcg(match.dose_mcg);
+          setAmountText(String(match.dose_mcg));
+          return;
+        }
+      } catch {}
+    }
+    // Fall back to the peptide's research-range midpoint.
+    const p = findPeptide(peptideId);
+    if (p?.dose) {
+      const { mid } = parseDoseRange(p.dose);
+      setAmountMcg(mid);
+      setAmountText(String(mid));
+    }
+  }, [peptideId, activeCycle, prefillDoseMcg]);
 
   const volumeUnits = useMemo(() => {
     if (!vial) return null;
@@ -67,6 +137,21 @@ export default function LogDoseModal() {
   }, [vial, amountMcg]);
 
   const vialInsufficient = !!vial && amountMcg / 1000 > vial.remaining_mg;
+  const presets = useMemo(() => {
+    if (!peptide?.dose) return [100, 250, 500];
+    const { lo, mid, hi } = parseDoseRange(peptide.dose);
+    return [lo, mid, hi];
+  }, [peptide?.dose]);
+
+  const commitDose = () => {
+    const n = parseFloat(amountText);
+    if (isNaN(n) || n <= 0 || n > 100000) {
+      setAmountText(String(amountMcg));
+    } else {
+      setAmountMcg(n);
+      setAmountText(String(n));
+    }
+  };
 
   const save = async () => {
     if (!peptideId || saving) return;
@@ -89,9 +174,15 @@ export default function LogDoseModal() {
     }
   };
 
+  // Peptides that already have a vial vs not — used for picker sections.
+  const vialPeptideIds = useMemo(() => new Set(vials.map((v) => v.peptide_id)), [vials]);
+  const peptidesWithoutVial = useMemo(
+    () => PEPTIDES.filter((p) => !vialPeptideIds.has(p.id)),
+    [vialPeptideIds]
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      {/* Top bar */}
       <View
         style={{
           flexDirection: 'row',
@@ -127,7 +218,7 @@ export default function LogDoseModal() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
       >
-        {/* Peptide selector */}
+        {/* Peptide selector card */}
         <View style={{ paddingHorizontal: space.xl }}>
           <Pressable
             onPress={() => setShowPeptidePicker(!showPeptidePicker)}
@@ -166,7 +257,7 @@ export default function LogDoseModal() {
             style={{
               marginHorizontal: space.xl,
               marginTop: 4,
-              height: 340,
+              height: 380,
               backgroundColor: t.surface,
               borderRadius: radius.md,
               borderWidth: 1,
@@ -174,12 +265,110 @@ export default function LogDoseModal() {
             }}
           >
             <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-              {PEPTIDES.map((p) => (
+              {/* Your vials section */}
+              {vials.length > 0 ? (
+                <View>
+                  <Text
+                    style={{
+                      padding: 10,
+                      paddingBottom: 4,
+                      fontSize: 10,
+                      letterSpacing: 1,
+                      color: t.ink3,
+                      fontFamily: font.sansSemi,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Your vials
+                  </Text>
+                  {vials.map((v) => {
+                    const p = findPeptide(v.peptide_id);
+                    if (!p) return null;
+                    return (
+                      <Pressable
+                        key={v.id}
+                        onPress={() => {
+                          setPeptideId(p.id);
+                          setVial(v);
+                          setShowPeptidePicker(false);
+                        }}
+                        style={{
+                          padding: space.md,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          borderBottomWidth: 1,
+                          borderBottomColor: t.line,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 4,
+                            backgroundColor: p.color,
+                          }}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              color: t.ink,
+                              fontSize: 14,
+                              fontFamily: font.sansSemi,
+                            }}
+                          >
+                            {p.name}
+                          </Text>
+                          <Text
+                            style={{
+                              color: t.ink3,
+                              fontSize: 11,
+                              fontFamily: font.mono,
+                              marginTop: 2,
+                            }}
+                          >
+                            {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            color: t.accent,
+                            fontSize: 11,
+                            fontFamily: font.sansSemi,
+                          }}
+                        >
+                          Vial
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {/* All peptides section */}
+              <Text
+                style={{
+                  padding: 10,
+                  paddingBottom: 4,
+                  marginTop: vials.length > 0 ? 4 : 0,
+                  fontSize: 10,
+                  letterSpacing: 1,
+                  color: t.ink3,
+                  fontFamily: font.sansSemi,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {vials.length > 0 ? 'Other peptides · tap to reconstitute' : 'All peptides'}
+              </Text>
+              {peptidesWithoutVial.map((p) => (
                 <Pressable
                   key={p.id}
                   onPress={() => {
-                    setPeptideId(p.id);
                     setShowPeptidePicker(false);
+                    router.replace({
+                      pathname: '/reconstitute',
+                      params: { peptideId: p.id },
+                    } as any);
                   }}
                   style={{
                     padding: space.md,
@@ -198,10 +387,20 @@ export default function LogDoseModal() {
                       backgroundColor: p.color,
                     }}
                   />
-                  <Text style={{ flex: 1, color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
+                  <Text
+                    style={{
+                      flex: 1,
+                      color: t.ink,
+                      fontSize: 14,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
                     {p.name}
                   </Text>
-                  <Text style={{ fontSize: 11, color: t.ink3 }}>{p.class.split('/')[0].trim()}</Text>
+                  <Text style={{ fontSize: 11, color: t.ink3 }}>
+                    {p.class.split('/')[0].trim()}
+                  </Text>
+                  <IconChevronRight size={12} color={t.ink4} />
                 </Pressable>
               ))}
             </ScrollView>
@@ -234,20 +433,26 @@ export default function LogDoseModal() {
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-              <Text
+              <TextInput
+                value={amountText}
+                onChangeText={setAmountText}
+                onBlur={commitDose}
+                onSubmitEditing={commitDose}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
                 style={{
-                  fontSize: 56,
+                  fontSize: 48,
                   fontFamily: font.monoSemi,
                   color: t.ink,
-                  letterSpacing: -2,
-                  lineHeight: 58,
+                  letterSpacing: -1,
+                  padding: 0,
+                  minWidth: 100,
+                  textAlign: 'center',
                 }}
-              >
-                {amountMcg}
-              </Text>
+              />
               <Text
                 style={{
-                  fontSize: 20,
+                  fontSize: 18,
                   color: t.ink3,
                   fontFamily: font.sansMed,
                   marginLeft: 6,
@@ -257,24 +462,52 @@ export default function LogDoseModal() {
               </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
-              {[-100, -25, +25, +100].map((delta) => (
-                <Pressable
-                  key={delta}
-                  onPress={() => setAmountMcg((v) => Math.max(1, v + delta))}
-                  style={{
-                    paddingVertical: 8,
-                    paddingHorizontal: 14,
-                    borderRadius: radius.pill,
-                    backgroundColor: t.surfaceAlt,
-                  }}
-                >
-                  <Text style={{ fontSize: 13, fontFamily: font.monoSemi, color: t.ink }}>
-                    {delta > 0 ? `+${delta}` : delta}
-                  </Text>
-                </Pressable>
-              ))}
+            {/* Smart preset chips from peptide's research range */}
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: space.md, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {presets.map((preset) => {
+                const active = preset === amountMcg;
+                return (
+                  <Pressable
+                    key={preset}
+                    onPress={() => {
+                      setAmountMcg(preset);
+                      setAmountText(String(preset));
+                    }}
+                    style={{
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                      borderRadius: radius.pill,
+                      backgroundColor: active ? t.ink : t.surfaceAlt,
+                      borderWidth: 1,
+                      borderColor: active ? t.ink : t.line,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontFamily: font.monoSemi,
+                        color: active ? t.bg : t.ink,
+                      }}
+                    >
+                      {preset} mcg
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
+            {peptide?.dose ? (
+              <Text
+                style={{
+                  marginTop: 6,
+                  fontSize: 10,
+                  color: t.ink3,
+                  fontFamily: font.mono,
+                  textAlign: 'center',
+                }}
+              >
+                Research range: {peptide.dose}
+              </Text>
+            ) : null}
 
             {volumeUnits ? (
               <Text
@@ -331,7 +564,14 @@ export default function LogDoseModal() {
                 <Text style={{ fontSize: 12, color: t.ink2, marginBottom: 6 }}>
                   No active vial for {peptide?.name ?? 'this peptide'}.
                 </Text>
-                <Pressable onPress={() => router.replace('/reconstitute')}>
+                <Pressable
+                  onPress={() =>
+                    router.replace({
+                      pathname: '/reconstitute',
+                      params: { peptideId },
+                    } as any)
+                  }
+                >
                   <Text style={{ fontSize: 13, color: t.accent, fontFamily: font.sansSemi }}>
                     Reconstitute a new vial →
                   </Text>
@@ -344,7 +584,7 @@ export default function LogDoseModal() {
         {/* Site + Route */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md, flexDirection: 'row', gap: 8 }}>
           <Pressable
-            onPress={() => setShowSitePicker(!showSitePicker)}
+            onPress={() => router.push('/injection-sites' as any)}
             style={{
               flex: 1,
               backgroundColor: t.surface,
@@ -375,7 +615,9 @@ export default function LogDoseModal() {
             >
               {site ?? '—'}
             </Text>
-            <Text style={{ fontSize: 11, color: t.accent, marginTop: 2 }}>Suggested</Text>
+            <Text style={{ fontSize: 11, color: t.accent, marginTop: 2 }}>
+              Tap to open body map
+            </Text>
           </Pressable>
           <View
             style={{
@@ -430,54 +672,6 @@ export default function LogDoseModal() {
             </View>
           </View>
         </View>
-
-        {showSitePicker ? (
-          <View
-            style={{
-              marginHorizontal: space.xl,
-              marginTop: 4,
-              padding: space.md,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-              backgroundColor: t.surface,
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: 6,
-            }}
-          >
-            {INJECTION_SITES.map((s) => {
-              const active = s === site;
-              return (
-                <Pressable
-                  key={s}
-                  onPress={() => {
-                    setSite(s);
-                    setShowSitePicker(false);
-                  }}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.accent : 'transparent',
-                    borderWidth: 1,
-                    borderColor: active ? t.accent : t.line,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: active ? '#fff' : t.ink2,
-                      fontFamily: font.sansMed,
-                    }}
-                  >
-                    {s}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
 
         {/* Time */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
@@ -544,8 +738,13 @@ export default function LogDoseModal() {
           </View>
         </View>
 
+        {/* Inline disclaimer */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+          <DosingDisclaimer />
+        </View>
+
         {/* Confirm */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.xl }}>
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
           <Pressable
             onPress={save}
             disabled={saving || vialInsufficient || !peptideId}
