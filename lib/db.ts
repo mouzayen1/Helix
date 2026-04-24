@@ -292,6 +292,46 @@ export async function listActiveVials(): Promise<Vial[]> {
   );
 }
 
+export async function getVial(id: string): Promise<Vial | null> {
+  return db().getFirstAsync<Vial>('SELECT * FROM vials WHERE id = ?', id);
+}
+
+export async function deactivateVial(id: string) {
+  await db().runAsync('UPDATE vials SET is_active = 0 WHERE id = ?', id);
+}
+
+export async function deleteVial(id: string) {
+  // Clear the vial_id foreign key on any doses that referenced it,
+  // then delete the vial row.
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    await d.runAsync('UPDATE doses SET vial_id = NULL WHERE vial_id = ?', id);
+    await d.runAsync('DELETE FROM vials WHERE id = ?', id);
+  });
+}
+
+export async function updateDose(
+  id: string,
+  patch: {
+    amount_mcg?: number;
+    route?: string;
+    site?: string | null;
+    note?: string | null;
+    taken_at?: string;
+  }
+) {
+  const sets: string[] = [];
+  const values: (string | number | null)[] = [];
+  if (patch.amount_mcg !== undefined) { sets.push('amount_mcg = ?'); values.push(patch.amount_mcg); }
+  if (patch.route !== undefined) { sets.push('route = ?'); values.push(patch.route); }
+  if (patch.site !== undefined) { sets.push('site = ?'); values.push(patch.site); }
+  if (patch.note !== undefined) { sets.push('note = ?'); values.push(patch.note); }
+  if (patch.taken_at !== undefined) { sets.push('taken_at = ?'); values.push(patch.taken_at); }
+  if (sets.length === 0) return;
+  values.push(id);
+  await db().runAsync(`UPDATE doses SET ${sets.join(', ')} WHERE id = ?`, ...values);
+}
+
 // ---- Doses -----------------------------------------------------------------
 
 export type Dose = {
@@ -431,6 +471,35 @@ export async function listCycles(): Promise<Cycle[]> {
 
 export async function endCycle(id: string) {
   await db().runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+}
+
+export async function updateCycle(
+  id: string,
+  patch: {
+    name?: string;
+    starts_on?: string;
+    ends_on?: string;
+    phase?: Cycle['phase'];
+    status?: Cycle['status'];
+    protocol?: CycleProtocolItem[];
+    notes?: string;
+  }
+) {
+  const sets: string[] = [];
+  const values: (string | number | null)[] = [];
+  if (patch.name !== undefined) { sets.push('name = ?'); values.push(patch.name); }
+  if (patch.starts_on !== undefined) { sets.push('starts_on = ?'); values.push(patch.starts_on); }
+  if (patch.ends_on !== undefined) { sets.push('ends_on = ?'); values.push(patch.ends_on); }
+  if (patch.phase !== undefined) { sets.push('phase = ?'); values.push(patch.phase); }
+  if (patch.status !== undefined) { sets.push('status = ?'); values.push(patch.status); }
+  if (patch.protocol !== undefined) {
+    sets.push('protocol_json = ?');
+    values.push(JSON.stringify(patch.protocol));
+  }
+  if (patch.notes !== undefined) { sets.push('notes = ?'); values.push(patch.notes); }
+  if (sets.length === 0) return;
+  values.push(id);
+  await db().runAsync(`UPDATE cycles SET ${sets.join(', ')} WHERE id = ?`, ...values);
 }
 
 // ---- Stacks ----------------------------------------------------------------
