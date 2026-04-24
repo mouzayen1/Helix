@@ -1,16 +1,21 @@
 // Progress — spec v2.0 §10 "Progress home". Tiles, journal preview, insights.
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconBook, IconChart, IconChevronRight } from '../../components/Icons';
 import { HCard, HSectionHeader } from '../../components/Primitives';
 import {
+  getActiveCycle,
+  getVialHistory,
+  listActiveVials,
   listAllMetricKindsWithLatest,
   listJournal,
+  type Cycle,
   type JournalEntry,
   type Metric,
   METRIC_KINDS,
+  type Vial,
 } from '../../lib/db';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
@@ -21,19 +26,46 @@ export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
   const [tiles, setTiles] = useState<{ kind: string; latest: Metric | null }[]>([]);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
+  const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
+  const [allVials, setAllVials] = useState<Vial[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [ts, js] = await Promise.all([
+        const [ts, js, c, active, past] = await Promise.all([
           listAllMetricKindsWithLatest(),
           listJournal(5),
+          getActiveCycle(),
+          listActiveVials(),
+          getVialHistory({ limit: 500 }),
         ]);
         setTiles(ts.filter((x) => x.latest));
         setJournal(js);
+        setActiveCycle(c);
+        setAllVials([...active, ...past]);
       })();
     }, [])
   );
+
+  // Cost rollup across all vials with cost_usd set. Hidden entirely when no
+  // vial has a cost — this is an opt-in feature, not a required surface.
+  const costSummary = useMemo(() => {
+    const withCost = allVials.filter((v) => v.cost_usd != null && v.cost_usd > 0);
+    if (withCost.length === 0) return null;
+    const total = withCost.reduce((s, v) => s + (v.cost_usd ?? 0), 0);
+    const doses = withCost.reduce((s, v) => s + (v.total_doses_drawn ?? 0), 0);
+    const perDose = doses > 0 ? total / doses : null;
+    const cycleCost = activeCycle
+      ? withCost
+          .filter(
+            (v) =>
+              v.reconstituted_at >= activeCycle.starts_on &&
+              v.reconstituted_at <= activeCycle.ends_on
+          )
+          .reduce((s, v) => s + (v.cost_usd ?? 0), 0)
+      : null;
+    return { total, doses, perDose, cycleCost };
+  }, [allVials, activeCycle]);
 
   return (
     <ScrollView
@@ -56,6 +88,50 @@ export default function ProgressScreen() {
           Metrics, journals, trends
         </Text>
       </View>
+
+      {/* Cost rollup — hidden entirely unless at least one vial has cost set */}
+      {costSummary ? (
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+          <View
+            style={{
+              backgroundColor: t.surface,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: t.line,
+              padding: space.md,
+              gap: 6,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                letterSpacing: 0.8,
+                color: t.ink3,
+                fontFamily: font.sansSemi,
+                textTransform: 'uppercase',
+              }}
+            >
+              Cost
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+              <Text style={{ fontSize: 22, fontFamily: font.monoSemi, color: t.ink }}>
+                ${costSummary.total.toFixed(0)}
+              </Text>
+              <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
+                total spent
+              </Text>
+            </View>
+            <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
+              {costSummary.perDose != null
+                ? `~$${costSummary.perDose.toFixed(2)} per dose`
+                : 'No dose history yet'}
+              {costSummary.cycleCost != null
+                ? ` · $${costSummary.cycleCost.toFixed(0)} this cycle`
+                : ''}
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       {/* Metric tiles */}
       <HSectionHeader
