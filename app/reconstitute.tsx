@@ -3,7 +3,7 @@
 // typed number inputs, auto-fill from peptide.reconstitution, co-reconstitute option.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Rect } from 'react-native-svg';
 import { IconChevronRight, IconClose } from '../components/Icons';
@@ -117,10 +117,11 @@ export default function ReconstituteModal() {
       if (coReconstitutePartner) {
         const partner = findPeptide(coReconstitutePartner);
         if (partner) {
-          // Assume same strength default; user can adjust later in Log flow.
+          const partnerParsed = parseRecon(partner.reconstitution);
+          const partnerStrength = partnerParsed?.strength_mg ?? strengthMg;
           await createVial({
             peptide_id: coReconstitutePartner,
-            strength_mg: strengthMg,
+            strength_mg: partnerStrength,
             bac_water_ml: bacMl,
             notes: `Co-reconstituted with ${peptide.name}`,
           });
@@ -128,8 +129,9 @@ export default function ReconstituteModal() {
       }
       router.back();
     } catch (e) {
-      console.warn('recon failed', e);
       setSaving(false);
+      const msg = e instanceof Error && e.message ? e.message : 'Please try again.';
+      Alert.alert('Could not save vial', msg, [{ text: 'OK' }]);
     }
   };
 
@@ -393,7 +395,7 @@ export default function ReconstituteModal() {
             value={targetDoseText}
             onChangeText={setTargetDoseText}
             onCommit={() =>
-              commitNum(targetDoseText, setTargetDoseMcg, setTargetDoseText, 1, 50000, targetDoseMcg)
+              commitNum(targetDoseText, setTargetDoseMcg, setTargetDoseText, 1, 500000, targetDoseMcg)
             }
             onMinus={() => {
               const v = Math.max(1, targetDoseMcg - 25);
@@ -401,7 +403,7 @@ export default function ReconstituteModal() {
               setTargetDoseText(String(v));
             }}
             onPlus={() => {
-              const v = Math.min(50000, targetDoseMcg + 25);
+              const v = Math.min(500000, targetDoseMcg + 25);
               setTargetDoseMcg(v);
               setTargetDoseText(String(v));
             }}

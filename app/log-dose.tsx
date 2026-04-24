@@ -5,7 +5,7 @@
 // Site card opens /injection-sites modal.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronRight, IconClock, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
@@ -145,7 +145,7 @@ export default function LogDoseModal() {
 
   const commitDose = () => {
     const n = parseFloat(amountText);
-    if (isNaN(n) || n <= 0 || n > 100000) {
+    if (isNaN(n) || n <= 0 || n > 500000) {
       setAmountText(String(amountMcg));
     } else {
       setAmountMcg(n);
@@ -169,8 +169,9 @@ export default function LogDoseModal() {
       });
       router.back();
     } catch (err) {
-      console.warn('log dose failed', err);
       setSaving(false);
+      const msg = err instanceof Error && err.message ? err.message : 'Please try again.';
+      Alert.alert('Could not log dose', msg, [{ text: 'OK' }]);
     }
   };
 
@@ -642,7 +643,7 @@ export default function LogDoseModal() {
               Route
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-              {ROUTES.slice(0, 3).map((r) => {
+              {ROUTES.map((r) => {
                 const active = r === route;
                 return (
                   <Pressable

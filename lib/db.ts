@@ -328,8 +328,29 @@ export async function updateDose(
   if (patch.note !== undefined) { sets.push('note = ?'); values.push(patch.note); }
   if (patch.taken_at !== undefined) { sets.push('taken_at = ?'); values.push(patch.taken_at); }
   if (sets.length === 0) return;
-  values.push(id);
-  await db().runAsync(`UPDATE doses SET ${sets.join(', ')} WHERE id = ?`, ...values);
+
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    const params = [...values, id];
+    await d.runAsync(`UPDATE doses SET ${sets.join(', ')} WHERE id = ?`, ...params);
+
+    if (patch.site !== undefined || patch.taken_at !== undefined) {
+      await d.runAsync('DELETE FROM injection_sites_log WHERE dose_id = ?', id);
+      if (patch.site) {
+        const dose = await d.getFirstAsync<{ taken_at: string }>(
+          'SELECT taken_at FROM doses WHERE id = ?',
+          id
+        );
+        if (dose) {
+          const sid = `site_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+          await d.runAsync(
+            'INSERT INTO injection_sites_log (id, site, used_at, dose_id) VALUES (?,?,?,?)',
+            sid, patch.site, dose.taken_at, id
+          );
+        }
+      }
+    }
+  });
 }
 
 // ---- Doses -----------------------------------------------------------------
