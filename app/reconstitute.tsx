@@ -134,14 +134,14 @@ export default function ReconstituteModal() {
             <View
               style={{
                 marginTop: 4,
-                maxHeight: 240,
+                height: 340,
                 backgroundColor: t.surface,
                 borderRadius: radius.md,
                 borderWidth: 1,
                 borderColor: t.line,
               }}
             >
-              <ScrollView>
+              <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
                 {PEPTIDES.map((p) => (
                   <Pressable
                     key={p.id}

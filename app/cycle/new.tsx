@@ -180,7 +180,7 @@ export default function NewCycle() {
         </View>
 
         {/* Duration + phase */}
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: space.md }}>
+        <View style={{ flexDirection: 'column', gap: 12, marginTop: space.md }}>
           <View style={{ flex: 1 }}>
             <Text
               style={{
@@ -238,39 +238,55 @@ export default function NewCycle() {
             >
               Phase
             </Text>
-            <View
-              style={{
-                flexDirection: 'row',
-                gap: 3,
-                padding: 3,
-                borderRadius: radius.md,
-                backgroundColor: t.surfaceAlt,
-              }}
-            >
-              {(['loading', 'active', 'taper', 'washout'] as const).map((ph) => {
-                const active = ph === phase;
+            <View style={{ gap: 6 }}>
+              {(
+                [
+                  { id: 'loading' as const, label: 'Loading', desc: 'Ramp-up phase' },
+                  { id: 'active' as const, label: 'Active', desc: 'Main protocol' },
+                  { id: 'taper' as const, label: 'Taper', desc: 'Wind-down' },
+                  { id: 'washout' as const, label: 'Washout', desc: 'Rest between cycles' },
+                ]
+              ).map((ph) => {
+                const active = ph.id === phase;
                 return (
                   <Pressable
-                    key={ph}
-                    onPress={() => setPhase(ph)}
+                    key={ph.id}
+                    onPress={() => setPhase(ph.id)}
                     style={{
-                      flex: 1,
-                      padding: 8,
-                      borderRadius: radius.sm,
-                      backgroundColor: active ? t.surface : 'transparent',
+                      padding: 10,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: active ? t.accent : t.line,
+                      backgroundColor: active ? t.accentSoft : t.surface,
+                      flexDirection: 'row',
                       alignItems: 'center',
+                      gap: 10,
                     }}
                   >
-                    <Text
+                    <View
                       style={{
-                        fontSize: 10,
-                        fontFamily: active ? font.sansSemi : font.sansMed,
-                        color: active ? t.ink : t.ink3,
-                        textTransform: 'capitalize',
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        borderWidth: 2,
+                        borderColor: active ? t.accent : t.ink4,
+                        backgroundColor: active ? t.accent : 'transparent',
                       }}
-                    >
-                      {ph[0]}
-                    </Text>
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontFamily: active ? font.sansSemi : font.sansMed,
+                          color: active ? t.ink : t.ink2,
+                        }}
+                      >
+                        {ph.label}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: t.ink3, marginTop: 1 }}>
+                        {ph.desc}
+                      </Text>
+                    </View>
                   </Pressable>
                 );
               })}
