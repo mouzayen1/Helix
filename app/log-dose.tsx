@@ -582,52 +582,14 @@ export default function LogDoseModal() {
           </View>
         </View>
 
-        {/* Site + Route */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md, flexDirection: 'row', gap: 8 }}>
-          <Pressable
-            onPress={() => router.push('/injection-sites' as any)}
-            style={{
-              flex: 1,
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              padding: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                textTransform: 'uppercase',
-              }}
-            >
-              Site
-            </Text>
-            <Text
-              style={{
-                fontSize: 15,
-                fontFamily: font.sansSemi,
-                color: t.ink,
-                marginTop: 6,
-              }}
-            >
-              {site ?? '—'}
-            </Text>
-            <Text style={{ fontSize: 11, color: t.accent, marginTop: 2 }}>
-              Tap to open body map
-            </Text>
-          </Pressable>
+        {/* Injection site — inline chip picker */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
           <View
             style={{
-              flex: 1,
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              padding: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              marginBottom: 8,
             }}
           >
             <Text
@@ -637,40 +599,103 @@ export default function LogDoseModal() {
                 color: t.ink3,
                 fontFamily: font.sansSemi,
                 textTransform: 'uppercase',
-                marginBottom: 6,
               }}
             >
-              Route
+              Injection site{site ? ` · ${site}` : ''}
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-              {ROUTES.map((r) => {
-                const active = r === route;
-                return (
-                  <Pressable
-                    key={r}
-                    onPress={() => setRoute(r)}
+            <Pressable
+              onPress={() => router.push('/injection-sites' as any)}
+              hitSlop={6}
+            >
+              <Text style={{ fontSize: 11, color: t.accent, fontFamily: font.sansSemi }}>
+                Body map
+              </Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6, paddingRight: space.md }}
+          >
+            {INJECTION_SITES.map((s) => {
+              const active = s === site;
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => setSite(s)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? t.accent : t.surface,
+                    borderWidth: 1,
+                    borderColor: active ? t.accent : t.line,
+                  }}
+                >
+                  <Text
                     style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: radius.pill,
-                      backgroundColor: active ? t.ink : 'transparent',
-                      borderWidth: 1,
-                      borderColor: active ? t.ink : t.line,
+                      fontSize: 12,
+                      color: active ? '#fff' : t.ink,
+                      fontFamily: font.sansMed,
                     }}
                   >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: active ? t.bg : t.ink2,
-                        fontFamily: font.sansMed,
-                      }}
-                    >
-                      {r}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    {s}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Pressable onPress={() => setSite(null)} hitSlop={6} style={{ marginTop: 6 }}>
+            <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.sansMed }}>
+              Clear site
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Route */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+          <Text
+            style={{
+              fontSize: 10,
+              letterSpacing: 0.8,
+              color: t.ink3,
+              fontFamily: font.sansSemi,
+              textTransform: 'uppercase',
+              marginBottom: 8,
+            }}
+          >
+            Route
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {ROUTES.map((r) => {
+              const active = r === route;
+              return (
+                <Pressable
+                  key={r}
+                  onPress={() => setRoute(r)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? t.ink : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? t.ink : t.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: active ? t.bg : t.ink2,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
+                    {r}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
