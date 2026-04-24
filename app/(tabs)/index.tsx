@@ -59,33 +59,53 @@ function greet(d: Date) {
 // Given a peptide with a multi-phase cycleTemplate, determine which phase
 // the user is currently in based on days-since-cycle-start. Returns null
 // if the peptide has no phase structure.
+//
+// Edge cases:
+//   - dayOfCycle = 0 (cycle just started) → returns phase 1, week 1.
+//   - dayOfCycle past the sum of phase weeks → returns the LAST phase with
+//     extended=true, so the UI can render 'Past <name>' instead of a
+//     frozen 'week X of X' that implies they're still in it.
+//   - Phases with zero weeks are skipped automatically.
 function currentPhaseFor(
   peptide_id: string,
   dayOfCycle: number
-): { name: string; weekInPhase: number; totalWeeks: number; doseModifier?: string } | null {
+): {
+  name: string;
+  weekInPhase: number;
+  totalWeeks: number;
+  doseModifier?: string;
+  extended: boolean;
+  weeksPastEnd?: number;
+} | null {
   const extras = getPeptideExtras(peptide_id);
   const phases = extras?.cycleTemplate?.phases;
   if (!phases || phases.length === 0) return null;
-  const currentWeek = Math.floor(dayOfCycle / 7);
+  const safeDay = Math.max(0, dayOfCycle);
+  const currentWeek = Math.floor(safeDay / 7);
   let cumulative = 0;
   for (const ph of phases) {
+    if (ph.weeks <= 0) continue;
     if (currentWeek < cumulative + ph.weeks) {
       return {
         name: ph.name,
         weekInPhase: currentWeek - cumulative + 1,
         totalWeeks: ph.weeks,
         doseModifier: ph.dose_modifier,
+        extended: false,
       };
     }
     cumulative += ph.weeks;
   }
-  // Past the last phase — return final phase as the current one.
+  // Past the last non-zero phase — keep the badge visible but flag it
+  // so the UI can say "Past maintenance" instead of a frozen week count.
   const last = phases[phases.length - 1];
   return {
     name: last.name,
     weekInPhase: last.weeks,
     totalWeeks: last.weeks,
     doseModifier: last.dose_modifier,
+    extended: true,
+    weeksPastEnd: Math.max(1, currentWeek - cumulative + 1),
   };
 }
 
@@ -473,13 +493,19 @@ export default function TodayScreen() {
                         <Text
                           style={{
                             fontSize: 11,
-                            color: t.accent,
+                            color: phase.extended ? t.ink3 : t.accent,
                             fontFamily: font.sansSemi,
                             marginTop: 2,
                             letterSpacing: 0.3,
                           }}
                         >
-                          {phase.name} · week {phase.weekInPhase} of {phase.totalWeeks}
+                          {phase.extended
+                            ? `Past ${phase.name.toLowerCase()}${
+                                phase.weeksPastEnd && phase.weeksPastEnd > 1
+                                  ? ` · week +${phase.weeksPastEnd - 1}`
+                                  : ''
+                              }`
+                            : `${phase.name} · week ${phase.weekInPhase} of ${phase.totalWeeks}`}
                           {phase.doseModifier ? ` · ${phase.doseModifier}` : ''}
                         </Text>
                       ) : null}
