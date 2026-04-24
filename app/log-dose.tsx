@@ -12,8 +12,10 @@ import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import {
   getActiveCycle,
   getActiveVial,
+  getVialsForPeptide,
   INJECTION_SITES,
   listActiveVials,
+  listDoses,
   logDose,
   siteSuggestion,
   type Cycle,
@@ -61,6 +63,9 @@ export default function LogDoseModal() {
   const [note, setNote] = useState('');
   const [vial, setVial] = useState<Vial | null>(null);
   const [vials, setVials] = useState<Vial[]>([]);
+  // All active vials for the currently selected peptide. When >1 we show
+  // a small picker so the user can choose which vial the dose came from.
+  const [peptideVials, setPeptideVials] = useState<Vial[]>([]);
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -98,7 +103,26 @@ export default function LogDoseModal() {
 
   useEffect(() => {
     if (!peptideId) return;
-    getActiveVial(peptideId).then(setVial);
+    (async () => {
+      const active = await getVialsForPeptide(peptideId, true);
+      setPeptideVials(active);
+      if (active.length === 0) {
+        setVial(null);
+        return;
+      }
+      // Default to the current selection if it's still in the active list,
+      // otherwise pick the one closest to expiry (oldest expires_at first,
+      // nulls last) — this matches logDose's server-side fallback.
+      const keep = vial && active.find((v) => v.id === vial.id);
+      if (keep) return;
+      const sorted = [...active].sort((a, b) => {
+        if (!a.expires_at && !b.expires_at) return 0;
+        if (!a.expires_at) return 1;
+        if (!b.expires_at) return -1;
+        return a.expires_at.localeCompare(b.expires_at);
+      });
+      setVial(sorted[0] ?? null);
+    })();
   }, [peptideId]);
 
   // Prefill dose from active cycle's today protocol, or from query param.
@@ -159,8 +183,7 @@ export default function LogDoseModal() {
     }
   };
 
-  const save = async () => {
-    if (!peptideId || saving) return;
+  const actuallySave = async () => {
     setSaving(true);
     try {
       await logDose({
@@ -179,6 +202,40 @@ export default function LogDoseModal() {
       const msg = err instanceof Error && err.message ? err.message : 'Please try again.';
       Alert.alert('Could not log dose', msg, [{ text: 'OK' }]);
     }
+  };
+
+  const save = async () => {
+    if (!peptideId || saving) return;
+    // Soft duplicate warning: same peptide logged within ±10 minutes of the
+    // chosen timestamp. Prevents accidental double-taps and duplicate entries
+    // when back-dating.
+    try {
+      const recent = await listDoses({ limit: 20 });
+      const target = takenAtDate.getTime();
+      const match = recent.find(
+        (d) =>
+          d.peptide_id === peptideId &&
+          Math.abs(new Date(d.taken_at).getTime() - target) < 10 * 60 * 1000
+      );
+      if (match) {
+        const mins = Math.max(
+          1,
+          Math.round((Date.now() - new Date(match.taken_at).getTime()) / 60000)
+        );
+        Alert.alert(
+          'Already logged recently?',
+          `You logged ${peptide?.name ?? 'this peptide'} ${mins} min ago. Log again?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Log anyway', onPress: () => void actuallySave() },
+          ]
+        );
+        return;
+      }
+    } catch {
+      // If the duplicate lookup fails for any reason, fall through to save.
+    }
+    await actuallySave();
   };
 
   // Peptides that already have a vial vs not — used for picker sections.
@@ -587,6 +644,80 @@ export default function LogDoseModal() {
             )}
           </View>
         </View>
+
+        {/* Vial picker — only when the selected peptide has multiple active vials */}
+        {peptideVials.length > 1 ? (
+          <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+            <Text
+              style={{
+                fontSize: 10,
+                letterSpacing: 0.8,
+                color: t.ink3,
+                fontFamily: font.sansSemi,
+                textTransform: 'uppercase',
+                marginBottom: 8,
+              }}
+            >
+              Vial · {peptideVials.length} active
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingRight: space.md }}
+            >
+              {peptideVials.map((v) => {
+                const active = vial?.id === v.id;
+                const reconDate = new Date(v.reconstituted_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                });
+                return (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => setVial(v)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 14,
+                      borderRadius: radius.md,
+                      backgroundColor: active ? t.ink : t.surface,
+                      borderWidth: 1,
+                      borderColor: active ? t.ink : t.line,
+                      minWidth: 140,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontFamily: font.monoSemi,
+                        color: active ? t.bg : t.ink,
+                      }}
+                    >
+                      {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg
+                    </Text>
+                    <Text
+                      style={{
+                        marginTop: 3,
+                        fontSize: 10,
+                        color: active ? t.bg : t.ink3,
+                        fontFamily: font.mono,
+                      }}
+                    >
+                      Recon {reconDate}
+                      {v.expires_at
+                        ? ` · exp ${new Date(v.expires_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}`
+                        : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
 
         {/* Injection site — inline chip picker */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
