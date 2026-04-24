@@ -7,10 +7,12 @@ import { IconChevronLeft, IconPlus } from '../../components/Icons';
 import {
   endCycle,
   listCycles,
+  listJournal,
   pauseCycle,
   resumeCycle,
   updateCycle,
   type Cycle,
+  type JournalEntry,
 } from '../../lib/db';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
@@ -88,11 +90,28 @@ export default function CycleDetail() {
   const [acceptConflicts, setAcceptConflicts] = useState<boolean>(false);
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
 
   const refresh = useCallback(async () => {
     const all = await listCycles();
     const c = all.find((x) => x.id === id) ?? null;
     setCycle(c);
+    if (c) {
+      // Journal entries whose entry_date falls within the cycle window.
+      // For active cycles, the upper bound is today so future-dated entries
+      // aren't included.
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const endBound =
+        c.status === 'active' && c.ends_on > todayIso ? todayIso : c.ends_on;
+      const journals = await listJournal(1000);
+      setJournalEntries(
+        journals.filter(
+          (j) => j.entry_date >= c.starts_on.slice(0, 10) && j.entry_date <= endBound.slice(0, 10)
+        )
+      );
+    } else {
+      setJournalEntries([]);
+    }
     if (c) {
       setName(c.name);
       setPhase(c.phase);
@@ -989,6 +1008,98 @@ export default function CycleDetail() {
             </Text>
           </Pressable>
         </View>
+      ) : null}
+
+      {/* Journal during this cycle (view mode) */}
+      {!editing && journalEntries.length > 0 ? (
+        <View style={{ marginHorizontal: space.xl, marginTop: space.xl, gap: 8 }}>
+          <Text
+            style={{
+              fontSize: 11,
+              letterSpacing: 1,
+              color: t.ink3,
+              fontFamily: font.sansSemi,
+              textTransform: 'uppercase',
+            }}
+          >
+            Journal during this cycle · {journalEntries.length}
+          </Text>
+          {journalEntries.map((j) => (
+            <Pressable
+              key={j.id}
+              onPress={() =>
+                router.push({ pathname: '/journal-entry', params: { date: j.entry_date } } as any)
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`Open journal ${j.entry_date}`}
+              style={{
+                backgroundColor: t.surface,
+                borderRadius: radius.md,
+                borderWidth: 1,
+                borderColor: t.line,
+                padding: space.md,
+                gap: 4,
+              }}
+            >
+              <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
+                {new Date(j.entry_date).toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </Text>
+              {j.body ? (
+                <Text numberOfLines={2} style={{ fontSize: 13, color: t.ink, lineHeight: 19 }}>
+                  {j.body}
+                </Text>
+              ) : null}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 2 }}>
+                {j.mood != null ? (
+                  <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+                    mood {j.mood}
+                  </Text>
+                ) : null}
+                {j.energy != null ? (
+                  <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+                    energy {j.energy}
+                  </Text>
+                ) : null}
+                {j.sleep_hours != null ? (
+                  <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+                    sleep {j.sleep_hours}h
+                  </Text>
+                ) : null}
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {/* Copy to new cycle (view mode, completed/cancelled cycles only) */}
+      {!editing && (cycle.status === 'complete' || cycle.status === 'cancelled') ? (
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: '/cycle/new',
+              params: { copyFromCycleId: cycle.id },
+            } as any)
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Copy to new cycle"
+          style={{
+            marginHorizontal: space.xl,
+            marginTop: space.xl,
+            padding: space.md,
+            borderRadius: radius.md,
+            backgroundColor: t.ink,
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
+            Copy to new cycle
+          </Text>
+        </Pressable>
       ) : null}
 
       {/* Pause / resume action (view mode, for active or paused cycles) */}

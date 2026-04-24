@@ -1,10 +1,10 @@
 // Library — spec v2.0 §10 "Library home". Full 42-peptide catalog.
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronRight, IconSearch } from '../../components/Icons';
-import { HCodeAvatar, HSectionHeader, HTag } from '../../components/Primitives';
+import { IconChevronRight, IconClose, IconSearch } from '../../components/Icons';
+import { HCodeAvatar, HSectionHeader } from '../../components/Primitives';
 import { listSavedPeptides } from '../../lib/db';
 import { PEPTIDE_CLASSES, PEPTIDES, peptideClassTopLevel, type Peptide } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
@@ -16,8 +16,11 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
 
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [activeCat, setActiveCat] = useState<string>('All');
+  const [savedOnly, setSavedOnly] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
+  const savedSet = useMemo(() => new Set(saved), [saved]);
 
   useFocusEffect(
     useCallback(() => {
@@ -25,19 +28,28 @@ export default function LibraryScreen() {
     }, [])
   );
 
+  // Debounce the search input by 150ms — enough to cut per-keystroke work
+  // while still feeling instant.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(id);
+  }, [query]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     return PEPTIDES.filter((p) => {
       if (activeCat !== 'All' && peptideClassTopLevel(p.class) !== activeCat) return false;
+      if (savedOnly && !savedSet.has(p.id)) return false;
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
         p.subtitle.toLowerCase().includes(q) ||
         p.class.toLowerCase().includes(q) ||
+        (p.summary && p.summary.toLowerCase().includes(q)) ||
         p.stacks.some((s) => s.toLowerCase().includes(q))
       );
     });
-  }, [query, activeCat]);
+  }, [debouncedQuery, activeCat, savedOnly, savedSet]);
 
   const savedPeptides = useMemo(
     () => saved.map((id) => PEPTIDES.find((p) => p.id === id)).filter(Boolean) as Peptide[],
@@ -69,34 +81,79 @@ export default function LibraryScreen() {
             {PEPTIDES.length} peptides · research-grade monographs
           </Text>
 
-          {/* Search */}
+          {/* Search + saved filter */}
           <View
             style={{
               marginTop: space.md,
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 10,
-              backgroundColor: t.surface,
-              borderWidth: 1,
-              borderColor: t.line,
-              borderRadius: radius.md,
-              paddingHorizontal: 14,
+              gap: 8,
             }}
           >
-            <IconSearch size={16} color={t.ink3} />
-            <TextInput
-              placeholder="Search peptide, class, or effect"
-              placeholderTextColor={t.ink3}
-              value={query}
-              onChangeText={setQuery}
+            <View
               style={{
                 flex: 1,
-                color: t.ink,
-                fontFamily: font.sans,
-                fontSize: 14,
-                paddingVertical: 11,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                backgroundColor: t.surface,
+                borderWidth: 1,
+                borderColor: t.line,
+                borderRadius: radius.md,
+                paddingHorizontal: 14,
               }}
-            />
+            >
+              <IconSearch size={16} color={t.ink3} />
+              <TextInput
+                placeholder="Search peptide, class, or effect"
+                placeholderTextColor={t.ink3}
+                value={query}
+                onChangeText={setQuery}
+                returnKeyType="search"
+                accessibilityLabel="Search peptides"
+                style={{
+                  flex: 1,
+                  color: t.ink,
+                  fontFamily: font.sans,
+                  fontSize: 14,
+                  paddingVertical: 11,
+                }}
+              />
+              {query.length > 0 ? (
+                <Pressable
+                  onPress={() => setQuery('')}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <IconClose size={14} color={t.ink3} />
+                </Pressable>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => setSavedOnly((v) => !v)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: savedOnly }}
+              accessibilityLabel="Saved only"
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 11,
+                borderRadius: radius.md,
+                borderWidth: 1,
+                borderColor: savedOnly ? t.accent : t.line,
+                backgroundColor: savedOnly ? t.accentSoft : t.surface,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: font.sansSemi,
+                  color: savedOnly ? t.accentInk : t.ink2,
+                }}
+              >
+                {savedOnly ? '★ Saved' : '☆ Saved'}
+              </Text>
+            </Pressable>
           </View>
         </View>
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../theme/ThemeContext';
@@ -21,7 +21,7 @@ import {
 import { DosingDisclaimer } from '../../components/Primitives';
 import { PEPTIDES, findPeptide } from '../../lib/peptides';
 import { getPeptideExtras } from '../../lib/peptide-extras';
-import { createCycle, type CycleProtocolItem } from '../../lib/db';
+import { createCycle, listCycles, type CycleProtocolItem } from '../../lib/db';
 
 type Phase = 'loading' | 'active' | 'taper' | 'washout';
 
@@ -244,6 +244,7 @@ export default function NewCycle() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { copyFromCycleId } = useLocalSearchParams<{ copyFromCycleId?: string }>();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [goal, setGoal] = useState<string | null>(null);
@@ -260,6 +261,38 @@ export default function NewCycle() {
   const [doseText, setDoseText] = useState<Record<string, string>>({});
 
   const isCustom = goal === 'Custom';
+
+  // Pre-fill from an existing cycle when the "Copy to new cycle" entry point
+  // navigates here with copyFromCycleId. Runs once per id — jumps the flow to
+  // step 3 (Customize) with the copied protocol already loaded.
+  useEffect(() => {
+    if (!copyFromCycleId) return;
+    let cancelled = false;
+    (async () => {
+      const all = await listCycles();
+      const src = all.find((c) => c.id === copyFromCycleId);
+      if (!src || cancelled) return;
+      try {
+        const protocol = JSON.parse(src.protocol_json || '[]') as CycleProtocolItem[];
+        setItems(protocol);
+      } catch {
+        setItems([]);
+      }
+      setCycleName(`${src.name} (copy)`);
+      const startD = new Date(src.starts_on);
+      const endD = new Date(src.ends_on);
+      const days = Math.max(1, Math.floor((endD.getTime() - startD.getTime()) / 864e5));
+      setDurationWeeks(Math.max(1, Math.round(days / 7)));
+      setPhase(src.phase);
+      setGoal('Custom');
+      setSelectionId(SCRATCH_ID);
+      setStartOffset(0);
+      setStep(3);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [copyFromCycleId]);
 
   const filteredTemplates = useMemo(
     () => TEMPLATES.filter((tpl) => tpl.goal === goal),
