@@ -49,9 +49,10 @@ export default function LogDoseModal() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { peptideId: initialId, prefillDoseMcg } = useLocalSearchParams<{
+  const { peptideId: initialId, prefillDoseMcg, site: initialSite } = useLocalSearchParams<{
     peptideId?: string;
     prefillDoseMcg?: string;
+    site?: string;
   }>();
 
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
@@ -96,7 +97,8 @@ export default function LogDoseModal() {
             setPeptideId(PEPTIDES[0].id);
           }
         }
-        if (!site) setSite(sug.site);
+        // Param takes priority over default suggestion.
+        if (!site) setSite(initialSite ?? sug.site);
       })();
     }, [])
   );

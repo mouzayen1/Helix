@@ -240,10 +240,18 @@ export default function InjectionSitesModal() {
         >
           All zones
         </Text>
+        <Text style={{ paddingHorizontal: space.xl, marginTop: 4, fontSize: 11, color: t.ink4 }}>
+          Tap a zone to log a dose there.
+        </Text>
         <View style={{ paddingHorizontal: space.xl, marginTop: space.sm, gap: 6 }}>
           {recency.map((r) => (
-            <View
+            <Pressable
               key={r.site}
+              onPress={() =>
+                router.push({ pathname: '/log-dose', params: { site: r.site } } as any)
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`Log dose at ${r.site}`}
               style={{
                 backgroundColor: t.surface,
                 borderRadius: radius.md,
@@ -272,7 +280,7 @@ export default function InjectionSitesModal() {
               <Text style={{ color: t.ink3, fontSize: 12, fontFamily: font.mono, width: 40, textAlign: 'right' }}>
                 {r.total_uses}×
               </Text>
-            </View>
+            </Pressable>
           ))}
         </View>
       </ScrollView>

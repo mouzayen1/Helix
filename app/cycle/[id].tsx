@@ -4,7 +4,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronLeft, IconPlus } from '../../components/Icons';
-import { endCycle, listCycles, updateCycle, type Cycle } from '../../lib/db';
+import {
+  endCycle,
+  listCycles,
+  pauseCycle,
+  resumeCycle,
+  updateCycle,
+  type Cycle,
+} from '../../lib/db';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
@@ -214,6 +221,16 @@ export default function CycleDetail() {
 
   const onEndCycle = async () => {
     await endCycle(cycle.id);
+    router.back();
+  };
+
+  const onPauseCycle = async () => {
+    await pauseCycle(cycle.id);
+    router.back();
+  };
+
+  const onResumeCycle = async () => {
+    await resumeCycle(cycle.id);
     router.back();
   };
 
@@ -974,13 +991,38 @@ export default function CycleDetail() {
         </View>
       ) : null}
 
-      {/* End-cycle action (view mode, only for active cycles) */}
-      {!editing && cycle.status === 'active' ? (
+      {/* Pause / resume action (view mode, for active or paused cycles) */}
+      {!editing && (cycle.status === 'active' || cycle.status === 'paused') ? (
         <Pressable
-          onPress={onEndCycle}
+          onPress={cycle.status === 'paused' ? onResumeCycle : onPauseCycle}
+          accessibilityRole="button"
+          accessibilityLabel={cycle.status === 'paused' ? 'Resume cycle' : 'Pause cycle'}
           style={{
             marginHorizontal: space.xl,
             marginTop: space.xl,
+            padding: space.md,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: t.line,
+            backgroundColor: t.surface,
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
+            {cycle.status === 'paused' ? 'Resume cycle' : 'Pause cycle'}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {/* End-cycle action (view mode, only for active or paused cycles) */}
+      {!editing && (cycle.status === 'active' || cycle.status === 'paused') ? (
+        <Pressable
+          onPress={onEndCycle}
+          accessibilityRole="button"
+          accessibilityLabel="End cycle"
+          style={{
+            marginHorizontal: space.xl,
+            marginTop: space.md,
             padding: space.md,
             borderRadius: radius.md,
             borderWidth: 1,
