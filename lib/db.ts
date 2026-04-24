@@ -15,6 +15,21 @@ function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
+// ---- v1.1 migration helper -----------------------------------------------
+// Adds a column only if it doesn't already exist. Safe across fresh installs
+// and upgrades because PRAGMA table_info tells us what's there.
+async function addColumnIfMissing(
+  d: SQLite.SQLiteDatabase,
+  table: string,
+  column: string,
+  definition: string
+): Promise<void> {
+  const cols = await d.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (!cols.some((c) => c.name === column)) {
+    await d.runAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export async function initDatabase() {
   const d = db();
   await d.execAsync(`
@@ -152,7 +167,32 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_metrics_kind_taken ON metrics(kind, taken_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sites_used ON injection_sites_log(site, used_at DESC);
     CREATE INDEX IF NOT EXISTS idx_vials_active ON vials(peptide_id, is_active, reconstituted_at DESC);
+
+    -- v1.1: dose_skips table (opt out of a scheduled dose with reason)
+    CREATE TABLE IF NOT EXISTS dose_skips (
+      id TEXT PRIMARY KEY,
+      peptide_id TEXT NOT NULL,
+      cycle_id TEXT,
+      scheduled_date TEXT NOT NULL,
+      time_of_day TEXT,
+      reason TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_dose_skips_date ON dose_skips(scheduled_date);
+    CREATE INDEX IF NOT EXISTS idx_dose_skips_cycle ON dose_skips(cycle_id);
   `);
+
+  // ---- v1.1 additive column migrations ------------------------------------
+  // Run after the CREATE IF NOT EXISTS pass so tables definitely exist.
+  // Each addColumnIfMissing is idempotent: safe on fresh installs and on
+  // upgrades from earlier Helix versions.
+  await addColumnIfMissing(d, 'vials', 'cost_usd', 'REAL');
+  await addColumnIfMissing(d, 'vials', 'depleted_at', 'TEXT');
+  await addColumnIfMissing(d, 'vials', 'first_used_at', 'TEXT');
+  await addColumnIfMissing(d, 'vials', 'total_doses_drawn', 'INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing(d, 'cycles', 'paused_at', 'TEXT');
+  await addColumnIfMissing(d, 'cycles', 'paused_total_days', 'INTEGER NOT NULL DEFAULT 0');
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
@@ -249,6 +289,23 @@ export type Vial = {
   expires_at: string | null;
   notes: string | null;
   is_active: 0 | 1;
+  // v1.1 additions
+  cost_usd: number | null;
+  depleted_at: string | null;
+  first_used_at: string | null;
+  total_doses_drawn: number;
+};
+
+// v1.1: recorded intentional skip of a scheduled dose.
+export type DoseSkip = {
+  id: string;
+  peptide_id: string;
+  cycle_id: string | null;
+  scheduled_date: string;
+  time_of_day: string | null;
+  reason: string | null;
+  note: string | null;
+  created_at: string;
 };
 
 export async function createVial(input: {
@@ -297,7 +354,14 @@ export async function getVial(id: string): Promise<Vial | null> {
 }
 
 export async function deactivateVial(id: string) {
-  await db().runAsync('UPDATE vials SET is_active = 0 WHERE id = ?', id);
+  // v1.1: stamp depleted_at when is_active flips 1->0, iff not already set.
+  await db().runAsync(
+    `UPDATE vials
+        SET is_active = 0,
+            depleted_at = COALESCE(depleted_at, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      WHERE id = ?`,
+    id
+  );
 }
 
 export async function deleteVial(id: string) {
@@ -307,6 +371,106 @@ export async function deleteVial(id: string) {
   await d.withTransactionAsync(async () => {
     await d.runAsync('UPDATE doses SET vial_id = NULL WHERE vial_id = ?', id);
     await d.runAsync('DELETE FROM vials WHERE id = ?', id);
+  });
+}
+
+// v1.1: restore a depleted vial back to active. Clears depleted_at.
+export async function restoreVial(id: string) {
+  await db().runAsync(
+    'UPDATE vials SET is_active = 1, depleted_at = NULL WHERE id = ?',
+    id
+  );
+}
+
+// v1.1: vial history (is_active=0) newest first, with optional filter.
+export async function getVialHistory(opts: { limit?: number; peptideId?: string } = {}): Promise<Vial[]> {
+  const { limit = 100, peptideId } = opts;
+  if (peptideId) {
+    return db().getAllAsync<Vial>(
+      `SELECT * FROM vials WHERE is_active = 0 AND peptide_id = ?
+       ORDER BY depleted_at DESC, reconstituted_at DESC LIMIT ?`,
+      peptideId, limit
+    );
+  }
+  return db().getAllAsync<Vial>(
+    `SELECT * FROM vials WHERE is_active = 0
+     ORDER BY depleted_at DESC, reconstituted_at DESC LIMIT ?`,
+    limit
+  );
+}
+
+// v1.1: all vials for a peptide (active-only flag optional).
+export async function getVialsForPeptide(peptideId: string, activeOnly = false): Promise<Vial[]> {
+  if (activeOnly) {
+    return db().getAllAsync<Vial>(
+      `SELECT * FROM vials WHERE peptide_id = ? AND is_active = 1
+       ORDER BY reconstituted_at DESC`,
+      peptideId
+    );
+  }
+  return db().getAllAsync<Vial>(
+    `SELECT * FROM vials WHERE peptide_id = ?
+     ORDER BY is_active DESC, reconstituted_at DESC`,
+    peptideId
+  );
+}
+
+// v1.1: alias matching the spec name.
+export const getVialById = getVial;
+
+// v1.1: all doses drawn from a specific vial (timeline on vial detail).
+export async function getDosesForVial(vialId: string): Promise<Dose[]> {
+  return db().getAllAsync<Dose>(
+    'SELECT * FROM doses WHERE vial_id = ? ORDER BY taken_at DESC',
+    vialId
+  );
+}
+
+// v1.1: update a vial's static fields. When strength_mg or bac_water_ml
+// changes, remaining_mg and concentration are recomputed from the dose
+// history (strength_mg − sum of amount_mcg / 1000 drawn from this vial).
+// Dose history is preserved. Wrapped in a transaction.
+export async function updateVial(
+  id: string,
+  patch: {
+    strength_mg?: number;
+    bac_water_ml?: number;
+    expires_at?: string | null;
+    notes?: string | null;
+    cost_usd?: number | null;
+  }
+) {
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    const current = await d.getFirstAsync<Vial>('SELECT * FROM vials WHERE id = ?', id);
+    if (!current) return;
+
+    const newStrength = patch.strength_mg ?? current.strength_mg;
+    const newBac = patch.bac_water_ml ?? current.bac_water_ml;
+    const recomputeConc = newStrength !== current.strength_mg || newBac !== current.bac_water_ml;
+    const newConc = newStrength / newBac;
+
+    let newRemaining = current.remaining_mg;
+    if (patch.strength_mg !== undefined && patch.strength_mg !== current.strength_mg) {
+      const sum = await d.getFirstAsync<{ drawn_mg: number | null }>(
+        'SELECT COALESCE(SUM(amount_mcg), 0) / 1000.0 AS drawn_mg FROM doses WHERE vial_id = ?',
+        id
+      );
+      const drawn = sum?.drawn_mg ?? 0;
+      newRemaining = Math.max(0, newStrength - drawn);
+    }
+
+    const sets: string[] = [];
+    const vals: (string | number | null)[] = [];
+    sets.push('strength_mg = ?'); vals.push(newStrength);
+    sets.push('bac_water_ml = ?'); vals.push(newBac);
+    if (recomputeConc) { sets.push('concentration = ?'); vals.push(newConc); }
+    sets.push('remaining_mg = ?'); vals.push(newRemaining);
+    if (patch.expires_at !== undefined) { sets.push('expires_at = ?'); vals.push(patch.expires_at); }
+    if (patch.notes !== undefined) { sets.push('notes = ?'); vals.push(patch.notes); }
+    if (patch.cost_usd !== undefined) { sets.push('cost_usd = ?'); vals.push(patch.cost_usd); }
+    vals.push(id);
+    await d.runAsync(`UPDATE vials SET ${sets.join(', ')} WHERE id = ?`, ...vals);
   });
 }
 
@@ -383,19 +547,39 @@ export async function logDose(input: {
   const taken_at = input.taken_at ?? new Date().toISOString();
   const amount_mg = input.amount_mcg / 1000;
   const d = db();
+
+  // v1.1: if vial_id omitted, auto-pick the active vial for this peptide
+  // that's closest to expiry (so we drain soon-to-expire vials first).
+  let vial_id: string | null = input.vial_id ?? null;
+  if (vial_id === null) {
+    const auto = await d.getFirstAsync<{ id: string }>(
+      `SELECT id FROM vials
+        WHERE peptide_id = ? AND is_active = 1
+        ORDER BY (expires_at IS NULL) ASC, expires_at ASC, reconstituted_at ASC
+        LIMIT 1`,
+      input.peptide_id
+    );
+    if (auto) vial_id = auto.id;
+  }
+
   await d.withTransactionAsync(async () => {
     await d.runAsync(
       `INSERT INTO doses (id, peptide_id, vial_id, cycle_id, amount_mcg, volume_units,
                           route, site, taken_at, note)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      id, input.peptide_id, input.vial_id ?? null, input.cycle_id ?? null,
+      id, input.peptide_id, vial_id, input.cycle_id ?? null,
       input.amount_mcg, input.volume_units ?? null, input.route,
       input.site ?? null, taken_at, input.note ?? null
     );
-    if (input.vial_id) {
+    if (vial_id) {
+      // v1.1: also bump total_doses_drawn and set first_used_at if null.
       await d.runAsync(
-        `UPDATE vials SET remaining_mg = MAX(0, remaining_mg - ?) WHERE id = ?`,
-        amount_mg, input.vial_id
+        `UPDATE vials
+           SET remaining_mg      = MAX(0, remaining_mg - ?),
+               total_doses_drawn = total_doses_drawn + 1,
+               first_used_at     = COALESCE(first_used_at, ?)
+         WHERE id = ?`,
+        amount_mg, taken_at, vial_id
       );
     }
     if (input.site) {
@@ -446,11 +630,14 @@ export type Cycle = {
   starts_on: string;
   ends_on: string;
   phase: 'loading' | 'active' | 'taper' | 'washout';
-  status: 'planned' | 'active' | 'complete' | 'cancelled';
+  status: 'planned' | 'active' | 'paused' | 'complete' | 'cancelled';
   stack_id: string | null;
   protocol_json: string;
   notes: string | null;
   created_at: string;
+  // v1.1 additions
+  paused_at: string | null;
+  paused_total_days: number;
 };
 
 export type CycleProtocolItem = {
@@ -492,6 +679,84 @@ export async function listCycles(): Promise<Cycle[]> {
 
 export async function endCycle(id: string) {
   await db().runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+}
+
+// v1.1: pause an active cycle. Today stops scheduling from it until resumed.
+export async function pauseCycle(id: string) {
+  await db().runAsync(
+    `UPDATE cycles
+        SET status = 'paused',
+            paused_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = ?`,
+    id
+  );
+}
+
+// v1.1: resume a paused cycle. Shifts ends_on forward by the paused span
+// and accumulates paused_total_days. Clears paused_at.
+export async function resumeCycle(id: string) {
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    const row = await d.getFirstAsync<Cycle>('SELECT * FROM cycles WHERE id = ?', id);
+    if (!row || !row.paused_at) return;
+    const pausedMs = Date.now() - new Date(row.paused_at).getTime();
+    const pausedDays = Math.max(0, Math.round(pausedMs / 864e5));
+    const endsOn = new Date(row.ends_on);
+    endsOn.setDate(endsOn.getDate() + pausedDays);
+    const newEnds = endsOn.toISOString().slice(0, 10);
+    await d.runAsync(
+      `UPDATE cycles
+          SET status = 'active',
+              paused_at = NULL,
+              paused_total_days = paused_total_days + ?,
+              ends_on = ?
+        WHERE id = ?`,
+      pausedDays, newEnds, id
+    );
+  });
+}
+
+// v1.1: dose skip helpers.
+export async function createDoseSkip(input: {
+  peptide_id: string;
+  cycle_id?: string | null;
+  scheduled_date: string;
+  time_of_day?: string | null;
+  reason?: string | null;
+  note?: string | null;
+}): Promise<string> {
+  const id = genId('skip');
+  await db().runAsync(
+    `INSERT INTO dose_skips
+       (id, peptide_id, cycle_id, scheduled_date, time_of_day, reason, note, created_at)
+     VALUES (?,?,?,?,?,?,?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+    id,
+    input.peptide_id,
+    input.cycle_id ?? null,
+    input.scheduled_date,
+    input.time_of_day ?? null,
+    input.reason ?? null,
+    input.note ?? null
+  );
+  return id;
+}
+
+export async function listDoseSkips(
+  opts: { from?: string; to?: string; cycle_id?: string } = {}
+): Promise<DoseSkip[]> {
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+  if (opts.from) { where.push('scheduled_date >= ?'); args.push(opts.from); }
+  if (opts.to) { where.push('scheduled_date <= ?'); args.push(opts.to); }
+  if (opts.cycle_id) { where.push('cycle_id = ?'); args.push(opts.cycle_id); }
+  const sql = `SELECT * FROM dose_skips${
+    where.length ? ' WHERE ' + where.join(' AND ') : ''
+  } ORDER BY scheduled_date DESC`;
+  return db().getAllAsync<DoseSkip>(sql, ...args);
+}
+
+export async function deleteDoseSkip(id: string) {
+  await db().runAsync('DELETE FROM dose_skips WHERE id = ?', id);
 }
 
 export async function updateCycle(
@@ -759,28 +1024,38 @@ export async function siteRecency(): Promise<SiteSuggestion[]> {
 
 // ---- Export ----------------------------------------------------------------
 
-export async function exportAll(): Promise<{
+export const SCHEMA_VERSION = 2;
+
+export async function exportAllData(): Promise<{
   profile: unknown;
+  cycles: Cycle[];
   doses: Dose[];
   vials: Vial[];
-  cycles: Cycle[];
   stacks: Stack[];
-  journal: JournalEntry[];
   metrics: Metric[];
+  journal: JournalEntry[];
+  dose_skips: DoseSkip[];
   saved_peptides: string[];
+  exported_at: string;
+  schema_version: number;
 }> {
   const d = db();
   return {
     profile: await getProfile(),
+    cycles: await listCycles(),
     doses: await d.getAllAsync<Dose>('SELECT * FROM doses ORDER BY taken_at DESC'),
     vials: await d.getAllAsync<Vial>('SELECT * FROM vials ORDER BY reconstituted_at DESC'),
-    cycles: await listCycles(),
     stacks: await listStacks(),
-    journal: await listJournal(1000),
     metrics: await d.getAllAsync<Metric>('SELECT * FROM metrics ORDER BY taken_at DESC'),
+    journal: await listJournal(1000),
+    dose_skips: await d.getAllAsync<DoseSkip>('SELECT * FROM dose_skips ORDER BY scheduled_date DESC'),
     saved_peptides: await listSavedPeptides(),
+    exported_at: new Date().toISOString(),
+    schema_version: SCHEMA_VERSION,
   };
 }
+
+export const exportAll = exportAllData;
 
 export async function deleteAllUserData() {
   const d = db();
@@ -794,6 +1069,7 @@ export async function deleteAllUserData() {
       DELETE FROM metrics;
       DELETE FROM injection_sites_log;
       DELETE FROM saved_peptides;
+      DELETE FROM dose_skips;
       UPDATE profile SET
         display_name = NULL, birth_year = NULL,
         onboarding_done = 0, terms_accepted_at = NULL,
