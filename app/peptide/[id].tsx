@@ -1,19 +1,41 @@
-// Peptide detail — spec v2.0 §10 "Peptide Detail".
-// Hero, quick-facts, summary, mechanism, interactions, citations.
+// Peptide detail — spec v2.0 §10 + extras.
+// Clickable stack partners, UnapprovedChip, new Benefits/Beginner/Cycle/Timing/
+// Co-admin/Conflicts sections from lib/peptide-extras.
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft } from '../../components/Icons';
-import { HFormula, HSectionHeader, HTag } from '../../components/Primitives';
+import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
+import {
+  HFormula,
+  HSectionHeader,
+  HTag,
+  UnapprovedChip,
+} from '../../components/Primitives';
 import { isSaved, savePeptide, unsavePeptide } from '../../lib/db';
-import { DISCLAIMER_CITATION_FOOTER, DISCLAIMER_PEPTIDE_UNAPPROVED } from '../../lib/disclaimers';
-import { findPeptide, peptideClassTopLevel } from '../../lib/peptides';
+import {
+  DISCLAIMER_BEGINNER,
+  DISCLAIMER_CITATION_FOOTER,
+} from '../../lib/disclaimers';
+import { getPeptideExtras } from '../../lib/peptide-extras';
+import { findPeptide, PEPTIDES, peptideClassTopLevel } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
 
 type TabId = 'overview' | 'dosing' | 'research' | 'notes';
+
+function resolvePartnerId(label: string): string | null {
+  const lower = label.toLowerCase().trim();
+  const exact = PEPTIDES.find((p) => p.name.toLowerCase() === lower);
+  if (exact) return exact.id;
+  const lenient = PEPTIDES.find(
+    (p) =>
+      lower.includes(p.name.toLowerCase()) ||
+      p.name.toLowerCase().includes(lower.split(' ')[0])
+  );
+  return lenient?.id ?? null;
+}
 
 export default function PeptideDetailScreen() {
   const { t } = useTheme();
@@ -21,6 +43,7 @@ export default function PeptideDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const p = findPeptide(id ?? '');
+  const extras = p ? getPeptideExtras(p.id) : undefined;
   const [tab, setTab] = useState<TabId>('overview');
   const [saved, setSaved] = useState(false);
 
@@ -62,6 +85,11 @@ export default function PeptideDetailScreen() {
   const mechParagraphs = p.mechanism
     ? p.mechanism.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean)
     : [];
+
+  const stackPartnerLinks = useMemo(
+    () => p.stacks.map((s) => ({ label: s, id: resolvePartnerId(s) })),
+    [p.stacks]
+  );
 
   return (
     <ScrollView
@@ -128,19 +156,20 @@ export default function PeptideDetailScreen() {
         </View>
 
         <View style={{ paddingHorizontal: space.xl, paddingTop: space.lg }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text
-              style={{
-                fontSize: 11,
-                fontFamily: font.sansBold,
-                letterSpacing: 1.2,
-                color: p.color,
-                textTransform: 'uppercase',
-              }}
-            >
-              {p.class}
-            </Text>
+          <View style={{ marginBottom: 8 }}>
+            <UnapprovedChip />
           </View>
+          <Text
+            style={{
+              fontSize: 11,
+              fontFamily: font.sansBold,
+              letterSpacing: 1.2,
+              color: p.color,
+              textTransform: 'uppercase',
+            }}
+          >
+            {p.class}
+          </Text>
           <Text
             style={{
               fontSize: 34,
@@ -225,7 +254,7 @@ export default function PeptideDetailScreen() {
         ))}
       </View>
 
-      {/* Reconstitution card */}
+      {/* Suggested reconstitution */}
       {p.reconstitution ? (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
           <View
@@ -261,23 +290,6 @@ export default function PeptideDetailScreen() {
           </View>
         </View>
       ) : null}
-
-      {/* Research-use banner */}
-      <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-        <View
-          style={{
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.warnSoft + '90',
-            borderWidth: 1,
-            borderColor: t.warn + '40',
-          }}
-        >
-          <Text style={{ fontSize: 12, color: t.ink2, lineHeight: 18 }}>
-            {DISCLAIMER_PEPTIDE_UNAPPROVED}
-          </Text>
-        </View>
-      </View>
 
       {/* Tabs */}
       <View
@@ -319,7 +331,7 @@ export default function PeptideDetailScreen() {
         })}
       </View>
 
-      {/* Tab content */}
+      {/* OVERVIEW tab */}
       {tab === 'overview' ? (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.lg }}>
           {p.sequence ? (
@@ -348,6 +360,7 @@ export default function PeptideDetailScreen() {
               </Text>
             </View>
           ) : null}
+
           <View>
             <Text
               style={{
@@ -365,7 +378,29 @@ export default function PeptideDetailScreen() {
               {p.summary || 'Research summary is being prepared for this entry.'}
             </Text>
           </View>
-          {p.stacks.length > 0 ? (
+
+          {extras?.benefits ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.ink3,
+                  textTransform: 'uppercase',
+                  marginBottom: 6,
+                }}
+              >
+                What this peptide is for
+              </Text>
+              <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
+                {extras.benefits}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Clickable stack partners (from monograph stacks[]) */}
+          {stackPartnerLinks.length > 0 ? (
             <View>
               <Text
                 style={{
@@ -380,15 +415,27 @@ export default function PeptideDetailScreen() {
                 Common stack partners
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {p.stacks.map((s) => (
-                  <HTag key={s}>{s}</HTag>
-                ))}
+                {stackPartnerLinks.map(({ label, id: pid }) =>
+                  pid ? (
+                    <Pressable
+                      key={label}
+                      onPress={() => router.push(`/peptide/${pid}` as any)}
+                    >
+                      <HTag>{label}</HTag>
+                    </Pressable>
+                  ) : (
+                    <HTag key={label} color={t.ink3}>
+                      {label}
+                    </HTag>
+                  )
+                )}
               </View>
             </View>
           ) : null}
         </View>
       ) : null}
 
+      {/* DOSING tab */}
       {tab === 'dosing' ? (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.md }}>
           <View
@@ -424,25 +471,107 @@ export default function PeptideDetailScreen() {
             <Text style={{ fontSize: 13, color: t.ink2, marginTop: 4 }}>{p.freq}</Text>
             <Text style={{ fontSize: 13, color: t.ink2 }}>{p.route}</Text>
           </View>
+
+          {extras?.beginnerProtocol ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.ink3,
+                  textTransform: 'uppercase',
+                  marginBottom: 6,
+                }}
+              >
+                Beginner protocol
+              </Text>
+              <View
+                style={{
+                  padding: space.md,
+                  borderRadius: radius.md,
+                  backgroundColor: t.warnSoft,
+                  borderLeftWidth: 3,
+                  borderLeftColor: t.warn,
+                  marginBottom: 8,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: t.ink2, lineHeight: 17 }}>
+                  {DISCLAIMER_BEGINNER}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
+                {extras.beginnerProtocol}
+              </Text>
+            </View>
+          ) : null}
+
+          {extras?.cycleTemplate ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.ink3,
+                  textTransform: 'uppercase',
+                  marginBottom: 6,
+                }}
+              >
+                Suggested cycle
+              </Text>
+              <View
+                style={{
+                  backgroundColor: t.surface,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  padding: space.md,
+                  gap: 6,
+                }}
+              >
+                <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
+                  {extras.cycleTemplate.duration_weeks > 0
+                    ? `${extras.cycleTemplate.duration_weeks}-week cycle`
+                    : 'As-needed (no continuous cycle)'}
+                </Text>
+                <Text style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}>
+                  {extras.cycleTemplate.phase_notes}
+                </Text>
+                <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono, lineHeight: 17 }}>
+                  {extras.cycleTemplate.schedule}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {extras?.timing ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.ink3,
+                  textTransform: 'uppercase',
+                  marginBottom: 6,
+                }}
+              >
+                Best timing
+              </Text>
+              <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
+                {extras.timing}
+              </Text>
+            </View>
+          ) : null}
+
           <Text style={{ fontSize: 12, color: t.ink3, lineHeight: 18 }}>
             {DISCLAIMER_CITATION_FOOTER}
           </Text>
-          <Pressable
-            onPress={() => router.push('/log-dose' as any)}
-            style={{
-              padding: space.md,
-              borderRadius: radius.md,
-              backgroundColor: t.ink,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-              Log a dose
-            </Text>
-          </Pressable>
         </View>
       ) : null}
 
+      {/* RESEARCH tab */}
       {tab === 'research' ? (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.lg }}>
           {mechParagraphs.length > 0 ? (
@@ -535,6 +664,109 @@ export default function PeptideDetailScreen() {
             </View>
           ) : null}
 
+          {extras && extras.coAdministration.length > 0 ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.ink3,
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                }}
+              >
+                Co-administration
+              </Text>
+              <View style={{ gap: 6 }}>
+                {extras.coAdministration.map((ca) => {
+                  const partner = findPeptide(ca.peptide_id);
+                  if (!partner) return null;
+                  return (
+                    <Pressable
+                      key={ca.peptide_id}
+                      onPress={() => router.push(`/peptide/${partner.id}` as any)}
+                      style={{
+                        backgroundColor: t.surface,
+                        borderRadius: radius.md,
+                        borderWidth: 1,
+                        borderColor: t.line,
+                        padding: space.md,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 10,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: 4,
+                          backgroundColor: partner.color,
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
+                          + {partner.name}
+                          {ca.co_reconstitute ? (
+                            <Text style={{ color: t.accent, fontSize: 11 }}> · co-reconstitute</Text>
+                          ) : null}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: t.ink3, marginTop: 2, lineHeight: 17 }}>
+                          {ca.note}
+                        </Text>
+                      </View>
+                      <IconChevronRight size={14} color={t.ink4} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          {extras && extras.stackConflicts.length > 0 ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.danger,
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                }}
+              >
+                Stack conflicts
+              </Text>
+              <View style={{ gap: 6 }}>
+                {extras.stackConflicts.map((sc) => {
+                  const partner = findPeptide(sc.peptide_id);
+                  if (!partner) return null;
+                  return (
+                    <View
+                      key={sc.peptide_id}
+                      style={{
+                        backgroundColor: t.dangerSoft,
+                        borderRadius: radius.md,
+                        borderLeftWidth: 3,
+                        borderLeftColor: t.danger,
+                        padding: space.md,
+                        gap: 4,
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
+                        ✕ {partner.name}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: t.ink2, lineHeight: 17 }}>
+                        {sc.reason}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
           {p.citations.length > 0 ? (
             <View>
               <Text
@@ -598,6 +830,7 @@ export default function PeptideDetailScreen() {
         </View>
       ) : null}
 
+      {/* NOTES tab */}
       {tab === 'notes' ? (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
           <Text style={{ fontSize: 15, color: t.ink2, lineHeight: 23 }}>
@@ -630,17 +863,18 @@ export default function PeptideDetailScreen() {
           </Text>
         </Pressable>
         <Pressable
-          onPress={() => router.push('/reconstitute' as any)}
+          onPress={() =>
+            router.push({ pathname: '/reconstitute', params: { peptideId: p.id } } as any)
+          }
           style={{
             flex: 1,
             padding: space.md,
             borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.lineStrong,
+            backgroundColor: t.accent,
             alignItems: 'center',
           }}
         >
-          <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
+          <Text style={{ color: '#fff', fontSize: 14, fontFamily: font.sansSemi }}>
             Reconstitute
           </Text>
         </Pressable>
