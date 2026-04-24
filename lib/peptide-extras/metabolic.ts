@@ -93,15 +93,50 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     benefits:
       'hGH 176-191 fragment. Marketed for lipolytic / fat-loss effects. Human clinical trials have been mixed and the strongest claims (fat-only loss without GH effects) are not well supported.',
     beginnerProtocol:
-      'Research protocols: 250–500 mcg SubQ daily, morning, empty stomach.',
+      'Research protocols: 250–500 mcg SubQ daily, morning, empty stomach. 5-on/2-off schedule is common for longer cycles to preserve response.',
     cycleTemplate: {
       duration_weeks: 12,
-      phase_notes: 'Cycled 8–12 weeks on, 4 weeks off.',
+      phase_notes: 'Cycled 8–12 weeks on, 4 weeks off. 5-on/2-off pattern common in research contexts.',
       schedule: '300 mcg SubQ morning, 5 days on / 2 off, for 12 weeks.',
+      phases: [
+        { name: 'Active (5-on / 2-off)', weeks: 12, dose_modifier: '300 mcg SubQ morning, 5 days on + 2 days off' },
+      ],
     },
     timing: 'Morning, empty stomach, 20–30 minutes before breakfast or pre-cardio.',
     coAdministration: [],
     stackConflicts: [],
+    commonMistakes: [
+      'Eating within 30 min of a dose — the pre-feed fasted window is part of the research protocol.',
+    ],
+    proTips: [
+      'Pair with fasted morning cardio if following published fat-loss research protocols.',
+    ],
+  },
+
+  tesofensine: {
+    benefits:
+      'Oral triple monoamine-reuptake inhibitor (NE, DA, 5-HT). Phase-2/3 trials (TIPO-1, TIPO-4) reported significant weight loss and appetite reduction. Also investigated for Parkinson-related fatigue.',
+    beginnerProtocol:
+      'Clinical trial range: 0.25–1.0 mg PO daily. Research dose-ranging: start at 500 mcg (0.5 mg) daily; some protocols used 250 mcg to assess tolerance. Cycles typically 8–24 weeks.',
+    cycleTemplate: {
+      duration_weeks: 12,
+      phase_notes: 'Long oral cycles (8–24 weeks) in trials. Monitor blood pressure; monoamine effects can elevate BP.',
+      schedule: '500 mcg PO once daily, morning, for 12 weeks; titrate per tolerance.',
+    },
+    timing: 'Morning with water. Evening dosing can disrupt sleep due to monoamine stimulation.',
+    coAdministration: [],
+    stackConflicts: [
+      { peptide_id: 'sema', reason: 'Unknown-risk combination; both act on appetite pathways. Research lacks head-to-head data.' },
+      { peptide_id: 'tirz', reason: 'Same rationale as semaglutide.' },
+      { peptide_id: 'reta', reason: 'Same rationale as semaglutide.' },
+    ],
+    commonMistakes: [
+      'Evening dosing — causes insomnia in a meaningful fraction of users due to dopamine/norepinephrine stimulation.',
+      'Ignoring blood-pressure monitoring — trial safety data required periodic checks.',
+    ],
+    proTips: [
+      'Start at 250 mcg for the first week to assess tolerance before moving to 500 mcg.',
+    ],
   },
 
   amq: {

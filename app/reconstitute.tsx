@@ -556,8 +556,55 @@ export default function ReconstituteModal() {
               textTransform: 'uppercase',
             }}
           >
-            Draw to {calc.unitsPerDose.toFixed(1)} units
+            How much to draw
           </Text>
+          <View
+            style={{
+              backgroundColor: t.accentSoft,
+              borderRadius: radius.md,
+              paddingVertical: space.md,
+              paddingHorizontal: space.lg,
+              borderLeftWidth: 3,
+              borderLeftColor: t.accent,
+              marginBottom: 10,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                color: t.accentInk,
+                fontFamily: font.sansSemi,
+                letterSpacing: 0.9,
+                textTransform: 'uppercase',
+              }}
+            >
+              On U100 insulin syringe
+            </Text>
+            <Text
+              style={{
+                fontSize: 28,
+                fontFamily: font.monoSemi,
+                color: t.ink,
+                marginTop: 4,
+                letterSpacing: -0.5,
+              }}
+            >
+              {calc.unitsPerDose.toFixed(1)}
+              <Text style={{ fontSize: 14, color: t.ink3, fontFamily: font.sansMed }}>
+                {' units'}
+              </Text>
+            </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                color: t.ink3,
+                fontFamily: font.mono,
+                marginTop: 2,
+              }}
+            >
+              = {calc.volMlPerDose.toFixed(3)} mL · {targetDoseMcg} mcg per dose
+            </Text>
+          </View>
           <View
             style={{
               backgroundColor: t.surface,

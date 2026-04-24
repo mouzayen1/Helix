@@ -965,6 +965,31 @@ export const PEPTIDES: Peptide[] = [
       { title: 'Goldspink G — Mechano growth factor (MGF) and muscle adaptation. J Anat, 2005. Not medical advice. Educational / research tracking reference. helix · v2.0 · 2026', url: 'https://pubmed.ncbi.nlm.nih.gov/15817105/' },
     ],
   },
+  {
+    id: 'tesofensine',
+    name: 'Tesofensine',
+    subtitle: 'Oral triple monoamine reuptake inhibitor',
+    class: 'METABOLIC / SMALL MOLECULE',
+    color: '#2A6BB5',
+    sequence: '',
+    formula: 'C17H24Cl2N',
+    mw: '329.3 g/mol',
+    halfLife: '~9 days',
+    route: 'Oral (capsule)',
+    dose: '250 mcg – 1 mg PO daily',
+    freq: 'Daily (morning)',
+    reconstitution: 'Oral capsule; no reconstitution needed',
+    summary:
+      'A triple monoamine-reuptake inhibitor (norepinephrine, dopamine, serotonin) originally developed for Parkinson disease, then repositioned for obesity after phase-2 trials (TIPO-1, TIPO-4) reported significant weight loss. Approved in some jurisdictions for obesity; still investigational in others.',
+    mechanism:
+      'Inhibits presynaptic reuptake of norepinephrine, dopamine, and serotonin.\n\nReduces appetite and increases satiety signaling in hypothalamic feeding circuits.\n\nModest thermogenic contribution via sympathetic activation.',
+    stacks: [],
+    notes:
+      'Blood-pressure monitoring recommended in trial protocols. Not a peptide (small molecule) but commonly grouped with metabolic peptides in research settings.',
+    citations: [
+      { title: 'Astrup A et al. — Tesofensine TIPO-1 obesity trial. Lancet, 2008.', url: 'https://pubmed.ncbi.nlm.nih.gov/18950853/' },
+    ],
+  },
 ];
 
 export const PEPTIDE_CLASSES = [

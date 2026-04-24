@@ -21,25 +21,45 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'kpv', note: 'GI tract inflammation + healing (research contexts)' },
     ],
     stackConflicts: [],
+    commonMistakes: [
+      'Single-daily dosing despite the 15–30 min plasma half-life — splitting into AM + PM maintains exposure.',
+      'Injecting systemically when targeting a local tendon — research suggests proximity to the injury site helps.',
+    ],
+    proTips: [
+      'Reconstitute-compatible with TB-500 at the same BAC volume for a single co-administered shot.',
+      'Short half-life forgives missed doses — just resume the next scheduled dose rather than double-up.',
+    ],
   },
 
   tb500: {
     benefits:
       'Thymosin β4 fragment studied for actin-cytoskeleton regulation, cell migration to injury sites, MMP-2 upregulation, and capillary density. Used in research on tendon, dermal, and cardiac repair.',
     beginnerProtocol:
-      'Research protocols: loading 2–5 mg SubQ twice weekly for 4 weeks, then 2–5 mg weekly maintenance. WADA-prohibited for athletes.',
+      'Research protocols: loading 3 mg SubQ twice weekly for 2 weeks, then 1.5–2.5 mg once weekly maintenance. WADA-prohibited for athletes.',
     cycleTemplate: {
       duration_weeks: 8,
-      phase_notes: 'Front-loaded: loading weeks 1–4, maintenance weeks 5–8, wash-out after.',
-      schedule: 'Weeks 1–4: 2.5 mg SubQ twice weekly. Weeks 5–8: 2.5 mg SubQ once weekly.',
+      phase_notes: 'Two-phase structure: aggressive loading for 2 weeks, then step down to weekly maintenance for 6 weeks. Wash-out 4 weeks between cycles.',
+      schedule: 'Loading (weeks 1–2): 3 mg SubQ 2× weekly. Maintenance (weeks 3–8): 1.5–2.5 mg SubQ once weekly.',
+      phases: [
+        { name: 'Loading', weeks: 2, dose_modifier: '3 mg SubQ 2× weekly' },
+        { name: 'Maintenance', weeks: 6, dose_modifier: '1.5–2.5 mg SubQ once weekly' },
+      ],
     },
     timing:
-      'Injection timing is not time-of-day sensitive. Same day each week helps protocol adherence.',
+      'Injection timing is not time-of-day sensitive. Same day each week helps protocol adherence during maintenance.',
     coAdministration: [
       { peptide_id: 'bpc157', note: 'Classic healing pair; co-reconstitute possible', co_reconstitute: true },
       { peptide_id: 'ghkcu', note: 'Broader tissue-repair coverage' },
     ],
     stackConflicts: [],
+    commonMistakes: [
+      'Skipping the loading phase and running straight to maintenance dosing — under-dosed for the first month.',
+      'Running cycles back-to-back without a wash-out period.',
+    ],
+    proTips: [
+      'Co-reconstitute with BPC-157 in the same BAC for a single SubQ shot when running the classic healing pair.',
+      'Inject into the nearest site to the injury when treating localized tendon/ligament issues (research convention; systemic effects still dominate).',
+    ],
   },
 
   tb4_full: {

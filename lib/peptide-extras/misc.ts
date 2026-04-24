@@ -88,16 +88,26 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     benefits:
       'Long-R3 IGF-1. Research on muscle protein synthesis, satellite-cell proliferation, anabolic signaling. Long half-life (~20–30 h) vs native IGF-1.',
     beginnerProtocol:
-      'Research protocols: 20–50 mcg SubQ daily.',
+      'Research protocols: 20–50 mcg SubQ daily. CRITICAL: reconstitute with 0.6% acetic acid (NOT BAC water) — IGF-1 LR3 is unstable in bacteriostatic water and degrades rapidly. Once reconstituted, refrigerate and use within 24 hours.',
     cycleTemplate: {
       duration_weeks: 4,
-      phase_notes: 'Short cycles (4 weeks on / 4 off) to avoid receptor downregulation.',
-      schedule: '40 mcg SubQ daily, post-workout on training days, for 4 weeks.',
+      phase_notes: 'Short cycles (4 weeks on / 4 off) to avoid receptor downregulation. Reconstitute fresh and use within 24 h.',
+      schedule: '40 mcg SubQ daily, post-workout on training days, for 4 weeks. Fresh reconstitution every 24h.',
     },
     timing: 'Post-workout (within 30 min) on training days.',
     coAdministration: [],
     stackConflicts: [
       { peptide_id: 'igfdes', reason: 'Both IGF-1 analogs — redundant receptor activation.' },
+    ],
+    commonMistakes: [
+      'Reconstituting with bacteriostatic water — IGF-1 LR3 degrades in BAC water. Use 0.6% acetic acid only.',
+      'Storing reconstituted solution longer than 24 hours — activity drops significantly after that window.',
+      'Using a previously-made vial from another peptide as a reference for diluent — IGF-1 LR3 is uniquely unstable.',
+    ],
+    proTips: [
+      'Buy 0.6% acetic acid specifically for IGF-1 reconstitution — do not substitute vinegar or any other diluent.',
+      'Plan the 4-week cycle in advance and only reconstitute what you will use within 24 h.',
+      'Refrigerate between doses; do not freeze.',
     ],
   },
 

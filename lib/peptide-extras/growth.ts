@@ -8,11 +8,14 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
     benefits:
       'Selective pentapeptide GH secretagogue. Stimulates a GH pulse with minimal effect on cortisol or prolactin. Research on IGF-1 elevation, sleep quality, recovery.',
     beginnerProtocol:
-      'Research protocols start at 100–200 mcg per dose, 1–3× daily. Typical target 200–300 mcg per pulse.',
+      'Research protocols start at 100–200 mcg per dose, 1–3× daily. Typical target 200–300 mcg per pulse. 5-days-on / 2-off schedule preserves receptor sensitivity across long cycles.',
     cycleTemplate: {
       duration_weeks: 12,
-      phase_notes: 'Pulsatile dosing to preserve receptor sensitivity. 5-days-on / 2-off patterns appear in research.',
+      phase_notes: 'Pulsatile dosing to preserve receptor sensitivity. 5-days-on / 2-off is the common pattern in research.',
       schedule: '200–300 mcg SubQ up to 3× daily (AM, post-workout, pre-bed). 5 days on, 2 off, for 12 weeks.',
+      phases: [
+        { name: 'Active (5-on / 2-off)', weeks: 12, dose_modifier: '200–300 mcg SubQ, up to 3×/day, 5 days on + 2 days off' },
+      ],
     },
     timing:
       'Pre-bed dose aligns with natural GH pulse. Empty stomach preferred (no carb/fat within 2 hours) to avoid blunting GH release.',
@@ -28,17 +31,28 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'hexar', reason: 'Multiple GHRPs cause ghrelin receptor desensitization.' },
       { peptide_id: 'mk677', reason: 'MK-677 is a long-acting ghrelin agonist; stacking causes constant over-stimulation.' },
     ],
+    commonMistakes: [
+      'Eating within 2 hours of a dose — carbs/fat blunt the GH pulse by raising somatostatin.',
+      'Running a continuous daily schedule longer than 8 weeks without 2-off days; receptor sensitivity drops.',
+    ],
+    proTips: [
+      'Pre-bed dose stacks on the natural slow-wave-sleep GH pulse — this is why users report better sleep subjectively.',
+      'Pair with CJC-1295 (no DAC) in separate vials, injected at the same time, for the GHRH + GHRP synergy.',
+    ],
   },
 
   cjc_nodac: {
     benefits:
       'GHRH analog (Mod GRF 1-29) with short half-life (~30 min). Pairs with a GHRP to drive large pulsatile GH release without affecting pulse architecture.',
     beginnerProtocol:
-      'Research protocols: 100 mcg SubQ per pulse, 1–3× daily, co-injected with a GHRP like Ipamorelin.',
+      'Research protocols: 100 mcg SubQ per pulse, 1–3× daily, co-injected with a GHRP like Ipamorelin. 5-on/2-off schedule mirrors the paired GHRP.',
     cycleTemplate: {
       duration_weeks: 12,
-      phase_notes: 'Same cadence as the paired GHRP (usually Ipamorelin).',
+      phase_notes: 'Same cadence as the paired GHRP (usually Ipamorelin). 5-days-on / 2-off preserves receptor sensitivity.',
       schedule: '100 mcg SubQ + 200–300 mcg Ipamorelin SubQ up to 3× daily, 5-on/2-off, 12 weeks.',
+      phases: [
+        { name: 'Active (5-on / 2-off)', weeks: 12, dose_modifier: '100 mcg SubQ per pulse, co-injected with Ipamorelin, 5 days on + 2 days off' },
+      ],
     },
     timing: 'Same as the paired GHRP — pre-bed, AM, and/or post-workout, empty stomach.',
     coAdministration: [
@@ -101,11 +115,15 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
     benefits:
       'Stabilized GHRH analog (Egrifta®). FDA-approved for HIV-associated lipodystrophy. Long-term elevation of GH/IGF-1 with established trial safety data.',
     beginnerProtocol:
-      'Label dose: 2 mg SubQ once daily. Clinical titration: 1–2 mg/day.',
+      'Label dose: 2 mg SubQ once daily. Clinical titration: 1–2 mg/day. Some research protocols use 5-on/2-off scheduling for extended cycles beyond 8 weeks.',
     cycleTemplate: {
       duration_weeks: 26,
-      phase_notes: 'Approved label supports 6+ month continuous dosing.',
-      schedule: '2 mg SubQ daily. Long-term; evaluate IGF-1 periodically.',
+      phase_notes: 'Approved label supports 6+ month continuous dosing. Research contexts sometimes use 5-on/2-off after week 8 for receptor preservation.',
+      schedule: '2 mg SubQ daily for 8 weeks, then optionally 5-on/2-off for weeks 9+. Long-term; evaluate IGF-1 periodically.',
+      phases: [
+        { name: 'Daily', weeks: 8, dose_modifier: '2 mg SubQ once daily' },
+        { name: 'Maintenance (5-on / 2-off)', weeks: 18, dose_modifier: '2 mg SubQ, 5 days on + 2 days off' },
+      ],
     },
     timing: 'Evening dosing in the label.',
     coAdministration: [

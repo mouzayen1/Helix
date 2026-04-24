@@ -5,15 +5,22 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
     benefits:
       "Khavinson's pineal tetrapeptide (Ala-Glu-Asp-Gly). Russian research on telomerase activation, sleep-wake regulation, melatonin production; elderly-population clinical studies.",
     beginnerProtocol:
-      'Russian clinical protocols: 5–10 mg SubQ daily for 10–20 days, repeated 2×/year.',
+      "Conservative start: 5 mg SubQ daily × 10 days. Khavinson's published range is 5–10 mg daily × 10–20 days, repeated 2×/year. 5 mg is the safer starting point for first-time users.",
     cycleTemplate: {
       duration_weeks: 3,
-      phase_notes: 'Short courses (10–20 days), typically repeated every 4–6 months.',
-      schedule: '10 mg SubQ daily × 10 days, then 6-month break.',
+      phase_notes: 'Short courses (10–20 days), typically repeated every 4–6 months. Starting at 5 mg and titrating up after a full course is a reasonable conservative approach.',
+      schedule: '5 mg SubQ daily × 10 days for first course; subsequent courses can use 10 mg daily × 10–20 days. 4–6 month break between courses.',
     },
     timing: 'Evening dosing is traditional (aligns with pineal / melatonin rhythm).',
     coAdministration: [],
     stackConflicts: [],
+    commonMistakes: [
+      'Running continuously beyond 20 days per course — published protocols explicitly cycle.',
+      'Starting at the high end (10 mg) without a tolerance course.',
+    ],
+    proTips: [
+      'Evening injection 30–60 min before bed aligns the dosing window with the natural pineal rhythm the peptide is meant to modulate.',
+    ],
   },
 
   ss31: {
@@ -37,15 +44,26 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
     benefits:
       'Injectable NAD+. Research on mitochondrial function, NAD+/sirtuin pathway, energy metabolism. Subjective benefits reported for fatigue and cognitive clarity.',
     beginnerProtocol:
-      'Research protocols: 100–300 mg SubQ or IM, 1–5× weekly; IV infusions up to 500–1000 mg.',
+      'Conservative research-context dose: 100 mg SubQ 2–3× weekly (Mon / Wed / Fri). Clinic protocols occasionally go higher (up to 250 mg daily for short loading) but most longevity research clusters at 100 mg 2–3× weekly.',
     cycleTemplate: {
       duration_weeks: 4,
-      phase_notes: 'Short loading cycles (2–4 weeks) with maintenance.',
-      schedule: '250 mg SubQ daily × 5, then 2–3× weekly maintenance for 4 weeks.',
+      phase_notes: 'Short loading possible (2 weeks daily), then 2–3× weekly maintenance. Injection rate matters more than total dose — push slowly over 60+ seconds to minimize flushing.',
+      schedule: '100 mg SubQ 2–3× weekly for 4 weeks. Optional loading: 100 mg daily × 7 days then step down.',
+      phases: [
+        { name: 'Optional loading', weeks: 1, dose_modifier: '100 mg SubQ daily × 7 days' },
+        { name: 'Maintenance', weeks: 3, dose_modifier: '100 mg SubQ 2–3× weekly (Mon / Wed / Fri)' },
+      ],
     },
-    timing: 'Morning. Injections can cause transient flushing and nausea — dose slowly.',
+    timing: 'Morning. Injections cause flushing, nausea, and chest warmth — these scale with injection RATE, not total dose. Push slowly over 60+ seconds.',
     coAdministration: [],
     stackConflicts: [],
+    commonMistakes: [
+      'Fast injection — the flushing / nausea people complain about is almost always a speed issue, not a dose issue.',
+      'Starting at 250+ mg/day without tolerance — lower-and-slower gives the same sirtuin pathway engagement with fewer side effects.',
+    ],
+    proTips: [
+      'If flushing is intense, halve the injection rate and break the dose into 2 pushes, 30–60 seconds apart.',
+    ],
   },
 
   foxo: {
