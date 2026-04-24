@@ -1,10 +1,11 @@
 // Cycle detail — spec v2.0 §10. View + edit mode.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronLeft, IconPlus } from '../../components/Icons';
 import { endCycle, listCycles, updateCycle, type Cycle } from '../../lib/db';
+import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
@@ -19,6 +20,49 @@ type ProtocolItem = {
 const FREQUENCIES = ['daily', 'twice daily', 'every other day', 'twice weekly', 'weekly'];
 const TIMES = ['morning', 'evening', 'pre-workout', 'pre-bed'];
 
+// Parse dose strings like "250 mcg", "1-2 mg", "10 mg/week" into a default
+// dose value in micrograms (auto-converts mg → mcg).
+function parseDefaultDose(dose: string | undefined): number {
+  if (!dose) return 250;
+  const m = dose.match(/(\d+(?:\.\d+)?)\s*(mcg|mg)?/i);
+  if (!m || m[1] === undefined) return 250;
+  const n = parseFloat(m[1]);
+  if (isNaN(n)) return 250;
+  const unit = (m[2] ?? 'mcg').toLowerCase();
+  return unit === 'mg' ? n * 1000 : n;
+}
+
+// Adaptive dose step based on magnitude. Scales from ±10 at small doses
+// to ±1000 at large doses so editing NAD+ (250k mcg) doesn't take 10,000 taps.
+function doseStepFor(dose: number): number {
+  if (dose < 100) return 10;
+  if (dose < 1000) return 25;
+  if (dose < 10000) return 100;
+  if (dose < 100000) return 500;
+  return 1000;
+}
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function isoDate(d: Date): string {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dy = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${dy}`;
+}
+
+function formatDate(d: Date): string {
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export default function CycleDetail() {
   const { t } = useTheme();
   const router = useRouter();
@@ -32,6 +76,9 @@ export default function CycleDetail() {
   const [phase, setPhase] = useState<Cycle['phase']>('active');
   const [status, setStatus] = useState<Cycle['status']>('active');
   const [items, setItems] = useState<ProtocolItem[]>([]);
+  const [startsOn, setStartsOn] = useState<string>('');
+  const [durationWeeks, setDurationWeeks] = useState<number>(4);
+  const [acceptConflicts, setAcceptConflicts] = useState<boolean>(false);
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -43,11 +90,20 @@ export default function CycleDetail() {
       setName(c.name);
       setPhase(c.phase);
       setStatus(c.status);
+      setStartsOn(c.starts_on);
+      const startD = new Date(c.starts_on);
+      const endD = new Date(c.ends_on);
+      const dayDelta = Math.max(
+        1,
+        Math.floor((endD.getTime() - startD.getTime()) / 864e5)
+      );
+      setDurationWeeks(Math.max(1, Math.round(dayDelta / 7)));
       try {
         setItems(JSON.parse(c.protocol_json || '[]'));
       } catch {
         setItems([]);
       }
+      setAcceptConflicts(false);
     }
   }, [id]);
 
@@ -56,6 +112,48 @@ export default function CycleDetail() {
       refresh();
     }, [refresh])
   );
+
+  // Conflict detection across edited items (matches New Cycle Step 4 semantics).
+  const conflicts = useMemo(() => {
+    const ids = new Set(items.map((i) => i.peptide_id));
+    const pairs: { a: string; b: string; reason: string }[] = [];
+    const seen = new Set<string>();
+    for (const item of items) {
+      const extras = getPeptideExtras(item.peptide_id);
+      if (!extras) continue;
+      for (const c of extras.stackConflicts) {
+        if (!ids.has(c.peptide_id)) continue;
+        const key = [item.peptide_id, c.peptide_id].sort().join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push({ a: item.peptide_id, b: c.peptide_id, reason: c.reason });
+      }
+    }
+    return pairs;
+  }, [items]);
+
+  // Dirty check: does any editable field differ from the last-loaded cycle?
+  const isDirty = useMemo(() => {
+    if (!cycle) return false;
+    if (name.trim() !== cycle.name) return true;
+    if (phase !== cycle.phase) return true;
+    if (status !== cycle.status) return true;
+    if (startsOn !== cycle.starts_on) return true;
+    const startD = new Date(cycle.starts_on);
+    const endD = new Date(cycle.ends_on);
+    const origWeeks = Math.max(
+      1,
+      Math.round(Math.floor((endD.getTime() - startD.getTime()) / 864e5) / 7)
+    );
+    if (durationWeeks !== origWeeks) return true;
+    try {
+      const orig = JSON.parse(cycle.protocol_json || '[]');
+      if (JSON.stringify(orig) !== JSON.stringify(items)) return true;
+    } catch {
+      return true;
+    }
+    return false;
+  }, [cycle, name, phase, status, startsOn, durationWeeks, items]);
 
   if (!cycle) {
     return (
@@ -75,15 +173,21 @@ export default function CycleDetail() {
     );
   }
 
+  // View-mode progress math (1-indexed display)
   const start = new Date(cycle.starts_on);
   const end = new Date(cycle.ends_on);
   const today = new Date();
   const total = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 864e5));
-  const day = Math.min(
+  const dayIdx = Math.min(
     total,
     Math.max(0, Math.floor((today.getTime() - start.getTime()) / 864e5))
   );
-  const pct = Math.round((day / total) * 100);
+  const day = Math.min(total, dayIdx + 1);
+  const pct = Math.round((dayIdx / total) * 100);
+
+  // Edit-mode derived dates
+  const editStartDate = startsOn ? new Date(startsOn) : new Date(cycle.starts_on);
+  const editEndDate = addDays(editStartDate, durationWeeks * 7);
 
   const onSave = async () => {
     if (saving) return;
@@ -93,12 +197,16 @@ export default function CycleDetail() {
         name: name.trim() || cycle.name,
         phase,
         status,
+        starts_on: isoDate(editStartDate),
+        ends_on: isoDate(editEndDate),
         protocol: items,
       });
       setEditing(false);
       refresh();
     } catch (e) {
-      console.warn('update cycle failed', e);
+      const msg =
+        e instanceof Error && e.message ? e.message : 'Please try again.';
+      Alert.alert('Could not save cycle', msg, [{ text: 'OK' }]);
     } finally {
       setSaving(false);
     }
@@ -109,9 +217,32 @@ export default function CycleDetail() {
     router.back();
   };
 
+  // Back-button with discard prompt when there are unsaved edits.
+  const handleBack = () => {
+    if (editing && isDirty) {
+      Alert.alert('Discard changes?', 'Your edits will be lost.', [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            setEditing(false);
+            refresh();
+          },
+        },
+      ]);
+      return;
+    }
+    if (editing) {
+      setEditing(false);
+      return;
+    }
+    router.back();
+  };
+
   const addPeptide = (pid: string) => {
     const p = findPeptide(pid)!;
-    const defaultDose = parseInt(p.dose?.match(/(\d+)/)?.[1] ?? '250', 10);
+    const defaultDose = parseDefaultDose(p.dose);
     setItems((prev) => [
       ...prev,
       {
@@ -132,6 +263,9 @@ export default function CycleDetail() {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
   };
 
+  // Save is blocked if conflicts exist and the user hasn't accepted them.
+  const canSave = !saving && (conflicts.length === 0 || acceptConflicts);
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
@@ -149,12 +283,18 @@ export default function CycleDetail() {
           alignItems: 'center',
         }}
       >
-        <Pressable onPress={() => (editing ? setEditing(false) : router.back())} hitSlop={8}>
+        <Pressable onPress={handleBack} hitSlop={8}>
           <IconChevronLeft size={18} color={t.ink2} />
         </Pressable>
         {editing ? (
-          <Pressable onPress={onSave} disabled={saving}>
-            <Text style={{ color: saving ? t.ink3 : t.accent, fontSize: 14, fontFamily: font.sansSemi }}>
+          <Pressable onPress={onSave} disabled={!canSave}>
+            <Text
+              style={{
+                color: !canSave ? t.ink3 : t.accent,
+                fontSize: 14,
+                fontFamily: font.sansSemi,
+              }}
+            >
               {saving ? 'Saving…' : 'Save'}
             </Text>
           </Pressable>
@@ -236,6 +376,9 @@ export default function CycleDetail() {
             <Text style={{ color: t.ink, fontSize: 15, fontFamily: font.sansSemi }}>
               Day {day} of {total}
             </Text>
+            <Text style={{ color: t.ink4, fontSize: 11, fontFamily: font.mono, marginTop: 2 }}>
+              {formatDate(start)} — {formatDate(end)}
+            </Text>
             <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
               {pct}% complete
             </Text>
@@ -255,6 +398,155 @@ export default function CycleDetail() {
                 />
               );
             })}
+          </View>
+        </View>
+      ) : null}
+
+      {/* Start date + duration editors (edit mode) */}
+      {editing ? (
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.md }}>
+          <View>
+            <Text
+              style={{
+                fontSize: 11,
+                color: t.ink3,
+                letterSpacing: 0.9,
+                fontFamily: font.sansSemi,
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
+              Start date
+            </Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.sm,
+              }}
+            >
+              <Pressable
+                onPress={() => setStartsOn(isoDate(addDays(editStartDate, -1)))}
+                accessibilityLabel="Earlier day"
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: t.ink, fontSize: 20, fontFamily: font.sansBold }}>−</Text>
+              </Pressable>
+              <View
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: t.ink, fontFamily: font.monoSemi, fontSize: 14 }}>
+                  {formatDate(editStartDate)}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setStartsOn(isoDate(addDays(editStartDate, 1)))}
+                accessibilityLabel="Later day"
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: t.ink, fontSize: 20, fontFamily: font.sansBold }}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View>
+            <Text
+              style={{
+                fontSize: 11,
+                color: t.ink3,
+                letterSpacing: 0.9,
+                fontFamily: font.sansSemi,
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
+              Duration (weeks) · ends {formatDate(editEndDate)}
+            </Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.sm,
+              }}
+            >
+              <Pressable
+                onPress={() => setDurationWeeks((w) => Math.max(1, w - 1))}
+                disabled={durationWeeks === 1}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: durationWeeks === 1 ? 0.4 : 1,
+                }}
+              >
+                <Text style={{ color: t.ink, fontSize: 20, fontFamily: font.sansBold }}>−</Text>
+              </Pressable>
+              <View
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: t.ink, fontFamily: font.monoSemi, fontSize: 16 }}>
+                  {durationWeeks} {durationWeeks === 1 ? 'week' : 'weeks'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setDurationWeeks((w) => Math.min(52, w + 1))}
+                disabled={durationWeeks === 52}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: durationWeeks === 52 ? 0.4 : 1,
+                }}
+              >
+                <Text style={{ color: t.ink, fontSize: 20, fontFamily: font.sansBold }}>+</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       ) : null}
@@ -494,7 +786,11 @@ export default function CycleDetail() {
                     }}
                   >
                     <Pressable
-                      onPress={() => updateItem(i, { dose_mcg: Math.max(1, row.dose_mcg - 25) })}
+                      onPress={() =>
+                        updateItem(i, {
+                          dose_mcg: Math.max(1, row.dose_mcg - doseStepFor(row.dose_mcg)),
+                        })
+                      }
                       hitSlop={6}
                     >
                       <Text style={{ fontSize: 16, color: t.ink, paddingHorizontal: 6 }}>−</Text>
@@ -511,7 +807,11 @@ export default function CycleDetail() {
                       {row.dose_mcg} mcg
                     </Text>
                     <Pressable
-                      onPress={() => updateItem(i, { dose_mcg: row.dose_mcg + 25 })}
+                      onPress={() =>
+                        updateItem(i, {
+                          dose_mcg: row.dose_mcg + doseStepFor(row.dose_mcg),
+                        })
+                      }
                       hitSlop={6}
                     >
                       <Text style={{ fontSize: 16, color: t.ink, paddingHorizontal: 6 }}>+</Text>
@@ -582,6 +882,97 @@ export default function CycleDetail() {
           );
         })}
       </View>
+
+      {/* Stack-conflict warnings (edit mode) */}
+      {editing && conflicts.length > 0 ? (
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+          <View
+            style={{
+              padding: space.lg,
+              borderRadius: radius.lg,
+              backgroundColor: t.dangerSoft,
+              borderWidth: 1,
+              borderColor: t.danger,
+              marginBottom: space.md,
+            }}
+          >
+            <Text
+              style={{
+                color: t.danger,
+                fontFamily: font.sansBold,
+                fontSize: 13,
+                letterSpacing: 0.5,
+                marginBottom: space.sm,
+              }}
+            >
+              STACKING CONFLICTS DETECTED
+            </Text>
+            <View style={{ gap: space.xs }}>
+              {conflicts.map((c) => {
+                const a = findPeptide(c.a);
+                const b = findPeptide(c.b);
+                return (
+                  <Text
+                    key={`${c.a}-${c.b}`}
+                    style={{ color: t.ink, fontFamily: font.sans, fontSize: 13 }}
+                  >
+                    <Text style={{ fontFamily: font.sansBold }}>
+                      {a?.name ?? c.a} + {b?.name ?? c.b}:
+                    </Text>{' '}
+                    {c.reason}
+                  </Text>
+                );
+              })}
+            </View>
+          </View>
+          <Pressable
+            onPress={() => setAcceptConflicts((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: acceptConflicts }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.sm,
+            }}
+          >
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 4,
+                borderWidth: 2,
+                borderColor: acceptConflicts ? t.accent : t.ink4,
+                backgroundColor: acceptConflicts ? t.accent : 'transparent',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {acceptConflicts ? (
+                <Text
+                  style={{
+                    color: t.accentInk,
+                    fontSize: 14,
+                    fontFamily: font.sansBold,
+                    lineHeight: 16,
+                  }}
+                >
+                  ✓
+                </Text>
+              ) : null}
+            </View>
+            <Text
+              style={{
+                color: t.ink,
+                fontFamily: font.sansMed,
+                fontSize: 13,
+                flex: 1,
+              }}
+            >
+              I understand these conflicts and accept the risk
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* End-cycle action (view mode, only for active cycles) */}
       {!editing && cycle.status === 'active' ? (

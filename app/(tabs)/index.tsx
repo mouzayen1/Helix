@@ -56,15 +56,18 @@ function greet(d: Date) {
 }
 
 // A protocol item maps to "expected today" based on frequency.
+// Unknown/pre-workout frequencies default to false (opt-in only).
 function isScheduledToday(row: CycleProtocolItem, dayOfCycle: number): boolean {
   const f = (row.freq || '').toLowerCase();
   if (f.includes('twice daily') || f.includes('2x daily')) return true;
   if (f.includes('daily') && !f.includes('every other')) return true;
   if (f.includes('every other')) return dayOfCycle % 2 === 0;
-  if (f.includes('twice weekly') || f.includes('2x weekly')) return dayOfCycle % 3 === 0;
+  if (f.includes('twice weekly') || f.includes('2x weekly'))
+    return dayOfCycle % 7 === 0 || dayOfCycle % 7 === 3;
   if (f.includes('weekly')) return dayOfCycle % 7 === 0;
-  if (f.includes('pre-workout')) return true;
-  return true;
+  // pre-workout and unknown freqs: do NOT auto-schedule. User logs manually
+  // when they actually do the workout.
+  return false;
 }
 
 export default function TodayScreen() {
@@ -103,22 +106,41 @@ export default function TodayScreen() {
     const end = new Date(cycle.ends_on);
     const today = new Date();
     const total = Math.max(1, daysBetween(start, end));
-    const day = Math.min(total, Math.max(0, daysBetween(start, today)));
-    const pct = Math.round((day / total) * 100);
-    return { day, total, pct, remaining: total - day };
+    // dayOfCycle is 0-indexed for schedule math; displayDay is 1-indexed
+    // so users see "Day 1 of 30" on the start date, not "Day 0".
+    const dayOfCycle = Math.min(total, Math.max(0, daysBetween(start, today)));
+    const displayDay = Math.min(total, dayOfCycle + 1);
+    const pct = Math.round((dayOfCycle / total) * 100);
+    return { day: dayOfCycle, displayDay, total, pct, remaining: total - dayOfCycle };
   }, [cycle]);
 
-  // Today's scheduled protocol rows (with their logged-status)
+  // Today's scheduled protocol rows. Twice-daily items split into AM + PM rows
+  // so each half can be independently logged/checked.
   const schedule = useMemo(() => {
     if (!cycle || !cycleView) return [];
     try {
       const protocol = JSON.parse(cycle.protocol_json || '[]') as CycleProtocolItem[];
-      return protocol
-        .filter((row) => isScheduledToday(row, cycleView.day))
-        .map((row) => {
+      const matching = protocol.filter((row) => isScheduledToday(row, cycleView.day));
+      const out: (CycleProtocolItem & { logged: boolean; window: 'AM' | 'PM' | 'ALL' })[] = [];
+      for (const row of matching) {
+        const isTwice =
+          (row.freq || '').toLowerCase().includes('twice daily') ||
+          (row.freq || '').toLowerCase().includes('2x daily');
+        if (isTwice) {
+          const amLogged = todayDoses.some(
+            (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() < 12
+          );
+          const pmLogged = todayDoses.some(
+            (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() >= 12
+          );
+          out.push({ ...row, logged: amLogged, window: 'AM' });
+          out.push({ ...row, logged: pmLogged, window: 'PM' });
+        } else {
           const logged = todayDoses.some((d) => d.peptide_id === row.peptide_id);
-          return { ...row, logged };
-        });
+          out.push({ ...row, logged, window: 'ALL' });
+        }
+      }
+      return out;
     } catch {
       return [];
     }
@@ -283,7 +305,7 @@ export default function TodayScreen() {
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color: t.ink2, fontSize: 13, fontFamily: font.mono }}>
-                  Day {cycleView.day} / {cycleView.total}
+                  Day {cycleView.displayDay} / {cycleView.total}
                 </Text>
                 <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
                   {cycleView.pct}% · {cycleView.remaining}d left
@@ -352,9 +374,11 @@ export default function TodayScreen() {
               {schedule.map((row, idx) => {
                 const p = findPeptide(row.peptide_id);
                 if (!p) return null;
+                const windowLabel =
+                  row.window === 'AM' ? 'Morning' : row.window === 'PM' ? 'Evening' : null;
                 return (
                   <View
-                    key={`${row.peptide_id}-${idx}`}
+                    key={`${row.peptide_id}-${row.window}-${idx}`}
                     style={{
                       backgroundColor: t.surface,
                       borderRadius: radius.md,
@@ -385,6 +409,18 @@ export default function TodayScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
                         {p.name}
+                        {windowLabel ? (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: p.color,
+                              fontFamily: font.sansSemi,
+                            }}
+                          >
+                            {' · '}
+                            {windowLabel}
+                          </Text>
+                        ) : null}
                       </Text>
                       <Text
                         style={{
@@ -691,7 +727,7 @@ export default function TodayScreen() {
                   }}
                 >
                   <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Edit / re-log
+                    Log another
                   </Text>
                 </Pressable>
                 <Pressable

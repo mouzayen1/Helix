@@ -849,7 +849,9 @@ export default function PeptideDetailScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.push('/log-dose' as any)}
+          onPress={() =>
+            router.push({ pathname: '/log-dose', params: { peptideId: p.id } } as any)
+          }
           style={{
             flex: 1,
             padding: space.md,
