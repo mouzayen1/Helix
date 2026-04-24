@@ -103,6 +103,54 @@ npx expo start
 eas build --platform android --profile preview
 ```
 
+## v1.1 — Flexibility & vial tracking
+
+v1.1 layers user-flexibility and lifecycle features on top of the v1.0
+Android demo. All additions are local-only and delivered via OTA.
+
+- **Vial library** (`/vials`) — active and depleted vials grouped by
+  peptide, remaining bar, expiry badge, dose count, cost per vial.
+- **Vial detail** (`/vials/:id`) — edit strength / BAC water / expiry /
+  cost / notes with dose-history-preserving recompute, per-vial dose
+  timeline, mark depleted, restore, delete.
+- **Multi-vial per peptide** — when more than one active vial exists
+  for a peptide, Log Dose shows an inline picker so the user chooses
+  which vial the dose came from. Defaults to closest-to-expiry.
+- **Backdated doses + notes** — Log Dose lets you pick any datetime
+  in the last 30 days and add a free-form note (side-effects, mood).
+- **Duplicate-dose soft warning** — saving a dose within 10 minutes
+  of an existing one prompts "Already logged recently?"
+- **Skip with reason** — Today schedule has a Skip button that opens
+  a sheet with preset chips (Forgot, Traveling, Side effect, Running
+  low, Rest day, Other) + optional note. Skipped rows render muted
+  with a SKIPPED badge; tap to un-skip.
+- **Pause / resume cycle** — Cycle Detail has Pause / Resume buttons;
+  Today shows a paused-cycle banner with a Resume action. Resume
+  shifts the end-date forward by the days paused.
+- **Library search** — debounced search across name, subtitle, class,
+  summary, and stack partners; clear button; ★ Saved-only filter chip.
+- **Copy cycle** — completed or cancelled cycles get a "Copy to new
+  cycle" button that pre-fills the New Cycle flow at step 3.
+- **Per-cycle journal** — cycle detail lists journal entries whose
+  date falls inside the cycle window.
+- **Local notifications** (opt-in) — Settings → Notifications gives
+  you Off / Dose-only / All-alerts, plus sub-toggles for dose
+  reminders, vial expiry (3 days ahead), phase transitions, and an
+  8pm missed-dose nudge. Preferred times + quiet hours configurable.
+  All scheduling is local — no remote push.
+- **Export as JSON / CSV** — Settings → Export uses `exportAllData()`
+  with `schema_version` + `exported_at`, record counts in the
+  confirmation, and per-table sections for CSV.
+- **Cost rollup** — Progress tab shows total spent, cost per dose,
+  and cost of the current cycle when any vial has `cost_usd` set.
+  Hidden entirely otherwise.
+- **Haptics** — light success pulses on Log Dose save, Resume, and
+  Restore; warn pulses on Skip and Mark Depleted; error on failed
+  save.
+- **Accessibility** — a11y labels/roles on all new buttons and
+  toggles, loading states on vial screens, discard-changes prompts
+  on dirty edits.
+
 ## What's next
 
 Still on the roadmap for launch (spec §04 phases 2–3):
