@@ -29,6 +29,7 @@ import {
   type DoseSkip,
   type Vial,
 } from '../../lib/db';
+import { haptic } from '../../lib/haptics';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide } from '../../lib/peptides';
 import { useProfile } from '../../lib/profile-context';
@@ -271,6 +272,7 @@ export default function TodayScreen() {
       reason: skipReason ?? undefined,
       note: skipNote.trim() || undefined,
     });
+    haptic.warn();
     setSkipSheet(null);
     await refresh();
   };
@@ -291,6 +293,7 @@ export default function TodayScreen() {
   const onResumeCycle = async () => {
     if (!cycle) return;
     await resumeCycle(cycle.id);
+    haptic.success();
     await refresh();
   };
 
@@ -357,6 +360,8 @@ export default function TodayScreen() {
           </View>
           <Pressable
             onPress={() => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
             style={{
               width: 40,
               height: 40,

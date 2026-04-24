@@ -21,6 +21,7 @@ import {
   type Cycle,
   type Vial,
 } from '../lib/db';
+import { haptic } from '../lib/haptics';
 import { findPeptide, PEPTIDES } from '../lib/peptides';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
@@ -198,9 +199,11 @@ export default function LogDoseModal() {
         taken_at: takenAtDate.toISOString(),
         note: note.trim() || undefined,
       });
+      haptic.success();
       router.back();
     } catch (err) {
       setSaving(false);
+      haptic.error();
       const msg = err instanceof Error && err.message ? err.message : 'Please try again.';
       Alert.alert('Could not log dose', msg, [{ text: 'OK' }]);
     }
@@ -259,7 +262,12 @@ export default function LogDoseModal() {
           paddingHorizontal: space.xl,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={10}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
           <IconClose size={16} color={t.ink3} />
         </Pressable>
         <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>Log dose</Text>
@@ -267,6 +275,9 @@ export default function LogDoseModal() {
           onPress={save}
           disabled={saving || vialInsufficient || !peptideId}
           hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Save dose"
+          accessibilityState={{ disabled: saving || vialInsufficient || !peptideId }}
         >
           <Text
             style={{

@@ -14,6 +14,7 @@ import {
   type Cycle,
   type JournalEntry,
 } from '../../lib/db';
+import { haptic } from '../../lib/haptics';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
@@ -245,11 +246,13 @@ export default function CycleDetail() {
 
   const onPauseCycle = async () => {
     await pauseCycle(cycle.id);
+    haptic.warn();
     router.back();
   };
 
   const onResumeCycle = async () => {
     await resumeCycle(cycle.id);
+    haptic.success();
     router.back();
   };
 

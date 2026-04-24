@@ -24,6 +24,7 @@ import {
   type Dose,
   type Vial,
 } from '../../lib/db';
+import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
@@ -204,6 +205,7 @@ export default function VialDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             await deactivateVial(vial.id);
+            haptic.warn();
             await load();
           },
         },
@@ -213,6 +215,7 @@ export default function VialDetailScreen() {
 
   const onRestore = async () => {
     await restoreVial(vial.id);
+    haptic.success();
     await load();
   };
 
