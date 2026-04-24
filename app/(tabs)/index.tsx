@@ -682,6 +682,31 @@ export default function TodayScreen() {
                   </Pressable>
                 );
               })}
+
+              {/* All vials card — routes to /vials for full library + history */}
+              <Pressable
+                onPress={() => router.push('/vials' as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Open all vials"
+                style={{
+                  minWidth: 160,
+                  backgroundColor: t.surfaceAlt,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  padding: space.md,
+                  justifyContent: 'center',
+                  alignItems: 'flex-start',
+                  gap: 6,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontFamily: font.sansSemi, color: t.ink }}>
+                  All vials →
+                </Text>
+                <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+                  Active + history
+                </Text>
+              </Pressable>
             </ScrollView>
           </>
         ) : null}

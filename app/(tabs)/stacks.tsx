@@ -96,24 +96,44 @@ export default function StacksScreen() {
             Cycles and protocols you are running
           </Text>
         </View>
-        <Pressable
-          onPress={() => router.push('/cycle/new')}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            backgroundColor: t.ink,
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            borderRadius: radius.pill,
-          }}
-          hitSlop={6}
-        >
-          <IconPlus size={14} color={t.bg} />
-          <Text style={{ color: t.bg, fontSize: 12, fontFamily: font.sansSemi }}>
-            New cycle
-          </Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={() => router.push('/vials' as any)}
+            style={{
+              backgroundColor: t.surface,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: radius.pill,
+              borderWidth: 1,
+              borderColor: t.line,
+            }}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Open vial library"
+          >
+            <Text style={{ color: t.ink, fontSize: 12, fontFamily: font.sansSemi }}>
+              Vials
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/cycle/new')}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: t.ink,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: radius.pill,
+            }}
+            hitSlop={6}
+          >
+            <IconPlus size={14} color={t.bg} />
+            <Text style={{ color: t.bg, fontSize: 12, fontFamily: font.sansSemi }}>
+              New cycle
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Active cycle */}
