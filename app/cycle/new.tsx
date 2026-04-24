@@ -727,6 +727,52 @@ export default function NewCycle() {
         >
           {tpl.duration_weeks} weeks · {tpl.phase}
         </Text>
+
+        {/* Surface any multi-phase protocols baked into this template's
+            peptides (e.g. TB-500 loading + maintenance). */}
+        {(() => {
+          const phased = tpl.items
+            .map((it) => ({
+              peptide: findPeptide(it.peptide_id),
+              phases: getPeptideExtras(it.peptide_id)?.cycleTemplate?.phases ?? [],
+            }))
+            .filter((x) => x.phases.length > 1);
+          if (phased.length === 0) return null;
+          return (
+            <View style={{ marginTop: space.sm, gap: 4 }}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  color: t.accent,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Multi-phase protocol
+              </Text>
+              {phased.map(({ peptide, phases }) => (
+                <Text
+                  key={peptide?.id ?? 'x'}
+                  style={{
+                    fontSize: 11,
+                    color: t.ink2,
+                    fontFamily: font.mono,
+                    lineHeight: 15,
+                  }}
+                >
+                  {peptide?.name ?? ''}:{' '}
+                  {phases
+                    .map(
+                      (ph) =>
+                        `${ph.name} ${ph.weeks}w${ph.dose_modifier ? ` (${ph.dose_modifier})` : ''}`
+                    )
+                    .join(' → ')}
+                </Text>
+              ))}
+            </View>
+          );
+        })()}
       </Pressable>
     );
   };

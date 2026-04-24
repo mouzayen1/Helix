@@ -24,6 +24,7 @@ import {
   type Dose,
   type Vial,
 } from '../../lib/db';
+import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide } from '../../lib/peptides';
 import { useProfile } from '../../lib/profile-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -53,6 +54,39 @@ function greet(d: Date) {
   if (h < 12) return 'Good morning,';
   if (h < 18) return 'Good afternoon,';
   return 'Good evening,';
+}
+
+// Given a peptide with a multi-phase cycleTemplate, determine which phase
+// the user is currently in based on days-since-cycle-start. Returns null
+// if the peptide has no phase structure.
+function currentPhaseFor(
+  peptide_id: string,
+  dayOfCycle: number
+): { name: string; weekInPhase: number; totalWeeks: number; doseModifier?: string } | null {
+  const extras = getPeptideExtras(peptide_id);
+  const phases = extras?.cycleTemplate?.phases;
+  if (!phases || phases.length === 0) return null;
+  const currentWeek = Math.floor(dayOfCycle / 7);
+  let cumulative = 0;
+  for (const ph of phases) {
+    if (currentWeek < cumulative + ph.weeks) {
+      return {
+        name: ph.name,
+        weekInPhase: currentWeek - cumulative + 1,
+        totalWeeks: ph.weeks,
+        doseModifier: ph.dose_modifier,
+      };
+    }
+    cumulative += ph.weeks;
+  }
+  // Past the last phase — return final phase as the current one.
+  const last = phases[phases.length - 1];
+  return {
+    name: last.name,
+    weekInPhase: last.weeks,
+    totalWeeks: last.weeks,
+    doseModifier: last.dose_modifier,
+  };
 }
 
 // A protocol item maps to "expected today" based on frequency.
@@ -376,6 +410,9 @@ export default function TodayScreen() {
                 if (!p) return null;
                 const windowLabel =
                   row.window === 'AM' ? 'Morning' : row.window === 'PM' ? 'Evening' : null;
+                const phase = cycleView
+                  ? currentPhaseFor(row.peptide_id, cycleView.day)
+                  : null;
                 return (
                   <View
                     key={`${row.peptide_id}-${row.window}-${idx}`}
@@ -432,6 +469,20 @@ export default function TodayScreen() {
                       >
                         {row.dose_mcg} mcg · {row.freq} · {row.time_of_day}
                       </Text>
+                      {phase ? (
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: t.accent,
+                            fontFamily: font.sansSemi,
+                            marginTop: 2,
+                            letterSpacing: 0.3,
+                          }}
+                        >
+                          {phase.name} · week {phase.weekInPhase} of {phase.totalWeeks}
+                          {phase.doseModifier ? ` · ${phase.doseModifier}` : ''}
+                        </Text>
+                      ) : null}
                     </View>
                     {row.logged ? (
                       <Text

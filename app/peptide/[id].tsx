@@ -527,7 +527,7 @@ export default function PeptideDetailScreen() {
                   borderWidth: 1,
                   borderColor: t.line,
                   padding: space.md,
-                  gap: 6,
+                  gap: 8,
                 }}
               >
                 <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
@@ -538,9 +538,65 @@ export default function PeptideDetailScreen() {
                 <Text style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}>
                   {extras.cycleTemplate.phase_notes}
                 </Text>
-                <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono, lineHeight: 17 }}>
-                  {extras.cycleTemplate.schedule}
-                </Text>
+                {/* Prefer phases when available; fall back to schedule string. */}
+                {extras.cycleTemplate.phases && extras.cycleTemplate.phases.length > 0 ? (
+                  <View style={{ gap: 6, marginTop: 4 }}>
+                    {extras.cycleTemplate.phases.map((ph, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          flexDirection: 'row',
+                          gap: space.sm,
+                          alignItems: 'flex-start',
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 10,
+                            backgroundColor: p.color + '22',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginTop: 1,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontFamily: font.monoSemi,
+                              color: p.color,
+                            }}
+                          >
+                            {i + 1}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12, color: t.ink, fontFamily: font.sansSemi }}>
+                            {ph.name} · {ph.weeks} {ph.weeks === 1 ? 'week' : 'weeks'}
+                          </Text>
+                          {ph.dose_modifier ? (
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                color: t.ink3,
+                                fontFamily: font.mono,
+                                marginTop: 1,
+                                lineHeight: 15,
+                              }}
+                            >
+                              {ph.dose_modifier}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono, lineHeight: 17 }}>
+                    {extras.cycleTemplate.schedule}
+                  </Text>
+                )}
               </View>
             </View>
           ) : null}
@@ -562,73 +618,6 @@ export default function PeptideDetailScreen() {
               <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
                 {extras.timing}
               </Text>
-            </View>
-          ) : null}
-
-          {extras?.cycleTemplate?.phases && extras.cycleTemplate.phases.length > 0 ? (
-            <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
-                }}
-              >
-                Cycle phases
-              </Text>
-              <View style={{ gap: 6 }}>
-                {extras.cycleTemplate.phases.map((ph, i) => (
-                  <View
-                    key={i}
-                    style={{
-                      padding: space.md,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: t.line,
-                      backgroundColor: t.surface,
-                      flexDirection: 'row',
-                      gap: space.md,
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 11,
-                        backgroundColor: p.color + '22',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 11, fontFamily: font.monoSemi, color: p.color }}>
-                        {i + 1}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
-                        {ph.name} · {ph.weeks} {ph.weeks === 1 ? 'week' : 'weeks'}
-                      </Text>
-                      {ph.dose_modifier ? (
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            color: t.ink2,
-                            fontFamily: font.mono,
-                            marginTop: 2,
-                            lineHeight: 17,
-                          }}
-                        >
-                          {ph.dose_modifier}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                ))}
-              </View>
             </View>
           ) : null}
 
