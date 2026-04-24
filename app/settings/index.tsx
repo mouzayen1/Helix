@@ -68,6 +68,7 @@ export default function Settings() {
         {
           key: 'notif',
           title: 'Notifications',
+          onPress: () => router.push('/settings/notifications' as any),
           right: (
             <Switch
               value={profile?.notifications_enabled === 1}

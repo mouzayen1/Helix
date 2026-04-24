@@ -13,7 +13,9 @@ import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppState } from 'react-native';
 import { getProfile, initDatabase, type Profile } from '../lib/db';
+import { scheduleAllSafe } from '../lib/notifications';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 
@@ -100,6 +102,18 @@ export default function RootLayout() {
         setDbReady(true);
       });
   }, []);
+
+  // Re-schedule local notifications on launch and whenever the app returns
+  // to the foreground. scheduleAllSafe is idempotent (cancels + re-creates)
+  // and no-ops when prefs.mode === 'off' or permissions are denied.
+  useEffect(() => {
+    if (!dbReady) return;
+    scheduleAllSafe();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') scheduleAllSafe();
+    });
+    return () => sub.remove();
+  }, [dbReady]);
 
   // OTA updates check on launch. Only runs in release builds — dev builds
   // skip this (expo-updates is a no-op in __DEV__). Silent-fails on network

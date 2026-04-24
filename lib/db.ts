@@ -193,6 +193,8 @@ export async function initDatabase() {
   await addColumnIfMissing(d, 'vials', 'total_doses_drawn', 'INTEGER NOT NULL DEFAULT 0');
   await addColumnIfMissing(d, 'cycles', 'paused_at', 'TEXT');
   await addColumnIfMissing(d, 'cycles', 'paused_total_days', 'INTEGER NOT NULL DEFAULT 0');
+  // v1.1 Phase 6: notification preferences (JSON blob on profile).
+  await addColumnIfMissing(d, 'profile', 'notif_prefs_json', 'TEXT');
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
@@ -234,6 +236,9 @@ export type Profile = {
   onboarding_done: 0 | 1;
   notifications_enabled: 0 | 1;
   biometric_lock: 0 | 1;
+  // v1.1: JSON blob for notification prefs (sub-toggles, quiet hours,
+  // preferred times per time_of_day). See lib/notifications.ts for schema.
+  notif_prefs_json: string | null;
 };
 
 export async function getProfile(): Promise<Profile | null> {
