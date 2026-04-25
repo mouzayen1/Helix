@@ -193,13 +193,17 @@ const TEMPLATES: Template[] = [
   },
 ];
 
+// Parse a dose string into a default mcg value. Used only as a fallback when
+// a Peptide doesn't expose `defaultDoseMcg`. The leading number is read in
+// whatever unit appears anywhere in the string ("mg" anywhere → multiply by
+// 1000) — covers strings like "0.25–2.4 mg weekly" that the older parser
+// silently truncated to 0.25 mcg.
 function parseDefaultDose(dose: string): number {
-  const m = dose.match(/(\d+(?:\.\d+)?)\s*(mcg|mg)?/i);
+  const m = dose.match(/(\d+(?:\.\d+)?)/);
   if (!m || m[1] === undefined) return 250;
   const n = parseFloat(m[1]);
   if (isNaN(n)) return 250;
-  const unit = (m[2] ?? 'mcg').toLowerCase();
-  return unit === 'mg' ? n * 1000 : n;
+  return /\bmg\b/i.test(dose) ? n * 1000 : n;
 }
 
 function defaultTimeOfDay(timing?: string): string {
@@ -456,7 +460,8 @@ export default function NewCycle() {
     if (items.some((i) => i.peptide_id === peptide_id)) return;
     const p = findPeptide(peptide_id);
     const extras = getPeptideExtras(peptide_id);
-    const dose = p ? parseDefaultDose(p.dose) : 250;
+    // Prefer the explicit per-peptide default so we never have to guess.
+    const dose = p ? p.defaultDoseMcg ?? parseDefaultDose(p.dose) : 250;
     const time = defaultTimeOfDay(extras?.timing);
     setItems((prev) => [
       ...prev,

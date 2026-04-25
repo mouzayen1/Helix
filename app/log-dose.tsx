@@ -29,13 +29,21 @@ import { font, radius, space } from '../theme/tokens';
 const ROUTES = ['SubQ', 'IM', 'Oral', 'Topical', 'Intranasal'] as const;
 type Route = (typeof ROUTES)[number];
 
-// Parse a peptide's research dose like "200–500 mcg/day" to numeric range.
+// Parse a peptide's research dose string like "200–500 mcg/day" or
+// "0.25–2.4 mg weekly" into a numeric range in mcg.
+//
+// Caller note: when a Peptide has `defaultDoseMcg`, prefer that — this
+// parser is only used for the LO / HI range chips. The unit detection
+// here is intentionally lenient: any "mg" appearing anywhere after the
+// last digit converts the whole range from mg to mcg.
 function parseDoseRange(dose: string): { lo: number; mid: number; hi: number } {
   const nums = [...dose.matchAll(/(\d+(?:\.\d+)?)/g)].map((m) => parseFloat(m[1]));
   if (nums.length === 0) return { lo: 100, mid: 250, hi: 500 };
-  // If values are in mg (look for 'mg' immediately before or after), convert to mcg.
-  const mgMatch = /\d\s*(?:–|-)\s*\d(?:\.\d+)?\s*mg/.test(dose);
-  const factor = mgMatch ? 1000 : 1;
+  // Treat the dose as mg-denominated if "mg" appears anywhere — covers
+  // "0.25–2.4 mg weekly", "1–12 mg weekly", "100–500 mg SubQ", etc.
+  // Without this, "0.25 mg" was parsed as 0.25 mcg.
+  const isMg = /\bmg\b/i.test(dose);
+  const factor = isMg ? 1000 : 1;
   const vals = nums.map((n) => n * factor);
   if (vals.length === 1) {
     return { lo: Math.round(vals[0] * 0.5), mid: vals[0], hi: Math.round(vals[0] * 1.5) };
@@ -153,12 +161,13 @@ export default function LogDoseModal() {
         }
       } catch {}
     }
-    // Fall back to the peptide's research-range midpoint.
+    // Fall back to the peptide's explicit defaultDoseMcg, then to a
+    // parsed range midpoint as a last resort.
     const p = findPeptide(peptideId);
-    if (p?.dose) {
-      const { mid } = parseDoseRange(p.dose);
-      setAmountMcg(mid);
-      setAmountText(String(mid));
+    if (p) {
+      const fallback = p.defaultDoseMcg ?? parseDoseRange(p.dose).mid;
+      setAmountMcg(fallback);
+      setAmountText(String(fallback));
     }
   }, [peptideId, activeCycle, prefillDoseMcg]);
 
@@ -170,11 +179,19 @@ export default function LogDoseModal() {
   }, [vial, amountMcg]);
 
   const vialInsufficient = !!vial && amountMcg / 1000 > vial.remaining_mg;
+  // Preset chips: lo / explicit-default / hi. The middle value uses the
+  // peptide's authoritative defaultDoseMcg so it always lines up with
+  // the amount Reset / Cycle pre-fill produces. The lo/hi come from the
+  // research-range string (mg-aware) and are clamped to be different
+  // from the middle value when the parser collapses to one number.
   const presets = useMemo(() => {
-    if (!peptide?.dose) return [100, 250, 500];
-    const { lo, mid, hi } = parseDoseRange(peptide.dose);
+    if (!peptide) return [100, 250, 500];
+    const range = parseDoseRange(peptide.dose);
+    const mid = peptide.defaultDoseMcg ?? range.mid;
+    const lo = range.lo === mid ? Math.max(1, Math.round(mid * 0.5)) : range.lo;
+    const hi = range.hi === mid ? Math.round(mid * 1.5) : range.hi;
     return [lo, mid, hi];
-  }, [peptide?.dose]);
+  }, [peptide]);
 
   const commitDose = () => {
     const n = parseFloat(amountText);

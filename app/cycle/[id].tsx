@@ -30,16 +30,18 @@ type ProtocolItem = {
 const FREQUENCIES = ['daily', 'twice daily', 'every other day', 'twice weekly', 'weekly'];
 const TIMES = ['morning', 'evening', 'pre-workout', 'pre-bed'];
 
-// Parse dose strings like "250 mcg", "1-2 mg", "10 mg/week" into a default
-// dose value in micrograms (auto-converts mg → mcg).
+// Parse dose strings into mcg as a fallback for peptides without an
+// explicit `defaultDoseMcg`. Treats any "mg" anywhere in the string as the
+// unit (covers "0.25–2.4 mg weekly", "10 mg/week", etc.). Fixed in v1.1.1
+// after the older "first-token-wins" version produced 0.25 mcg defaults
+// for mg-denominated drugs.
 function parseDefaultDose(dose: string | undefined): number {
   if (!dose) return 250;
-  const m = dose.match(/(\d+(?:\.\d+)?)\s*(mcg|mg)?/i);
+  const m = dose.match(/(\d+(?:\.\d+)?)/);
   if (!m || m[1] === undefined) return 250;
   const n = parseFloat(m[1]);
   if (isNaN(n)) return 250;
-  const unit = (m[2] ?? 'mcg').toLowerCase();
-  return unit === 'mg' ? n * 1000 : n;
+  return /\bmg\b/i.test(dose) ? n * 1000 : n;
 }
 
 // Adaptive dose step based on magnitude. Scales from ±10 at small doses
@@ -281,7 +283,8 @@ export default function CycleDetail() {
 
   const addPeptide = (pid: string) => {
     const p = findPeptide(pid)!;
-    const defaultDose = parseDefaultDose(p.dose);
+    // Prefer the explicit per-peptide default so the parser never has to guess.
+    const defaultDose = p.defaultDoseMcg ?? parseDefaultDose(p.dose);
     setItems((prev) => [
       ...prev,
       {
