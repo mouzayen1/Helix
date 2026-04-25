@@ -7,7 +7,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "check:catalog": "node scripts/check-catalog-math.mjs",
+    "check:types": "tsc --noEmit",
+    "check": "npm run check:types && npm run check:catalog"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-mono": "^0.2.3",

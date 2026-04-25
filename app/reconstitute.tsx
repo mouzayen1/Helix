@@ -16,18 +16,41 @@ import { font, radius, space } from '../theme/tokens';
 
 const STRENGTH_PRESETS = [2, 5, 10, 15];
 
-// Parse strings like "5 mg + 2 mL BAC = 2.5 mg/mL · 10 units = 250 mcg"
-// into { strength_mg, bac_water_ml, target_dose_mcg }.
-function parseRecon(recon: string | undefined) {
+// Parse strings like "5 mg + 2 mL BAC = 2.5 mg/mL · 10 units = 250 mcg" or
+// "5 mg + 1 mL BAC = 5 mg/mL · 32 units = 1.6 mg" into
+// { strength_mg, bac_water_ml, target_dose_mcg }. Both mg and mcg are
+// accepted for the example dose; mg is converted to mcg internally so the
+// reconstitute UI's "Draw Xu" callout always matches the monograph.
+//
+// fallbackMcg is the peptide's authoritative defaultDoseMcg (preferred over
+// the legacy 250 mcg hardcoded fallback when the example dose can't be
+// parsed — e.g. mL-based intranasal recipes or pen-only strings).
+function parseRecon(recon: string | undefined, fallbackMcg = 250) {
   if (!recon) return null;
   const strengthMatch = recon.match(/(\d+(?:\.\d+)?)\s*mg\s*\+/);
   const bacMatch = recon.match(/\+\s*(\d+(?:\.\d+)?)\s*mL/);
-  const doseMatch = recon.match(/(\d+(?:\.\d+)?)\s*mcg/);
   if (!strengthMatch || !bacMatch) return null;
+  // Find the *last* "= N mg" or "= N mcg" — for strings that contain both
+  // "= 5 mg/mL" (concentration) and "= 1.6 mg" (example dose), we want the
+  // example, which always comes after the concentration.
+  const doseMatches = [
+    ...recon.matchAll(/=\s*(\d+(?:\.\d+)?)\s*(mcg|mg)\b/gi),
+  ];
+  let target_dose_mcg = fallbackMcg;
+  for (let i = doseMatches.length - 1; i >= 0; i--) {
+    const m = doseMatches[i];
+    // Skip the "= N mg/mL" concentration callout — only the example dose.
+    if (recon.slice(m.index ?? 0, (m.index ?? 0) + m[0].length + 3).includes('mg/mL')) {
+      continue;
+    }
+    const n = parseFloat(m[1]);
+    target_dose_mcg = m[2].toLowerCase() === 'mg' ? n * 1000 : n;
+    break;
+  }
   return {
     strength_mg: parseFloat(strengthMatch[1]),
     bac_water_ml: parseFloat(bacMatch[1]),
-    target_dose_mcg: doseMatch ? parseFloat(doseMatch[1]) : 250,
+    target_dose_mcg,
   };
 }
 
@@ -56,9 +79,12 @@ export default function ReconstituteModal() {
     [extras]
   );
 
-  // Auto-fill numeric fields from the selected peptide's suggested reconstitution.
+  // Auto-fill numeric fields from the selected peptide's suggested
+  // reconstitution. Pass defaultDoseMcg so peptides whose example dose can't
+  // be parsed (intranasal mL recipes, pen-only strings) still seed a
+  // sensible target value.
   useEffect(() => {
-    const parsed = parseRecon(peptide.reconstitution);
+    const parsed = parseRecon(peptide.reconstitution, peptide.defaultDoseMcg);
     if (parsed) {
       setStrengthMg(parsed.strength_mg);
       setStrengthText(String(parsed.strength_mg));
@@ -117,7 +143,7 @@ export default function ReconstituteModal() {
       if (coReconstitutePartner) {
         const partner = findPeptide(coReconstitutePartner);
         if (partner) {
-          const partnerParsed = parseRecon(partner.reconstitution);
+          const partnerParsed = parseRecon(partner.reconstitution, partner.defaultDoseMcg);
           const partnerStrength = partnerParsed?.strength_mg ?? strengthMg;
           await createVial({
             peptide_id: coReconstitutePartner,
