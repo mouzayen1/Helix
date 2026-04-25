@@ -20,51 +20,137 @@ export type FreqShape = {
 };
 
 export function describeFreq(freq: string | null | undefined): FreqShape {
-  const f = (freq ?? '').toLowerCase().trim();
+  const raw = (freq ?? '').toLowerCase().trim();
 
-  // PRN / unscheduled — return 0 perDay so callers can detect "no schedule"
-  // and skip duration math entirely.
-  if (
-    f === '' ||
-    f.includes('pre-workout') ||
-    f.includes('as needed') ||
-    f.includes('as-needed') ||
-    f.includes('prn') ||
-    f.includes('single dose') ||
-    f.includes('single-dose') ||
-    f.includes('varies') ||
-    f.includes('cycled') ||
-    f.includes('variable')
-  ) {
-    return { perDay: 0, daysPerDose: 0, displayUnit: 'days', label: 'as-needed' };
+  // ----- Normalize -------------------------------------------------------
+  // 1. "titrated weekly / titrated daily" describes how the dose escalates,
+  //    NOT the dosing cadence. Strip it before keyword matching so
+  //    Liraglutide ("Once daily (titrated weekly)") doesn't get misread
+  //    as a weekly drug.
+  // 2. Drop parentheticals — they're almost always footnotes / alternative
+  //    protocols / unit clarifications, not the primary cadence.
+  // 3. Take only the FIRST clause before a semicolon. Multi-clause freqs
+  //    like "Once weekly (SubQ); Once daily fasting (oral)" need a single
+  //    answer; the leading clause is the one most users actually follow.
+  let f = raw.replace(/titrated\s+(daily|weekly|every\s+\w+)/g, ' ');
+  f = f.replace(/\([^)]*\)/g, ' ');
+  const semi = f.indexOf(';');
+  if (semi >= 0) f = f.slice(0, semi);
+  f = f.replace(/\s+/g, ' ').trim();
+
+  // hasCadence: at least one frequency-keyword survived the cleaning.
+  // Only when no keyword is present do we treat this as "as-needed" — that
+  // way "Daily during loading … then as-needed" still parses as daily, and
+  // "Nightly as needed" still parses as nightly.
+  const hasCadence =
+    /\b(daily|nightly|weekly|every other day|eod|per\s*week|per\s*day|once|twice|thrice|×|x)\s*(daily|weekly|day|week|night|nightly)?/i.test(
+      f
+    ) ||
+    /\b(once|twice|thrice|1×|2×|3×|1x|2x|3x|[1-9]–[1-9][×x])\s*(daily|weekly)/i.test(f);
+
+  if (!hasCadence) {
+    // Pure "as-needed" / unspecified — return 0 perDay so callers skip
+    // duration math entirely.
+    if (
+      f === '' || raw.includes('pre-workout') || raw.includes('as needed') ||
+      raw.includes('as-needed') || raw.includes('prn') ||
+      raw.includes('single dose') || raw.includes('single-dose') ||
+      raw.includes('varies') || raw.includes('cycled') || raw.includes('variable')
+    ) {
+      return { perDay: 0, daysPerDose: 0, displayUnit: 'days', label: 'as-needed' };
+    }
+    return { perDay: 1, daysPerDose: 1, displayUnit: 'days', label: raw || 'daily' };
   }
 
-  // Twice / 2× shapes first so "2x daily" doesn't fall through to "daily".
-  if (f.includes('twice daily') || f.includes('2x daily') || f.includes('2× daily')) {
+  // ----- Match specific patterns first ----------------------------------
+  // Twice-daily before generic "daily".
+  if (f.includes('twice daily') || /\b2[x×]\s*daily/.test(f) || /\b2\s+per\s*day/.test(f)) {
     return { perDay: 2, daysPerDose: 0.5, displayUnit: 'days', label: '2/day' };
   }
-  if (f.includes('three times daily') || f.includes('3x daily') || f.includes('3× daily') || f.includes('1–3× daily') || f.includes('2–3× daily')) {
-    return { perDay: 2, daysPerDose: 0.5, displayUnit: 'days', label: 'multiple/day' };
+  // 1–3× / 2–3× / 3× daily — "multiple/day" bucket. We treat the upper
+  // bound as ≥2/day for vial-life math; the label communicates the range.
+  if (
+    /\b[1-9]\s*[–-]\s*[1-9][×x]\s*daily/.test(f) ||
+    /\b3[x×]\s*daily/.test(f) ||
+    f.includes('three times daily')
+  ) {
+    // Use the upper-bound 3/day for vial-life math so estimates lean
+    // conservative — if a user is dosing 1-3× daily, the safer planning
+    // assumption is 3×.
+    return { perDay: 3, daysPerDose: 1 / 3, displayUnit: 'days', label: 'multiple/day' };
   }
-  if (f.includes('twice weekly') || f.includes('2x week') || f.includes('2× week') || f.includes('2/week')) {
+
+  // Twice / 2× / 2-per weekly
+  if (
+    f.includes('twice weekly') ||
+    /\b2[x×]\s*week/.test(f) ||
+    /\b2\s*\/\s*week/.test(f) ||
+    /\b2\s+per\s*week/.test(f)
+  ) {
     return { perDay: 2 / 7, daysPerDose: 7 / 2, displayUnit: 'weeks', label: '2/week' };
   }
-  if (f.includes('three times weekly') || f.includes('3x week') || f.includes('3× week') || f.includes('3/week')) {
+  // 2–3× / 3× weekly bucket. Display in weeks but show ≥3/week label so
+  // the user sees the upper-bound vial-life estimate.
+  if (
+    /\b[2-3]\s*[–-]\s*[2-3][×x]\s*weekly/.test(f) ||
+    /\b3[x×]\s*week/.test(f) ||
+    /\b3\s*\/\s*week/.test(f) ||
+    /\b3\s+per\s*week/.test(f) ||
+    f.includes('three times weekly')
+  ) {
     return { perDay: 3 / 7, daysPerDose: 7 / 3, displayUnit: 'weeks', label: '3/week' };
   }
+  // 1–2× per week — the slower end of variable weekly. Use 2/week as the
+  // upper-bound model (covers "1–2× weekly during loading, then weekly").
+  if (/\b1\s*[–-]\s*2[×x]\s*(per\s*)?week/.test(f)) {
+    return { perDay: 2 / 7, daysPerDose: 7 / 2, displayUnit: 'weeks', label: '1–2/week' };
+  }
+
   if (f.includes('every other day') || f.includes('eod')) {
     return { perDay: 0.5, daysPerDose: 2, displayUnit: 'days', label: 'every other day' };
   }
-  if (f.includes('weekly') || f.includes('1× weekly') || f.includes('1x weekly') || f.includes('once weekly') || f.includes('once / week')) {
+
+  // Specific "once weekly" before generic "weekly" so it always wins over
+  // any stray "weekly" elsewhere in the cleaned string.
+  if (
+    f.includes('once weekly') ||
+    /\b1[x×]\s*weekly/.test(f) ||
+    f.includes('once / week') ||
+    f.includes('1 per week')
+  ) {
     return { perDay: 1 / 7, daysPerDose: 7, displayUnit: 'weeks', label: 'weekly' };
   }
-  if (f.includes('nightly') || f.includes('daily') || f.includes('once daily') || f.includes('1× daily') || f.includes('1x daily')) {
+
+  // Specific "once daily" / nightly before generic "daily".
+  if (
+    f.includes('once daily') ||
+    /\b1[x×]\s*daily/.test(f) ||
+    f.includes('nightly') ||
+    f.includes('once a day')
+  ) {
     return { perDay: 1, daysPerDose: 1, displayUnit: 'days', label: 'daily' };
   }
 
-  // Fallback: assume once daily but flag with a generic label so the UI
-  // doesn't claim a precise cadence.
-  return { perDay: 1, daysPerDose: 1, displayUnit: 'days', label: f || 'daily' };
+  // Generic weekly — only when no daily indicator coexists. ("Weekly to
+  // daily SubQ" should resolve to daily — the upper-cadence end is what
+  // a fresh vial would actually fund.)
+  if (f.includes('weekly') && !f.includes('daily')) {
+    return { perDay: 1 / 7, daysPerDose: 7, displayUnit: 'weeks', label: 'weekly' };
+  }
+
+  // Generic daily — covers "Daily for 10–20 days", "Daily SubQ or topical",
+  // "Daily during loading", "Daily or per-training-session", and the
+  // weekly-to-daily upper bound.
+  if (
+    f.includes('daily') ||
+    f.includes('per-training') ||
+    f.includes('per training')
+  ) {
+    return { perDay: 1, daysPerDose: 1, displayUnit: 'days', label: 'daily' };
+  }
+
+  // Final fallback — should be unreachable given the hasCadence gate above.
+  return { perDay: 1, daysPerDose: 1, displayUnit: 'days', label: raw || 'daily' };
 }
 
 // Returns true when a protocol row (with a freq string) is "scheduled" on
