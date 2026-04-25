@@ -29,6 +29,7 @@ import {
   type DoseSkip,
   type Vial,
 } from '../../lib/db';
+import { isScheduledOnDay } from '../../lib/freq';
 import { haptic } from '../../lib/haptics';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide } from '../../lib/peptides';
@@ -115,19 +116,11 @@ function currentPhaseFor(
   };
 }
 
-// A protocol item maps to "expected today" based on frequency.
-// Unknown/pre-workout frequencies default to false (opt-in only).
+// A protocol item maps to "expected today" based on frequency. Logic lives
+// in lib/freq.ts so the Today screen, vial-life estimator, and notification
+// scheduler all agree.
 function isScheduledToday(row: CycleProtocolItem, dayOfCycle: number): boolean {
-  const f = (row.freq || '').toLowerCase();
-  if (f.includes('twice daily') || f.includes('2x daily')) return true;
-  if (f.includes('daily') && !f.includes('every other')) return true;
-  if (f.includes('every other')) return dayOfCycle % 2 === 0;
-  if (f.includes('twice weekly') || f.includes('2x weekly'))
-    return dayOfCycle % 7 === 0 || dayOfCycle % 7 === 3;
-  if (f.includes('weekly')) return dayOfCycle % 7 === 0;
-  // pre-workout and unknown freqs: do NOT auto-schedule. User logs manually
-  // when they actually do the workout.
-  return false;
+  return isScheduledOnDay(row.freq, dayOfCycle);
 }
 
 export default function TodayScreen() {

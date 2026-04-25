@@ -9,6 +9,7 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import { createVial } from '../lib/db';
+import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../lib/peptides';
 import { useTheme } from '../theme/ThemeContext';
@@ -563,7 +564,7 @@ export default function ReconstituteModal() {
                     marginTop: 2,
                   }}
                 >
-                  ~{Math.floor(calc.totalDoses)} days @ 1/day
+                  {formatDuration(calc.totalDoses, peptide.freq)}
                 </Text>
               </View>
             </View>

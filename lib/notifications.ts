@@ -17,6 +17,7 @@ import {
   type CycleProtocolItem,
   type Vial,
 } from './db';
+import { isScheduledOnDay } from './freq';
 
 export type NotifMode = 'off' | 'dose' | 'all';
 
@@ -133,13 +134,7 @@ function dayOfCycleOn(cycle: Cycle, date: Date) {
 }
 
 function isScheduledOn(row: CycleProtocolItem, dayOfCycle: number): boolean {
-  const f = (row.freq || '').toLowerCase();
-  if (f.includes('daily')) return true;
-  if (f.includes('every other')) return dayOfCycle % 2 === 0;
-  if (f.includes('twice weekly') || f.includes('2x week') || f.includes('2/week'))
-    return dayOfCycle % 7 === 0 || dayOfCycle % 7 === 3;
-  if (f.includes('weekly')) return dayOfCycle % 7 === 0;
-  return false;
+  return isScheduledOnDay(row.freq, dayOfCycle);
 }
 
 // ---- Schedule all -------------------------------------------------------
