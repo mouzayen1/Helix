@@ -7,7 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DateTimeField, describeBackdate } from '../components/DateTimeField';
+import { DateTimeField, describeTargetDate } from '../components/DateTimeField';
 import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import {
@@ -227,15 +227,16 @@ export default function LogDoseModal() {
   };
 
   // Pre-save backdate confirm: when the chosen timestamp is meaningfully
-  // in the past, show a Cancel/Save prompt with the human-readable date
-  // so the user can back out of an accidentally-backdated entry BEFORE
-  // it lands. Same-day saves skip the prompt.
+  // in the past, surface the target date with a Cancel/Save choice so
+  // the user can back out of an accidentally-backdated entry BEFORE
+  // it lands. Copy is forward-looking ("This dose will be dated X") so
+  // it doesn't read like a duplicate warning.
   const confirmBackdateThenSave = () => {
     const minAgo = (Date.now() - takenAtDate.getTime()) / 60000;
     if (minAgo > 60 * 6) {
       Alert.alert(
-        'Save backdated dose?',
-        `${describeBackdate(takenAtDate)}.`,
+        'Confirm date',
+        `This dose will be dated ${describeTargetDate(takenAtDate)}. Save?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Save', onPress: () => void actuallySave() },

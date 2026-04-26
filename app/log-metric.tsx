@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DateTimeField, describeBackdate, isSameLocalDay } from '../components/DateTimeField';
+import { DateTimeField, describeTargetDate, isSameLocalDay } from '../components/DateTimeField';
 import { IconClose } from '../components/Icons';
 import { insertMetric, listMetrics, METRIC_KINDS } from '../lib/db';
 import { haptic } from '../lib/haptics';
@@ -46,14 +46,16 @@ export default function LogMetricModal() {
   };
 
   // Pre-save backdate confirmation: when the chosen taken_at is more than
-  // ~6h in the past, surface the human-readable target date with a Save /
-  // Cancel choice so the user can back out before the entry lands.
+  // ~6h in the past, surface the target date with a Save / Cancel choice
+  // so the user can back out before the entry lands. Copy is
+  // forward-looking ("This reading will be dated X") so it doesn't read
+  // like a duplicate warning.
   const confirmBackdateThenSave = () => {
     const minAgo = (Date.now() - takenAt.getTime()) / 60000;
     if (minAgo > 60 * 6) {
       Alert.alert(
-        'Save backdated reading?',
-        `${describeBackdate(takenAt)}.`,
+        'Confirm date',
+        `This ${selected.label.toLowerCase()} reading will be dated ${describeTargetDate(takenAt)}. Save?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Save', onPress: () => void performSave() },

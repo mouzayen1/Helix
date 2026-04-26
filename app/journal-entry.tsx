@@ -3,7 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DateTimeField, describeBackdate } from '../components/DateTimeField';
+import { DateTimeField, describeTargetDate } from '../components/DateTimeField';
 import { IconClose } from '../components/Icons';
 import { getJournal, upsertJournal } from '../lib/db';
 import { haptic } from '../lib/haptics';
@@ -146,14 +146,15 @@ export default function JournalEntryModal() {
   };
 
   // Pre-save backdate confirm: when the chosen entry_date is meaningfully
-  // in the past, show Cancel/Save with the human-readable date so the
-  // user can back out before the entry lands.
+  // in the past, show Cancel/Save with the target date. Copy is
+  // forward-looking ("This entry will be dated X") so it doesn't read
+  // like a duplicate warning.
   const confirmBackdateThenSave = () => {
     const minAgo = (Date.now() - entryAt.getTime()) / 60000;
     if (minAgo > 60 * 6) {
       Alert.alert(
-        'Save backdated entry?',
-        `${describeBackdate(entryAt)}.`,
+        'Confirm date',
+        `This journal entry will be dated ${describeTargetDate(entryAt, false)}. Save?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Save', onPress: () => void performSave() },

@@ -242,9 +242,11 @@ export function formatPretty(d: Date, showTime: boolean): string {
   return `${dayPart} · ${timePart}`;
 }
 
-// "Logged just now" / "Logged 2 days ago for Apr 18" — short subtitle the
-// caller can show on a success toast or in a list row to confirm what was
-// actually saved.
+// "Logged just now" / "Logged 2 days ago for Mon, Apr 21" — past-tense
+// subtitle for confirming what was already saved (success toasts, list
+// rows). For pre-save confirmation prompts, use describeTargetDate
+// instead, since "Logged 12 days ago for X" reads as a duplicate
+// warning when shown before the write.
 export function describeBackdate(d: Date): string {
   const now = Date.now();
   const diffMin = Math.round((now - d.getTime()) / 60000);
@@ -259,6 +261,32 @@ export function describeBackdate(d: Date): string {
     'en-US',
     { weekday: 'short', month: 'short', day: 'numeric' }
   )}`;
+}
+
+// Neutral, present-tense form for pre-save confirmation prompts. Reads as
+// a forward-looking statement of intent, not a past-tense claim that
+// something has already been logged. Example outputs:
+//   "Sat, Apr 24 at 8:15 AM (2 days ago)"
+//   "Tue, Apr 14 (12 days ago)"
+export function describeTargetDate(d: Date, includeTime = true): string {
+  const datePart = d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timePart = includeTime
+    ? ` at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+    : '';
+  const diffMin = Math.round((Date.now() - d.getTime()) / 60000);
+  let ago = '';
+  if (diffMin >= 60 * 24) {
+    const diffDays = Math.round(diffMin / (60 * 24));
+    ago = ` (${diffDays} day${diffDays === 1 ? '' : 's'} ago)`;
+  } else if (diffMin >= 60) {
+    const diffHr = Math.round(diffMin / 60);
+    ago = ` (${diffHr}h ago)`;
+  }
+  return `${datePart}${timePart}${ago}`;
 }
 
 // Two Dates fall on the same local-time calendar day. Exported so callers
