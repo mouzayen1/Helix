@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppState } from 'react-native';
-import { getProfile, initDatabase, type Profile } from '../lib/db';
+import { initDatabase } from '../lib/db';
 import { scheduleAllSafe } from '../lib/notifications';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
@@ -30,13 +30,25 @@ function RootGate() {
   useEffect(() => {
     if (!loaded) return;
     const inOnboarding = segments[0] === '(onboarding)' || segments[0] === 'welcome';
-    const done = profile?.onboarding_done === 1;
-    if (!done && !inOnboarding) {
+    const fullyOnboarded =
+      profile?.onboarding_done === 1 &&
+      !!profile.age_gate_accepted_at &&
+      !!profile.disclaimer_accepted_at &&
+      !!profile.terms_accepted_at;
+    if (!fullyOnboarded && !inOnboarding) {
       router.replace('/welcome');
-    } else if (done && inOnboarding) {
+    } else if (fullyOnboarded && inOnboarding) {
       router.replace('/(tabs)');
     }
-  }, [profile?.onboarding_done, loaded, segments, router]);
+  }, [
+    loaded,
+    profile?.age_gate_accepted_at,
+    profile?.disclaimer_accepted_at,
+    profile?.onboarding_done,
+    profile?.terms_accepted_at,
+    segments,
+    router,
+  ]);
 
   return (
     <>
