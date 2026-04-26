@@ -253,9 +253,11 @@ export function describeBackdate(d: Date): string {
   const diffHr = Math.round(diffMin / 60);
   if (diffHr < 24) return `Logged ${diffHr}h ago`;
   const diffDays = Math.round(diffHr / 24);
+  // Include the weekday so users can spot a wrong-date save at a glance —
+  // "Mon, Apr 21" reads cleanly; "2026-04-21" forces them to think.
   return `Logged ${diffDays} day${diffDays === 1 ? '' : 's'} ago for ${d.toLocaleDateString(
     'en-US',
-    { month: 'short', day: 'numeric' }
+    { weekday: 'short', month: 'short', day: 'numeric' }
   )}`;
 }
 

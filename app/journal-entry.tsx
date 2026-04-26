@@ -1,6 +1,6 @@
 // Journal entry — spec v2.0 §10. Upsert by entry_date.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateTimeField, describeBackdate } from '../components/DateTimeField';
@@ -65,9 +65,17 @@ export default function JournalEntryModal() {
   // typed something" and prompt before discarding their draft.
   const lastLoadedKey = useRef<string>('');
 
-  // Loader runs on focus AND whenever the user changes the date. If the
-  // user has typed into the form and is now switching to a different day,
-  // we prompt before nuking their draft.
+  // Single source of truth for loading the entry whose entry_date matches
+  // the current entryKey. Runs on mount AND whenever the user picks a new
+  // date in the DateTimeField. The cancellation flag protects against a
+  // race where the user changes the date again before the previous async
+  // getJournal resolves — the older promise's setState calls are dropped
+  // so the form always reflects the LATEST chosen date.
+  //
+  // Reset behavior: when no entry exists for the chosen date, the form
+  // returns to defaults so the user doesn't see stale values from the
+  // previous day. The lastLoadedKey ref skips the reset on the very first
+  // load (form is already at defaults; no need to re-apply them).
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -89,8 +97,6 @@ export default function JournalEntryModal() {
           setBody(existing.body ?? '');
           setExistedAtLoad(true);
         } else {
-          // Fresh date with no entry → reset form to defaults so the
-          // user doesn't see stale fields from the previous day.
           if (lastLoadedKey.current !== '') {
             setMood(3);
             setEnergy(5);
@@ -110,46 +116,6 @@ export default function JournalEntryModal() {
       };
     }, [entryKey])
   );
-
-  // Same loader runs when the user picks a new date via the DateTimeField
-  // while the modal is already focused.
-  useEffect(() => {
-    if (lastLoadedKey.current === entryKey || lastLoadedKey.current === '') return;
-    let cancelled = false;
-    (async () => {
-      const existing = await getJournal(entryKey);
-      if (cancelled) return;
-      if (existing) {
-        setMood(existing.mood ?? 3);
-        setEnergy(existing.energy ?? 5);
-        setSleepQuality(existing.sleep_quality ?? 5);
-        setLibido(existing.libido ?? 5);
-        setRecovery(existing.recovery ?? 5);
-        setSleepHours(existing.sleep_hours ?? 7.5);
-        try {
-          setTags(JSON.parse(existing.tags_json));
-        } catch {
-          setTags([]);
-        }
-        setBody(existing.body ?? '');
-        setExistedAtLoad(true);
-      } else {
-        setMood(3);
-        setEnergy(5);
-        setSleepQuality(5);
-        setLibido(5);
-        setRecovery(5);
-        setSleepHours(7.5);
-        setTags([]);
-        setBody('');
-        setExistedAtLoad(false);
-      }
-      lastLoadedKey.current = entryKey;
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [entryKey]);
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]));
