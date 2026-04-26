@@ -5,7 +5,8 @@
 // cycles, or vials change. scheduleAll() is idempotent: it cancels all
 // previously-scheduled Helix notifications first, then re-schedules a fresh
 // 7-day window.
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
+import type * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import {
   getActiveCycle,
@@ -18,6 +19,8 @@ import {
   type Vial,
 } from './db';
 import { isScheduledOnDay } from './freq';
+
+type NotificationsModule = typeof Notifications;
 
 export type NotifMode = 'off' | 'dose' | 'all';
 
@@ -89,20 +92,41 @@ export async function setNotifPrefs(patch: Partial<NotifPrefs>) {
 
 // ---- Permission + setup -------------------------------------------------
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+let notificationsModule: Promise<NotificationsModule | null> | null = null;
+let notificationHandlerSet = false;
+
+async function getNotificationsModule(): Promise<NotificationsModule | null> {
+  if (Platform.OS === 'web') return null;
+  if (Platform.OS === 'android' && Constants.appOwnership === 'expo') return null;
+  notificationsModule ??= import('expo-notifications').catch((err) => {
+    if (__DEV__) console.warn('expo-notifications unavailable', err);
+    return null;
+  });
+  return notificationsModule;
+}
+
+async function getConfiguredNotificationsModule(): Promise<NotificationsModule | null> {
+  const notifications = await getNotificationsModule();
+  if (!notifications || notificationHandlerSet) return notifications;
+  notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+  notificationHandlerSet = true;
+  return notifications;
+}
 
 export async function ensurePermission(): Promise<boolean> {
-  const settings = await Notifications.getPermissionsAsync();
+  const notifications = await getConfiguredNotificationsModule();
+  if (!notifications) return false;
+  const settings = await notifications.getPermissionsAsync();
   if (settings.status === 'granted') return true;
   if (!settings.canAskAgain) return false;
-  const req = await Notifications.requestPermissionsAsync();
+  const req = await notifications.requestPermissionsAsync();
   return req.status === 'granted';
 }
 
@@ -145,13 +169,14 @@ function isScheduledOn(row: CycleProtocolItem, dayOfCycle: number): boolean {
 
 export async function scheduleAll() {
   const prefs = await getNotifPrefs();
+  const notifications = await getConfiguredNotificationsModule();
+  if (!notifications) return;
 
   // Always start by wiping previously-scheduled notifications so the schedule
   // stays in sync with current prefs / cycle edits.
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  await notifications.cancelAllScheduledNotificationsAsync();
 
   if (prefs.mode === 'off') return;
-  if (Platform.OS === 'web') return;
 
   const ok = await ensurePermission();
   if (!ok) return;
@@ -185,13 +210,13 @@ export async function scheduleAll() {
         when.setHours(hour, minute, 0, 0);
         if (when.getTime() <= Date.now() + 60 * 1000) continue;
         if (inQuietHours(when, prefs.quietHours)) continue;
-        await Notifications.scheduleNotificationAsync({
+        await notifications.scheduleNotificationAsync({
           content: {
             title: 'Dose reminder',
             body: "Open Helix to see today's protocol.",
           },
           trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            type: notifications.SchedulableTriggerInputTypes.DATE,
             date: when,
           },
         });
@@ -207,13 +232,13 @@ export async function scheduleAll() {
       const warn = new Date(exp.getTime() - 3 * 864e5);
       warn.setHours(9, 0, 0, 0);
       if (warn.getTime() <= Date.now() + 60 * 1000) continue;
-      await Notifications.scheduleNotificationAsync({
+      await notifications.scheduleNotificationAsync({
         content: {
           title: 'Vial expiring soon',
           body: 'Open Helix to review your vials.',
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          type: notifications.SchedulableTriggerInputTypes.DATE,
           date: warn,
         },
       });
@@ -229,13 +254,13 @@ export async function scheduleAll() {
       : new Date(today.getTime() + 864e5);
     // Daily trigger repeats. Individual fire-time checks for "no dose today"
     // happen inside the nudge handler on open — this is a soft reminder.
-    await Notifications.scheduleNotificationAsync({
+    await notifications.scheduleNotificationAsync({
       content: {
         title: 'Haven’t logged today?',
         body: 'Open Helix to catch up on today’s schedule.',
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        type: notifications.SchedulableTriggerInputTypes.CALENDAR,
         hour: 20,
         minute: 0,
         repeats: true,
