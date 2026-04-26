@@ -1356,7 +1356,7 @@ export default function NewCycle() {
                 fontSize: 13,
               }}
             >
-              No peptides match "{pickerQuery}"
+              {`No peptides match "${pickerQuery}"`}
             </Text>
           </View>
         ) : (
@@ -1686,7 +1686,7 @@ export default function NewCycle() {
               textAlign: 'center',
             }}
           >
-            No peptides yet. Tap "Add peptide" above.
+            {'No peptides yet. Tap "Add peptide" above.'}
           </Text>
         </View>
       ) : (

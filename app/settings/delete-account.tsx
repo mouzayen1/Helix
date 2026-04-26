@@ -77,7 +77,7 @@ export default function DeleteAccount() {
               textTransform: 'uppercase',
             }}
           >
-            Type "{CONFIRM_PHRASE}" to confirm
+            {`Type "${CONFIRM_PHRASE}" to confirm`}
           </Text>
           <TextInput
             value={phrase}

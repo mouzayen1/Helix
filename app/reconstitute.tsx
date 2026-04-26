@@ -96,7 +96,7 @@ export default function ReconstituteModal() {
     }
     // Clear any prior co-reconstitute partner when peptide changes
     setCoReconstitutePartner(null);
-  }, [peptide.id, peptide.reconstitution]);
+  }, [peptide.defaultDoseMcg, peptide.id, peptide.reconstitution]);
 
   const calc = useMemo(() => {
     const concMgPerMl = strengthMg / bacMl;
@@ -198,7 +198,7 @@ export default function ReconstituteModal() {
             Mix a new vial.
           </Text>
           <Text style={{ fontSize: 13, color: t.ink3, marginTop: 4 }}>
-            We'll tell you exactly how much BAC water to draw.
+            We will tell you exactly how much BAC water to draw.
           </Text>
 
           {/* Beginner mode toggle */}

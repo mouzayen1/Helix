@@ -3,7 +3,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconBook, IconChart, IconChevronRight } from '../../components/Icons';
 import { HCard, HSectionHeader } from '../../components/Primitives';
 import {
   getActiveCycle,
@@ -233,7 +232,7 @@ export default function ProgressScreen() {
               }}
             >
               <Text style={{ color: t.bg, fontFamily: font.sansSemi, fontSize: 14 }}>
-                Write today's entry
+                {"Write today's entry"}
               </Text>
             </Pressable>
           </HCard>

@@ -32,7 +32,7 @@ export default function LogMetricModal() {
         note: note.trim() || undefined,
       });
       router.back();
-    } catch (e) {
+    } catch {
       setSaving(false);
     }
   };

@@ -76,7 +76,7 @@ export default function JournalEntryModal() {
         body: body.trim() || undefined,
       });
       router.back();
-    } catch (e) {
+    } catch {
       setSaving(false);
     }
   };
