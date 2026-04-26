@@ -11,9 +11,17 @@ export default function ChoosePath() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { update } = useProfile();
+  const { profile, update } = useProfile();
 
   const useLocally = async () => {
+    if (
+      !profile?.age_gate_accepted_at ||
+      !profile.disclaimer_accepted_at ||
+      !profile.terms_accepted_at
+    ) {
+      router.replace('/welcome');
+      return;
+    }
     await update({ onboarding_done: 1 });
     router.replace('/(tabs)');
   };
