@@ -1,10 +1,12 @@
 // Log metric — spec v2.0 §10. Modal. Insert a single reading.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DateTimeField, describeBackdate } from '../components/DateTimeField';
 import { IconClose } from '../components/Icons';
 import { METRIC_KINDS, insertMetric } from '../lib/db';
+import { haptic } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 
@@ -15,6 +17,7 @@ export default function LogMetricModal() {
   const [kind, setKind] = useState<string>('weight');
   const [value, setValue] = useState('');
   const [note, setNote] = useState('');
+  const [takenAt, setTakenAt] = useState<Date>(new Date());
   const [saving, setSaving] = useState(false);
 
   const selected = METRIC_KINDS.find((k) => k.id === kind)!;
@@ -29,11 +32,23 @@ export default function LogMetricModal() {
         kind,
         value: parsed,
         unit: selected.unit,
+        taken_at: takenAt.toISOString(),
         note: note.trim() || undefined,
       });
-      router.back();
+      haptic.success();
+      // Backdated entries get an inline confirmation — same-day saves are
+      // routine and don't need the extra tap.
+      const minAgo = (Date.now() - takenAt.getTime()) / 60000;
+      if (minAgo > 60) {
+        Alert.alert('Reading saved', describeBackdate(takenAt), [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      } else {
+        router.back();
+      }
     } catch (e) {
       setSaving(false);
+      haptic.error();
     }
   };
 
@@ -138,6 +153,11 @@ export default function LogMetricModal() {
             fontFamily: font.monoSemi,
           }}
         />
+
+        {/* When — back-date for forgotten weigh-ins, lab draws, etc. */}
+        <View style={{ marginTop: space.md }}>
+          <DateTimeField value={takenAt} onChange={setTakenAt} label="When" />
+        </View>
 
         {/* Note */}
         <Text

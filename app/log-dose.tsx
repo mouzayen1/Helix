@@ -7,7 +7,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronRight, IconClock, IconClose } from '../components/Icons';
+import { DateTimeField, describeBackdate } from '../components/DateTimeField';
+import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import {
   getActiveCycle,
@@ -80,10 +81,9 @@ export default function LogDoseModal() {
   const [saving, setSaving] = useState(false);
 
   // When the dose was actually administered. Defaults to now; user can
-  // back-date within the last 30 days (forgetting to log yesterday's dose,
-  // logging a dose taken earlier today, etc.).
+  // back-date within the last 30 days. The DateTimeField component owns
+  // the editor expand/collapse state internally.
   const [takenAtDate, setTakenAtDate] = useState<Date>(new Date());
-  const [editingTime, setEditingTime] = useState<boolean>(false);
 
   const peptide = peptideId ? findPeptide(peptideId) : null;
 
@@ -217,7 +217,17 @@ export default function LogDoseModal() {
         note: note.trim() || undefined,
       });
       haptic.success();
-      router.back();
+      // Backdated saves get a confirmation so users can spot a wrong-date
+      // entry before it silently lands in their trends. Same-day saves
+      // skip the prompt to keep the routine flow tap-light.
+      const minAgo = (Date.now() - takenAtDate.getTime()) / 60000;
+      if (minAgo > 60 * 6) {
+        Alert.alert('Dose logged', describeBackdate(takenAtDate), [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      } else {
+        router.back();
+      }
     } catch (err) {
       setSaving(false);
       haptic.error();
@@ -866,322 +876,9 @@ export default function LogDoseModal() {
           </View>
         </View>
 
-        {/* When — editable day + time */}
+        {/* When — DateTimeField owns the expand/collapse + steppers */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <Pressable
-            onPress={() => setEditingTime((v) => !v)}
-            style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              padding: space.md,
-              borderWidth: 1,
-              borderColor: editingTime ? t.accent : t.line,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-            }}
-          >
-            <IconClock size={16} color={t.ink3} />
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 10,
-                  color: t.ink3,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 0.8,
-                  textTransform: 'uppercase',
-                }}
-              >
-                When
-              </Text>
-              <Text style={{ fontSize: 14, color: t.ink, fontFamily: font.sansSemi, marginTop: 2 }}>
-                {takenAtDate.toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}{' '}
-                ·{' '}
-                {takenAtDate.toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            <Text style={{ fontSize: 12, color: t.accent, fontFamily: font.sansSemi }}>
-              {editingTime ? 'Done' : 'Edit'}
-            </Text>
-          </Pressable>
-
-          {editingTime ? (
-            <View
-              style={{
-                marginTop: 6,
-                padding: space.md,
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                gap: space.md,
-              }}
-            >
-              {/* Quick presets for common back-dating */}
-              <View style={{ gap: 6 }}>
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: t.ink3,
-                    fontFamily: font.sansSemi,
-                    letterSpacing: 0.8,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Quick
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {[
-                    { label: 'Now', offset: () => new Date() },
-                    { label: '−1h', offset: () => new Date(Date.now() - 1 * 3600_000) },
-                    { label: '−3h', offset: () => new Date(Date.now() - 3 * 3600_000) },
-                    { label: '−6h', offset: () => new Date(Date.now() - 6 * 3600_000) },
-                    {
-                      label: 'Yesterday',
-                      offset: () => {
-                        const d = new Date();
-                        d.setDate(d.getDate() - 1);
-                        return d;
-                      },
-                    },
-                    {
-                      label: '2d ago',
-                      offset: () => {
-                        const d = new Date();
-                        d.setDate(d.getDate() - 2);
-                        return d;
-                      },
-                    },
-                  ].map((p) => (
-                    <Pressable
-                      key={p.label}
-                      onPress={() => setTakenAtDate(p.offset())}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 7,
-                        borderRadius: radius.pill,
-                        borderWidth: 1,
-                        borderColor: t.line,
-                        backgroundColor: t.surfaceAlt,
-                      }}
-                    >
-                      <Text style={{ fontSize: 12, color: t.ink, fontFamily: font.sansMed }}>
-                        {p.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {/* Day stepper */}
-              <View style={{ gap: 6 }}>
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: t.ink3,
-                    fontFamily: font.sansSemi,
-                    letterSpacing: 0.8,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Day
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable
-                    onPress={() => {
-                      const d = new Date(takenAtDate);
-                      d.setDate(d.getDate() - 1);
-                      // cap at 30 days back
-                      const earliest = new Date();
-                      earliest.setDate(earliest.getDate() - 30);
-                      earliest.setHours(0, 0, 0, 0);
-                      if (d.getTime() < earliest.getTime()) return;
-                      setTakenAtDate(d);
-                    }}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: radius.md,
-                      backgroundColor: t.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>−</Text>
-                  </Pressable>
-                  <View
-                    style={{
-                      flex: 1,
-                      height: 40,
-                      borderRadius: radius.md,
-                      backgroundColor: t.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
-                      {takenAtDate.toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => {
-                      const d = new Date(takenAtDate);
-                      d.setDate(d.getDate() + 1);
-                      // cap at today's date (can't log future doses)
-                      const latest = new Date();
-                      if (d.getTime() > latest.getTime()) return;
-                      setTakenAtDate(d);
-                    }}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: radius.md,
-                      backgroundColor: t.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>+</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Time steppers (hour + minute) */}
-              <View style={{ flexDirection: 'row', gap: space.md }}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: t.ink3,
-                      fontFamily: font.sansSemi,
-                      letterSpacing: 0.8,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Hour
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setHours((d.getHours() + 23) % 24);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>−</Text>
-                    </Pressable>
-                    <Text
-                      style={{
-                        flex: 1,
-                        textAlign: 'center',
-                        fontSize: 16,
-                        fontFamily: font.monoSemi,
-                        color: t.ink,
-                      }}
-                    >
-                      {takenAtDate.getHours().toString().padStart(2, '0')}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setHours((d.getHours() + 1) % 24);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: t.ink3,
-                      fontFamily: font.sansSemi,
-                      letterSpacing: 0.8,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Min
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setMinutes((d.getMinutes() + 55) % 60);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>−5</Text>
-                    </Pressable>
-                    <Text
-                      style={{
-                        flex: 1,
-                        textAlign: 'center',
-                        fontSize: 16,
-                        fontFamily: font.monoSemi,
-                        color: t.ink,
-                      }}
-                    >
-                      {takenAtDate.getMinutes().toString().padStart(2, '0')}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setMinutes((d.getMinutes() + 5) % 60);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>+5</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </View>
-          ) : null}
+          <DateTimeField value={takenAtDate} onChange={setTakenAtDate} label="When" />
         </View>
 
         {/* Note */}

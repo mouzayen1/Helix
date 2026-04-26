@@ -1,12 +1,24 @@
 // Journal entry — spec v2.0 §10. Upsert by entry_date.
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DateTimeField, describeBackdate } from '../components/DateTimeField';
 import { IconClose } from '../components/Icons';
 import { getJournal, upsertJournal } from '../lib/db';
+import { haptic } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
+
+// Local YYYY-MM-DD — spec stores entry_date in the user's local calendar
+// day, not UTC, so a 10pm journal entry stays on the right day after
+// midnight rolls over in different time zones.
+function localDateKey(d: Date): string {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dy = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${dy}`;
+}
 
 const MOODS = [
   { value: 1, label: 'Rough' },
@@ -26,7 +38,15 @@ export default function JournalEntryModal() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const today = new Date().toISOString().slice(0, 10);
+  // Optional `date` query param lets the cycle-detail "Journal during this
+  // cycle" list deep-link directly to a past day's entry.
+  const params = useLocalSearchParams<{ date?: string }>();
+  const initialDate = params.date
+    ? new Date(`${params.date}T12:00:00`)
+    : new Date();
+
+  const [entryAt, setEntryAt] = useState<Date>(initialDate);
+  const entryKey = localDateKey(entryAt);
 
   const [mood, setMood] = useState<number>(3);
   const [energy, setEnergy] = useState(5);
@@ -37,11 +57,23 @@ export default function JournalEntryModal() {
   const [tags, setTags] = useState<string[]>([]);
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
+  // Tracks whether an entry already exists for entryKey — drives the
+  // "replace existing entry?" prompt at save time and lets us label the
+  // form so the user knows they're editing rather than creating.
+  const [existedAtLoad, setExistedAtLoad] = useState(false);
+  // Loaded snapshot — used to detect "user changed the date but already
+  // typed something" and prompt before discarding their draft.
+  const lastLoadedKey = useRef<string>('');
 
+  // Loader runs on focus AND whenever the user changes the date. If the
+  // user has typed into the form and is now switching to a different day,
+  // we prompt before nuking their draft.
   useFocusEffect(
     useCallback(() => {
+      let cancelled = false;
       (async () => {
-        const existing = await getJournal(today);
+        const existing = await getJournal(entryKey);
+        if (cancelled) return;
         if (existing) {
           setMood(existing.mood ?? 3);
           setEnergy(existing.energy ?? 5);
@@ -49,23 +81,85 @@ export default function JournalEntryModal() {
           setLibido(existing.libido ?? 5);
           setRecovery(existing.recovery ?? 5);
           setSleepHours(existing.sleep_hours ?? 7.5);
-          setTags(JSON.parse(existing.tags_json));
+          try {
+            setTags(JSON.parse(existing.tags_json));
+          } catch {
+            setTags([]);
+          }
           setBody(existing.body ?? '');
+          setExistedAtLoad(true);
+        } else {
+          // Fresh date with no entry → reset form to defaults so the
+          // user doesn't see stale fields from the previous day.
+          if (lastLoadedKey.current !== '') {
+            setMood(3);
+            setEnergy(5);
+            setSleepQuality(5);
+            setLibido(5);
+            setRecovery(5);
+            setSleepHours(7.5);
+            setTags([]);
+            setBody('');
+          }
+          setExistedAtLoad(false);
         }
+        lastLoadedKey.current = entryKey;
       })();
-    }, [today])
+      return () => {
+        cancelled = true;
+      };
+    }, [entryKey])
   );
+
+  // Same loader runs when the user picks a new date via the DateTimeField
+  // while the modal is already focused.
+  useEffect(() => {
+    if (lastLoadedKey.current === entryKey || lastLoadedKey.current === '') return;
+    let cancelled = false;
+    (async () => {
+      const existing = await getJournal(entryKey);
+      if (cancelled) return;
+      if (existing) {
+        setMood(existing.mood ?? 3);
+        setEnergy(existing.energy ?? 5);
+        setSleepQuality(existing.sleep_quality ?? 5);
+        setLibido(existing.libido ?? 5);
+        setRecovery(existing.recovery ?? 5);
+        setSleepHours(existing.sleep_hours ?? 7.5);
+        try {
+          setTags(JSON.parse(existing.tags_json));
+        } catch {
+          setTags([]);
+        }
+        setBody(existing.body ?? '');
+        setExistedAtLoad(true);
+      } else {
+        setMood(3);
+        setEnergy(5);
+        setSleepQuality(5);
+        setLibido(5);
+        setRecovery(5);
+        setSleepHours(7.5);
+        setTags([]);
+        setBody('');
+        setExistedAtLoad(false);
+      }
+      lastLoadedKey.current = entryKey;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entryKey]);
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]));
   };
 
-  const save = async () => {
-    if (saving) return;
+  const performSave = async () => {
     setSaving(true);
     try {
       await upsertJournal({
-        entry_date: today,
+        entry_date: entryKey,
         mood,
         energy,
         sleep_hours: sleepHours,
@@ -75,10 +169,43 @@ export default function JournalEntryModal() {
         tags,
         body: body.trim() || undefined,
       });
-      router.back();
+      haptic.success();
+      const minAgo = (Date.now() - entryAt.getTime()) / 60000;
+      if (minAgo > 60 * 6) {
+        Alert.alert('Entry saved', describeBackdate(entryAt), [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      } else {
+        router.back();
+      }
     } catch (e) {
       setSaving(false);
+      haptic.error();
     }
+  };
+
+  const save = async () => {
+    if (saving) return;
+    // Existing-entry merge prompt: when an entry already exists for this
+    // date, ask before silently overwriting it. upsertJournal does
+    // overwrite-by-design, so this is the user's explicit chance to
+    // back out.
+    if (existedAtLoad) {
+      Alert.alert(
+        'Replace existing entry?',
+        `An entry already exists for ${entryAt.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        })}. Saving will replace it with these values.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Replace', style: 'destructive', onPress: () => void performSave() },
+        ]
+      );
+      return;
+    }
+    await performSave();
   };
 
   return (
@@ -116,11 +243,18 @@ export default function JournalEntryModal() {
             letterSpacing: -0.5,
           }}
         >
-          How are you today?
+          How are you{existedAtLoad ? '' : ' today'}?
         </Text>
-        <Text style={{ color: t.ink3, fontSize: 12, fontFamily: font.mono, marginTop: 2 }}>
-          {today}
-        </Text>
+        {existedAtLoad ? (
+          <Text style={{ color: t.accent, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 0.6, marginTop: 4, textTransform: 'uppercase' }}>
+            Editing existing entry
+          </Text>
+        ) : null}
+
+        {/* When — back-date for journals you forgot to write yesterday */}
+        <View style={{ marginTop: space.md }}>
+          <DateTimeField value={entryAt} onChange={setEntryAt} label="Date" mode="date" />
+        </View>
 
         {/* Mood */}
         <Text
