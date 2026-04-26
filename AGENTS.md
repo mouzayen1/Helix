@@ -26,7 +26,7 @@ There is no general unit test suite. The regression net is TypeScript, linting, 
 
 ## Commit & Pull Request Guidelines
 
-Recent commits use scoped Conventional Commit style, for example `fix(freq): ...`, `feat(catalog): ...`, `polish(a11y): ...`, and `chore: ...`. Keep commits small and scoped. Pull requests should include a clear summary, affected routes or modules, verification commands run, and screenshots or screen recordings for UI changes.
+Recent commits use scoped Conventional Commit style, for example `fix(freq): ...`, `feat(catalog): ...`, `polish(a11y): ...`, and `chore: ...`. Keep commits small and scoped. When asked to make code changes, commit each completed logical change after verification. Confirm the current branch before the first commit in a session. Do not bundle unrelated fixes into one commit, and never delete remote branches without asking. Pull requests should include a clear summary, affected routes or modules, verification commands run, and screenshots or screen recordings for UI changes.
 
 ## Compliance & Configuration Notes
 
