@@ -261,7 +261,10 @@ export function describeBackdate(d: Date): string {
   )}`;
 }
 
-function isSameLocalDay(a: Date, b: Date) {
+// Two Dates fall on the same local-time calendar day. Exported so callers
+// (Log Metric, etc.) can run "already logged today?" duplicate checks
+// against a chosen taken_at without re-implementing the comparison.
+export function isSameLocalDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&

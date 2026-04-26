@@ -121,6 +121,8 @@ export default function JournalEntryModal() {
     setTags((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]));
   };
 
+  // Bottom of the chain — actually writes. The prompts above all funnel
+  // here on user confirmation.
   const performSave = async () => {
     setSaving(true);
     try {
@@ -136,26 +138,37 @@ export default function JournalEntryModal() {
         body: body.trim() || undefined,
       });
       haptic.success();
-      const minAgo = (Date.now() - entryAt.getTime()) / 60000;
-      if (minAgo > 60 * 6) {
-        Alert.alert('Entry saved', describeBackdate(entryAt), [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      } else {
-        router.back();
-      }
+      router.back();
     } catch (e) {
       setSaving(false);
       haptic.error();
     }
   };
 
+  // Pre-save backdate confirm: when the chosen entry_date is meaningfully
+  // in the past, show Cancel/Save with the human-readable date so the
+  // user can back out before the entry lands.
+  const confirmBackdateThenSave = () => {
+    const minAgo = (Date.now() - entryAt.getTime()) / 60000;
+    if (minAgo > 60 * 6) {
+      Alert.alert(
+        'Save backdated entry?',
+        `${describeBackdate(entryAt)}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: () => void performSave() },
+        ]
+      );
+      return;
+    }
+    void performSave();
+  };
+
   const save = async () => {
     if (saving) return;
-    // Existing-entry merge prompt: when an entry already exists for this
-    // date, ask before silently overwriting it. upsertJournal does
-    // overwrite-by-design, so this is the user's explicit chance to
-    // back out.
+    // Existing-entry replace prompt fires first when applicable. Once the
+    // user confirms (or it's a fresh date), the backdate-confirm chain
+    // runs. Same-day entries with no existing entry skip both prompts.
     if (existedAtLoad) {
       Alert.alert(
         'Replace existing entry?',
@@ -166,12 +179,12 @@ export default function JournalEntryModal() {
         })}. Saving will replace it with these values.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Replace', style: 'destructive', onPress: () => void performSave() },
+          { text: 'Replace', style: 'destructive', onPress: () => confirmBackdateThenSave() },
         ]
       );
       return;
     }
-    await performSave();
+    confirmBackdateThenSave();
   };
 
   return (

@@ -217,17 +217,7 @@ export default function LogDoseModal() {
         note: note.trim() || undefined,
       });
       haptic.success();
-      // Backdated saves get a confirmation so users can spot a wrong-date
-      // entry before it silently lands in their trends. Same-day saves
-      // skip the prompt to keep the routine flow tap-light.
-      const minAgo = (Date.now() - takenAtDate.getTime()) / 60000;
-      if (minAgo > 60 * 6) {
-        Alert.alert('Dose logged', describeBackdate(takenAtDate), [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      } else {
-        router.back();
-      }
+      router.back();
     } catch (err) {
       setSaving(false);
       haptic.error();
@@ -236,11 +226,32 @@ export default function LogDoseModal() {
     }
   };
 
+  // Pre-save backdate confirm: when the chosen timestamp is meaningfully
+  // in the past, show a Cancel/Save prompt with the human-readable date
+  // so the user can back out of an accidentally-backdated entry BEFORE
+  // it lands. Same-day saves skip the prompt.
+  const confirmBackdateThenSave = () => {
+    const minAgo = (Date.now() - takenAtDate.getTime()) / 60000;
+    if (minAgo > 60 * 6) {
+      Alert.alert(
+        'Save backdated dose?',
+        `${describeBackdate(takenAtDate)}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: () => void actuallySave() },
+        ]
+      );
+      return;
+    }
+    void actuallySave();
+  };
+
   const save = async () => {
     if (!peptideId || saving) return;
     // Soft duplicate warning: same peptide logged within ±10 minutes of the
     // chosen timestamp. Prevents accidental double-taps and duplicate entries
-    // when back-dating.
+    // when back-dating. Twice-daily intentional dosing (separated by hours)
+    // does NOT trip this — that's by design.
     try {
       const recent = await listDoses({ limit: 20 });
       const target = takenAtDate.getTime();
@@ -259,7 +270,7 @@ export default function LogDoseModal() {
           `You logged ${peptide?.name ?? 'this peptide'} ${mins} min ago. Log again?`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Log anyway', onPress: () => void actuallySave() },
+            { text: 'Log anyway', onPress: () => confirmBackdateThenSave() },
           ]
         );
         return;
@@ -267,7 +278,7 @@ export default function LogDoseModal() {
     } catch {
       // If the duplicate lookup fails for any reason, fall through to save.
     }
-    await actuallySave();
+    confirmBackdateThenSave();
   };
 
   // Peptides that already have a vial vs not — used for picker sections.

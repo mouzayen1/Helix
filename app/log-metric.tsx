@@ -3,9 +3,9 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DateTimeField, describeBackdate } from '../components/DateTimeField';
+import { DateTimeField, describeBackdate, isSameLocalDay } from '../components/DateTimeField';
 import { IconClose } from '../components/Icons';
-import { METRIC_KINDS, insertMetric } from '../lib/db';
+import { insertMetric, listMetrics, METRIC_KINDS } from '../lib/db';
 import { haptic } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
@@ -24,8 +24,10 @@ export default function LogMetricModal() {
   const parsed = parseFloat(value);
   const valid = !isNaN(parsed) && parsed > 0;
 
-  const save = async () => {
-    if (!valid || saving) return;
+  // Fires the actual write. Wrapped in a separate function so the
+  // duplicate-warning + backdate-confirm prompts can chain into it on user
+  // confirmation.
+  const performSave = async () => {
     setSaving(true);
     try {
       await insertMetric({
@@ -36,20 +38,60 @@ export default function LogMetricModal() {
         note: note.trim() || undefined,
       });
       haptic.success();
-      // Backdated entries get an inline confirmation — same-day saves are
-      // routine and don't need the extra tap.
-      const minAgo = (Date.now() - takenAt.getTime()) / 60000;
-      if (minAgo > 60) {
-        Alert.alert('Reading saved', describeBackdate(takenAt), [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      } else {
-        router.back();
-      }
+      router.back();
     } catch (e) {
       setSaving(false);
       haptic.error();
     }
+  };
+
+  // Pre-save backdate confirmation: when the chosen taken_at is more than
+  // ~6h in the past, surface the human-readable target date with a Save /
+  // Cancel choice so the user can back out before the entry lands.
+  const confirmBackdateThenSave = () => {
+    const minAgo = (Date.now() - takenAt.getTime()) / 60000;
+    if (minAgo > 60 * 6) {
+      Alert.alert(
+        'Save backdated reading?',
+        `${describeBackdate(takenAt)}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: () => void performSave() },
+        ]
+      );
+      return;
+    }
+    void performSave();
+  };
+
+  const save = async () => {
+    if (!valid || saving) return;
+    // Same-day duplicate warning: weighing or reading the same metric twice
+    // in one day is unusual; nudge the user before silently appending a
+    // second entry. Pulls the most recent N readings of this kind and
+    // looks for one that falls on the same local calendar day as takenAt.
+    try {
+      const recent = await listMetrics(kind, 10);
+      const sameDay = recent.find((r) => isSameLocalDay(new Date(r.taken_at), takenAt));
+      if (sameDay) {
+        const time = new Date(sameDay.taken_at).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+        });
+        Alert.alert(
+          'Already logged today?',
+          `You logged ${selected.label} earlier today (${time}, ${sameDay.value} ${selected.unit ?? ''}). Log again?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Log anyway', onPress: () => confirmBackdateThenSave() },
+          ]
+        );
+        return;
+      }
+    } catch {
+      // Lookup failure shouldn't block the save — fall through.
+    }
+    confirmBackdateThenSave();
   };
 
   return (
