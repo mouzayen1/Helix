@@ -500,8 +500,20 @@ export async function updateDose(
 
   const d = db();
   await d.withTransactionAsync(async () => {
+    const current = await d.getFirstAsync<Dose>('SELECT * FROM doses WHERE id = ?', id);
+    if (!current) return;
+
     const params = [...values, id];
     await d.runAsync(`UPDATE doses SET ${sets.join(', ')} WHERE id = ?`, ...params);
+
+    if (patch.amount_mcg !== undefined && current.vial_id) {
+      const deltaMg = (patch.amount_mcg - current.amount_mcg) / 1000;
+      await d.runAsync(
+        'UPDATE vials SET remaining_mg = MAX(0, remaining_mg - ?) WHERE id = ?',
+        deltaMg,
+        current.vial_id
+      );
+    }
 
     if (patch.site !== undefined || patch.taken_at !== undefined) {
       await d.runAsync('DELETE FROM injection_sites_log WHERE dose_id = ?', id);
