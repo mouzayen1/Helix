@@ -1,24 +1,26 @@
 // Injection sites — spec v2.0 §10 "Injection sites". Body map + rotation.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Ellipse, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { IconClose } from '../components/Icons';
 import { INJECTION_SITES, siteRecency, siteSuggestion, type SiteSuggestion } from '../lib/db';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 
-// (x, y) center for each zone in viewBox 100x200
+const HUMAN_BODY_IMAGE = require('../assets/images/injection-human.png');
+const BODY_MAP_ASPECT_RATIO = 1023 / 1537;
+
+// (x, y) center for each zone as a percentage of the PNG canvas
 const SITE_POSITIONS: Record<(typeof INJECTION_SITES)[number], [number, number]> = {
-  'L.Deltoid': [30, 45],
-  'R.Deltoid': [70, 45],
-  'L.Abdomen': [42, 82],
-  'R.Abdomen': [58, 82],
-  'L.Hip': [38, 105],
-  'R.Hip': [62, 105],
-  'L.Thigh': [40, 135],
-  'R.Thigh': [60, 135],
+  'L.Deltoid': [33, 24],
+  'R.Deltoid': [67, 24],
+  'L.Abdomen': [45, 43],
+  'R.Abdomen': [55, 43],
+  'L.Hip': [43, 54],
+  'R.Hip': [57, 54],
+  'L.Thigh': [44, 70],
+  'R.Thigh': [56, 70],
 };
 
 function zoneColor(days_since: number, suggested: boolean, t: any) {
@@ -83,7 +85,7 @@ export default function InjectionSitesModal() {
           </Text>
         </View>
 
-        {/* Body SVG */}
+        {/* Body map */}
         <View
           style={{
             marginHorizontal: space.xl,
@@ -96,82 +98,55 @@ export default function InjectionSitesModal() {
             paddingVertical: space.lg,
           }}
         >
-          <Svg width={200} height={380} viewBox="0 0 100 200">
-            {/* Head */}
-            <Circle cx={50} cy={15} r={10} fill="none" stroke={t.ink4} strokeWidth={0.8} />
-            {/* Neck */}
-            <Path d="M46 24 L46 28 L54 28 L54 24" fill="none" stroke={t.ink4} strokeWidth={0.8} />
-            {/* Torso */}
-            <Path
-              d="M30 30 L20 50 L22 95 L28 100 L35 105 L65 105 L72 100 L78 95 L80 50 L70 30 Z"
-              fill={t.surfaceAlt}
-              stroke={t.ink4}
-              strokeWidth={0.8}
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 300,
+              aspectRatio: BODY_MAP_ASPECT_RATIO,
+              position: 'relative',
+            }}
+          >
+            <Image
+              source={HUMAN_BODY_IMAGE}
+              resizeMode="contain"
+              style={{ width: '100%', height: '100%' }}
             />
-            {/* Arms */}
-            <Path
-              d="M20 50 L12 80 L14 105 L20 105 L22 80"
-              fill={t.surfaceAlt}
-              stroke={t.ink4}
-              strokeWidth={0.8}
-            />
-            <Path
-              d="M80 50 L88 80 L86 105 L80 105 L78 80"
-              fill={t.surfaceAlt}
-              stroke={t.ink4}
-              strokeWidth={0.8}
-            />
-            {/* Legs */}
-            <Path
-              d="M35 105 L30 170 L38 175 L42 120 Z"
-              fill={t.surfaceAlt}
-              stroke={t.ink4}
-              strokeWidth={0.8}
-            />
-            <Path
-              d="M65 105 L70 170 L62 175 L58 120 Z"
-              fill={t.surfaceAlt}
-              stroke={t.ink4}
-              strokeWidth={0.8}
-            />
-            {/* Zones */}
             {recency.map((r) => {
               const pos = SITE_POSITIONS[r.site as keyof typeof SITE_POSITIONS];
               if (!pos) return null;
               const suggested = r.site === suggestion?.site;
               const color = zoneColor(r.days_since, suggested, t);
+              const dotSize = suggested ? 30 : 22;
               return (
-                <Circle
+                <View
                   key={r.site}
-                  cx={pos[0]}
-                  cy={pos[1]}
-                  r={suggested ? 7 : 5}
-                  fill={color}
-                  opacity={suggested ? 0.95 : 0.75}
-                  stroke={suggested ? color : 'transparent'}
-                  strokeWidth={suggested ? 2 : 0}
-                />
-              );
-            })}
-            {/* Labels */}
-            {recency.map((r) => {
-              const pos = SITE_POSITIONS[r.site as keyof typeof SITE_POSITIONS];
-              if (!pos) return null;
-              return (
-                <SvgText
-                  key={`l-${r.site}`}
-                  x={pos[0]}
-                  y={pos[1] + 2}
-                  fontSize={4}
-                  fill="#fff"
-                  textAnchor="middle"
-                  fontWeight="bold"
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: `${pos[0]}%`,
+                    top: `${pos[1]}%`,
+                    width: dotSize,
+                    height: dotSize,
+                    marginLeft: -dotSize / 2,
+                    marginTop: -dotSize / 2,
+                    borderRadius: dotSize / 2,
+                    backgroundColor: color,
+                    opacity: suggested ? 0.95 : 0.75,
+                    borderWidth: suggested ? 3 : 0,
+                    borderColor: color,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                 >
-                  {r.total_uses > 0 ? r.total_uses : ''}
-                </SvgText>
+                  {r.total_uses > 0 ? (
+                    <Text style={{ color: '#fff', fontSize: 10, fontFamily: font.sansBold }}>
+                      {r.total_uses}
+                    </Text>
+                  ) : null}
+                </View>
               );
             })}
-          </Svg>
+          </View>
 
           {/* Legend */}
           <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.md }}>
