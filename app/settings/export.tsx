@@ -19,12 +19,17 @@ function toCsv(rows: Record<string, unknown>[]): string {
       .map((k) => {
         const v = r[k];
         if (v == null) return '';
-        const s = typeof v === 'string' ? v : JSON.stringify(v);
-        return '"' + s.replace(/"/g, '""') + '"';
+        return csvCell(v);
       })
       .join(',')
   );
   return [header, ...lines].join('\n');
+}
+
+function csvCell(v: unknown): string {
+  const raw = typeof v === 'string' ? v : JSON.stringify(v);
+  const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return '"' + s.replace(/"/g, '""') + '"';
 }
 
 export default function ExportScreen() {
@@ -80,7 +85,7 @@ export default function ExportScreen() {
             sections.push(
               isObj
                 ? toCsv(rows as Record<string, unknown>[])
-                : `value\n${(rows as unknown[]).map((v) => `"${String(v)}"`).join('\n')}`
+                : `value\n${(rows as unknown[]).map((v) => csvCell(String(v))).join('\n')}`
             );
           } else {
             sections.push('(empty)');
