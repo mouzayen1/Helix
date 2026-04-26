@@ -60,6 +60,8 @@ export const DEFAULT_NOTIF_PREFS: NotifPrefs = {
   },
 };
 
+const HELIX_NOTIFICATION_DATA = { owner: 'helix' } as const;
+
 // ---- Prefs ---------------------------------------------------------------
 
 export async function getNotifPrefs(): Promise<NotifPrefs> {
@@ -172,9 +174,15 @@ export async function scheduleAll() {
   const notifications = await getConfiguredNotificationsModule();
   if (!notifications) return;
 
-  // Always start by wiping previously-scheduled notifications so the schedule
-  // stays in sync with current prefs / cycle edits.
-  await notifications.cancelAllScheduledNotificationsAsync();
+  // Start by wiping previously-scheduled Helix notifications so the schedule
+  // stays in sync with current prefs / cycle edits without touching other
+  // local notifications that may be added later.
+  const scheduled = await notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    scheduled
+      .filter((n) => n.content.data?.owner === HELIX_NOTIFICATION_DATA.owner)
+      .map((n) => notifications.cancelScheduledNotificationAsync(n.identifier))
+  );
 
   if (prefs.mode === 'off') return;
 
@@ -214,6 +222,7 @@ export async function scheduleAll() {
           content: {
             title: 'Dose reminder',
             body: "Open Helix to see today's protocol.",
+            data: HELIX_NOTIFICATION_DATA,
           },
           trigger: {
             type: notifications.SchedulableTriggerInputTypes.DATE,
@@ -236,6 +245,7 @@ export async function scheduleAll() {
         content: {
           title: 'Vial expiring soon',
           body: 'Open Helix to review your vials.',
+          data: HELIX_NOTIFICATION_DATA,
         },
         trigger: {
           type: notifications.SchedulableTriggerInputTypes.DATE,
@@ -258,6 +268,7 @@ export async function scheduleAll() {
       content: {
         title: 'Haven’t logged today?',
         body: 'Open Helix to catch up on today’s schedule.',
+        data: HELIX_NOTIFICATION_DATA,
       },
       trigger: {
         type: notifications.SchedulableTriggerInputTypes.CALENDAR,
