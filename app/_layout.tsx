@@ -7,17 +7,19 @@ import {
 } from '@expo-google-fonts/inter';
 import { IBMPlexMono_400Regular, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as LocalAuthentication from 'expo-local-authentication';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AppState } from 'react-native';
 import { initDatabase } from '../lib/db';
 import { scheduleAllSafe } from '../lib/notifications';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
+import { font, radius, space } from '../theme/tokens';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -95,6 +97,93 @@ function RootGate() {
   );
 }
 
+function BiometricGate({ children }: { children: React.ReactNode }) {
+  const { t } = useTheme();
+  const { profile, loaded } = useProfile();
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const lockEnabled = loaded && profile?.biometric_lock === 1;
+
+  const authenticate = useCallback(async () => {
+    if (!lockEnabled) return;
+    setChecking(true);
+    try {
+      const [hasHardware, enrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+      ]);
+      if (!hasHardware || !enrolled) {
+        setAuthenticated(true);
+        return;
+      }
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock Helix',
+        fallbackLabel: 'Use device passcode',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: false,
+      });
+      setAuthenticated(result.success);
+    } finally {
+      setChecking(false);
+    }
+  }, [lockEnabled]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (!lockEnabled) {
+      setAuthenticated(true);
+      return;
+    }
+    setAuthenticated(false);
+    void authenticate();
+  }, [authenticate, loaded, lockEnabled]);
+
+  useEffect(() => {
+    if (!lockEnabled) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void authenticate();
+      } else {
+        setAuthenticated(false);
+      }
+    });
+    return () => sub.remove();
+  }, [authenticate, lockEnabled]);
+
+  if (!lockEnabled || authenticated) return <>{children}</>;
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: t.bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: space.xl,
+      }}
+    >
+      <Text style={{ color: t.ink, fontSize: 24, fontFamily: font.sansBold }}>
+        Helix is locked
+      </Text>
+      <Pressable
+        onPress={() => void authenticate()}
+        disabled={checking}
+        style={{
+          marginTop: space.lg,
+          paddingVertical: 12,
+          paddingHorizontal: 18,
+          borderRadius: radius.md,
+          backgroundColor: checking ? t.surfaceAlt : t.ink,
+        }}
+      >
+        <Text style={{ color: checking ? t.ink3 : t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
+          {checking ? 'Checking...' : 'Unlock'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
   const [fontsLoaded] = useFonts({
@@ -156,7 +245,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ProfileProvider>
           <ThemeProvider>
-            <RootGate />
+            <BiometricGate>
+              <RootGate />
+            </BiometricGate>
           </ThemeProvider>
         </ProfileProvider>
       </SafeAreaProvider>

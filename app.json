@@ -38,6 +38,12 @@
             "backgroundColor": "#0E1113"
           }
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Helix to use Face ID to unlock your local data."
+        }
       ]
     ],
     "experiments": {

@@ -1,7 +1,8 @@
 // Settings — spec v2.0 §10 "Settings home".
 import Constants from 'expo-constants';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
 import { useProfile } from '../../lib/profile-context';
@@ -13,6 +14,32 @@ export default function Settings() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, update } = useProfile();
+
+  const setBiometricLock = async (enabled: boolean) => {
+    if (!enabled) {
+      await update({ biometric_lock: 0 });
+      return;
+    }
+    const [hasHardware, enrolled] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+    ]);
+    if (!hasHardware || !enrolled) {
+      Alert.alert(
+        'Biometric lock unavailable',
+        'Set up Face ID, Touch ID, or device biometrics before enabling Helix lock.'
+      );
+      return;
+    }
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Enable Helix lock',
+      fallbackLabel: 'Use device passcode',
+      disableDeviceFallback: false,
+    });
+    if (result.success) {
+      await update({ biometric_lock: 1 });
+    }
+  };
 
   const groups: {
     label: string;
@@ -83,7 +110,7 @@ export default function Settings() {
           right: (
             <Switch
               value={profile?.biometric_lock === 1}
-              onValueChange={(v) => update({ biometric_lock: v ? 1 : 0 })}
+              onValueChange={(v) => void setBiometricLock(v)}
               trackColor={{ false: t.surfaceAlt, true: t.accent }}
             />
           ),
