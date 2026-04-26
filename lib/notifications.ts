@@ -187,8 +187,8 @@ export async function scheduleAll() {
         if (inQuietHours(when, prefs.quietHours)) continue;
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: `Time for ${row.peptide_id}`,
-            body: `${row.dose_mcg} mcg · ${row.time_of_day}`,
+            title: 'Dose reminder',
+            body: "Open Helix to see today's protocol.",
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -209,8 +209,8 @@ export async function scheduleAll() {
       if (warn.getTime() <= Date.now() + 60 * 1000) continue;
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Vial expires soon',
-          body: `Your ${v.peptide_id} vial expires in 3 days.`,
+          title: 'Vial expiring soon',
+          body: 'Open Helix to review your vials.',
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
