@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DoseDetailSheet } from '../components/DoseDetailSheet';
 import { IconChevronLeft } from '../components/Icons';
 import {
-  getActiveCycle,
+  listActiveCycles,
   listCycles,
   listDoses,
   type Cycle,
@@ -45,11 +45,17 @@ const RANGES: { key: DateRangeKey; label: string }[] = [
   { key: 'all', label: 'All' },
 ];
 
-function startOfRange(range: DateRangeKey, activeCycle: Cycle | null): Date | null {
+function startOfRange(range: DateRangeKey, activeCycles: Cycle[]): Date | null {
   const now = new Date();
   if (range === 'all') return null;
   if (range === 'cycle') {
-    return activeCycle ? new Date(activeCycle.starts_on) : null;
+    // Earliest start_on across all active cycles — covers concurrent
+    // protocols that started on different days.
+    const starts = activeCycles
+      .filter((c) => c.status === 'active')
+      .map((c) => new Date(c.starts_on).getTime());
+    if (starts.length === 0) return null;
+    return new Date(Math.min(...starts));
   }
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
   const d = new Date(now);
@@ -64,7 +70,8 @@ export default function DoseHistoryScreen() {
 
   const [doses, setDoses] = useState<Dose[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
-  const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
+  // Multi-cycle: 'This cycle' filter covers ANY currently-active cycle.
+  const [activeCycles, setActiveCycles] = useState<Cycle[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters — peptide is multi-select, range is single-select.
@@ -75,14 +82,14 @@ export default function DoseHistoryScreen() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [d, c, active] = await Promise.all([
+    const [d, c, acs] = await Promise.all([
       listDoses({ limit: 1000 }),
       listCycles(),
-      getActiveCycle(),
+      listActiveCycles(),
     ]);
     setDoses(d);
     setCycles(c);
-    setActiveCycle(active);
+    setActiveCycles(acs);
     setLoading(false);
   }, []);
 
@@ -101,13 +108,13 @@ export default function DoseHistoryScreen() {
   }, [doses]);
 
   const filtered = useMemo(() => {
-    const start = startOfRange(range, activeCycle);
+    const start = startOfRange(range, activeCycles);
     return doses.filter((d) => {
       if (selectedPeptides.size > 0 && !selectedPeptides.has(d.peptide_id)) return false;
       if (start && new Date(d.taken_at).getTime() < start.getTime()) return false;
       return true;
     });
-  }, [doses, selectedPeptides, range, activeCycle]);
+  }, [doses, selectedPeptides, range, activeCycles]);
 
   // Stats header — adapts to the active filter so it always reads
   // naturally. Half the perceived intelligence of this screen lives here.
@@ -224,7 +231,8 @@ export default function DoseHistoryScreen() {
         >
           {RANGES.map((r) => {
             const active = range === r.key;
-            const disabled = r.key === 'cycle' && !activeCycle;
+            const disabled =
+              r.key === 'cycle' && !activeCycles.some((c) => c.status === 'active');
             return (
               <Pressable
                 key={r.key}

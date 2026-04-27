@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronRight, IconPlus } from '../../components/Icons';
 import { HCard, HSectionHeader } from '../../components/Primitives';
 import {
-  getActiveCycle,
+  listActiveCycles,
   listCycles,
   listStacks,
   type Cycle,
@@ -48,20 +48,25 @@ export default function StacksScreen() {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [active, setActive] = useState<Cycle | null>(null);
+  // Multi-cycle: every active or paused cycle gets its own card. The
+  // single-active assumption was a real foot-gun — users with concurrent
+  // protocols (e.g. healing + fat-loss) would only see the most-recent.
+  const [activeCycles, setActiveCycles] = useState<Cycle[]>([]);
   const [past, setPast] = useState<Cycle[]>([]);
   const [stacks, setStacks] = useState<Stack[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [a, cs, ss] = await Promise.all([
-          getActiveCycle(),
+        const [acs, cs, ss] = await Promise.all([
+          listActiveCycles(),
           listCycles(),
           listStacks(),
         ]);
-        setActive(a);
-        setPast(cs.filter((c) => c.status !== 'active'));
+        setActiveCycles(acs);
+        // Past = anything not active and not paused (active and paused
+        // both render in the multi-card section above).
+        setPast(cs.filter((c) => c.status !== 'active' && c.status !== 'paused'));
         setStacks(ss);
       })();
     }, [])
@@ -154,10 +159,12 @@ export default function StacksScreen() {
         </View>
       </View>
 
-      {/* Active cycle */}
-      {active ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
-          <ActiveCycleCard cycle={active} />
+      {/* Active cycle cards — one per active/paused cycle, stacked. */}
+      {activeCycles.length > 0 ? (
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.md }}>
+          {activeCycles.map((c) => (
+            <ActiveCycleCard key={c.id} cycle={c} />
+          ))}
         </View>
       ) : (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>

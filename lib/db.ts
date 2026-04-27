@@ -567,12 +567,22 @@ export async function logDose(input: {
     if (auto) vial_id = auto.id;
   }
 
+  // v1.1: if cycle_id omitted, auto-attach to the active cycle whose
+  // protocol covers this peptide. Eliminates the 'orphan dose' surprise
+  // on dose-history when a user logs mid-cycle without explicitly
+  // selecting the cycle every time.
+  let cycle_id: string | null = input.cycle_id ?? null;
+  if (cycle_id === null) {
+    const cov = await getActiveCycleForPeptide(input.peptide_id);
+    if (cov) cycle_id = cov.id;
+  }
+
   await d.withTransactionAsync(async () => {
     await d.runAsync(
       `INSERT INTO doses (id, peptide_id, vial_id, cycle_id, amount_mcg, volume_units,
                           route, site, taken_at, note)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      id, input.peptide_id, vial_id, input.cycle_id ?? null,
+      id, input.peptide_id, vial_id, cycle_id,
       input.amount_mcg, input.volume_units ?? null, input.route,
       input.site ?? null, taken_at, input.note ?? null
     );
@@ -676,6 +686,36 @@ export async function getActiveCycle(): Promise<Cycle | null> {
   return db().getFirstAsync<Cycle>(
     `SELECT * FROM cycles WHERE status = 'active' ORDER BY starts_on DESC LIMIT 1`
   );
+}
+
+// v1.1: list ALL currently-active cycles. Multiple concurrent cycles are
+// a first-class case (e.g. running a healing protocol alongside a fat-loss
+// one with different durations). Today / Stacks / notifications all merge
+// the protocols across the result; getActiveCycle stays for callers that
+// genuinely need a single representative cycle.
+export async function listActiveCycles(): Promise<Cycle[]> {
+  return db().getAllAsync<Cycle>(
+    `SELECT * FROM cycles WHERE status IN ('active', 'paused') ORDER BY starts_on DESC`
+  );
+}
+
+// v1.1: find the active cycle (if any) whose protocol includes this
+// peptide. Used by logDose to auto-attach cycle_id so doses stop
+// accumulating as 'orphan' when a covering cycle is running. When more
+// than one active cycle covers the same peptide, returns the most
+// recently started one — the user's clearest intent.
+export async function getActiveCycleForPeptide(peptideId: string): Promise<Cycle | null> {
+  const all = await listActiveCycles();
+  for (const c of all) {
+    if (c.status !== 'active') continue;
+    try {
+      const protocol = JSON.parse(c.protocol_json || '[]') as { peptide_id: string }[];
+      if (protocol.some((row) => row.peptide_id === peptideId)) return c;
+    } catch {
+      // Malformed protocol_json — skip; don't crash the lookup.
+    }
+  }
+  return null;
 }
 
 export async function listCycles(): Promise<Cycle[]> {
