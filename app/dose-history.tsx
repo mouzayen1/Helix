@@ -18,9 +18,11 @@
 //
 // v2 follow-ups (deferred): site / route / cycle-id filters, free-text
 // note search, group-by-week toggle, export filtered CSV.
+import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DoseDetailSheet } from '../components/DoseDetailSheet';
 import { IconChevronLeft } from '../components/Icons';
@@ -74,9 +76,17 @@ export default function DoseHistoryScreen() {
   const [activeCycles, setActiveCycles] = useState<Cycle[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters — peptide is multi-select, range is single-select.
+  // Filters — peptide / site / route / cycle are multi-select; range is
+  // single-select. The cycle filter accepts a sentinel '__none__' string
+  // for "doses without a cycle" so orphans don't silently disappear when
+  // any other cycle is selected. Sites and routes are adaptive: chips
+  // only render for values the user has actually logged.
   const [selectedPeptides, setSelectedPeptides] = useState<Set<string>>(new Set());
+  const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [selectedRoutes, setSelectedRoutes] = useState<Set<string>>(new Set());
+  const [selectedCycles, setSelectedCycles] = useState<Set<string>>(new Set());
   const [range, setRange] = useState<DateRangeKey>('30d');
+  const [exporting, setExporting] = useState(false);
   // Sheet for the dose tapped in the list.
   const [openDose, setOpenDose] = useState<Dose | null>(null);
 
@@ -99,22 +109,56 @@ export default function DoseHistoryScreen() {
     }, [refresh])
   );
 
-  // Adaptive peptide chips — only the peptides the user has actually
-  // dosed. Cuts down the chip row from 42 to 1-5 in practice.
+  // Adaptive chips — peptides / sites / routes only render when the user
+  // has actually logged data with those values. A SubQ-only user doesn't
+  // need an "Oral" filter chip cluttering the row.
   const usedPeptideIds = useMemo(() => {
     const set = new Set<string>();
     for (const d of doses) set.add(d.peptide_id);
     return Array.from(set);
   }, [doses]);
+  const usedSites = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of doses) if (d.site) set.add(d.site);
+    return Array.from(set).sort();
+  }, [doses]);
+  const usedRoutes = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of doses) set.add(d.route);
+    return Array.from(set).sort();
+  }, [doses]);
+  // Cycles the user could plausibly want to filter by — anything that has
+  // at least one dose attached. Sorted with active cycles on top so they
+  // bubble in the chip row.
+  const usedCycles = useMemo(() => {
+    const seen = new Set<string>();
+    for (const d of doses) if (d.cycle_id) seen.add(d.cycle_id);
+    const list = cycles.filter((c) => seen.has(c.id));
+    return list.sort((a, b) => {
+      const aActive = a.status === 'active' ? 0 : 1;
+      const bActive = b.status === 'active' ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+      return b.starts_on.localeCompare(a.starts_on);
+    });
+  }, [doses, cycles]);
+  // True when at least one orphan dose exists — controls whether the "No
+  // cycle" chip appears at all. Don't show a filter for an empty bucket.
+  const hasOrphans = useMemo(() => doses.some((d) => !d.cycle_id), [doses]);
 
   const filtered = useMemo(() => {
     const start = startOfRange(range, activeCycles);
     return doses.filter((d) => {
       if (selectedPeptides.size > 0 && !selectedPeptides.has(d.peptide_id)) return false;
+      if (selectedSites.size > 0 && (!d.site || !selectedSites.has(d.site))) return false;
+      if (selectedRoutes.size > 0 && !selectedRoutes.has(d.route)) return false;
+      if (selectedCycles.size > 0) {
+        const key = d.cycle_id ?? '__none__';
+        if (!selectedCycles.has(key)) return false;
+      }
       if (start && new Date(d.taken_at).getTime() < start.getTime()) return false;
       return true;
     });
-  }, [doses, selectedPeptides, range, activeCycles]);
+  }, [doses, selectedPeptides, selectedSites, selectedRoutes, selectedCycles, range, activeCycles]);
 
   // Stats header — adapts to the active filter so it always reads
   // naturally. Half the perceived intelligence of this screen lives here.
@@ -148,12 +192,81 @@ export default function DoseHistoryScreen() {
   }, [stats, selectedPeptides]);
 
   const togglePeptide = (id: string) => {
-    setSelectedPeptides((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelectedPeptides((prev) => toggleInSet(prev, id));
+  };
+  const toggleSite = (s: string) => setSelectedSites((prev) => toggleInSet(prev, s));
+  const toggleRoute = (r: string) => setSelectedRoutes((prev) => toggleInSet(prev, r));
+  const toggleCycle = (id: string) => setSelectedCycles((prev) => toggleInSet(prev, id));
+
+  const clearAllFilters = () => {
+    setSelectedPeptides(new Set());
+    setSelectedSites(new Set());
+    setSelectedRoutes(new Set());
+    setSelectedCycles(new Set());
+    setRange('30d');
+  };
+  const hasAnyFilter =
+    selectedPeptides.size > 0 ||
+    selectedSites.size > 0 ||
+    selectedRoutes.size > 0 ||
+    selectedCycles.size > 0 ||
+    range !== '30d';
+
+  // Export the currently-filtered list as a CSV the user can hand off to
+  // a clinician. Reuses the same csvCell escape logic that ships in the
+  // global Settings → Export flow (leading =/+/-/@ get a leading apostrophe
+  // so spreadsheets don't treat exported notes as formulas). The file
+  // name encodes the active filters so multiple exports don't collide.
+  const exportFilteredCsv = async () => {
+    if (filtered.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const header = [
+        'taken_at',
+        'peptide',
+        'amount_mcg',
+        'volume_units',
+        'route',
+        'site',
+        'cycle',
+        'note',
+      ];
+      const rows = filtered.map((d) => {
+        const p = findPeptide(d.peptide_id);
+        const cycle = d.cycle_id ? cycleLookup[d.cycle_id]?.name : '';
+        return [
+          d.taken_at,
+          p?.name ?? d.peptide_id,
+          d.amount_mcg,
+          d.volume_units ?? '',
+          d.route,
+          d.site ?? '',
+          cycle ?? '',
+          d.note ?? '',
+        ];
+      });
+      const lines = [header.map(csvCell).join(',')];
+      for (const r of rows) lines.push(r.map(csvCell).join(','));
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const tag = [
+        range !== 'all' ? range : null,
+        selectedPeptides.size === 1
+          ? findPeptide(Array.from(selectedPeptides)[0])?.id
+          : null,
+      ]
+        .filter(Boolean)
+        .join('-');
+      const filename = `helix-doses${tag ? '-' + tag : ''}-${ts}.csv`;
+      const dir = FileSystem.documentDirectory ?? '';
+      const path = `${dir}${filename}`;
+      await FileSystem.writeAsStringAsync(path, lines.join('\n'));
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(path);
+      else Alert.alert('Saved', `Wrote ${filtered.length} doses to ${filename}`);
+    } catch (err) {
+      Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const cycleLookup = useMemo(() => {
@@ -317,6 +430,223 @@ export default function DoseHistoryScreen() {
           </ScrollView>
         ) : null}
 
+        {/* Adaptive site filter — only the sites the user has actually
+            injected. Collapses to nothing for users who only ever pick
+            the default site. */}
+        {usedSites.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: space.xl, gap: 6 }}
+            style={{ flexGrow: 0, marginBottom: space.sm }}
+          >
+            <FilterLabel>Site</FilterLabel>
+            {usedSites.map((s) => {
+              const active = selectedSites.has(s);
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => toggleSite(s)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`Filter by site ${s}`}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? t.accentSoft : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? t.accent : t.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: active ? t.accentInk : t.ink2,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
+                    {s}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {/* Adaptive route filter — only renders for users with mixed
+            routes. SubQ-only users never see it. */}
+        {usedRoutes.length > 1 ? (
+          <View
+            style={{
+              paddingHorizontal: space.xl,
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: 6,
+              alignItems: 'center',
+              marginBottom: space.sm,
+            }}
+          >
+            <FilterLabel>Route</FilterLabel>
+            {usedRoutes.map((r) => {
+              const active = selectedRoutes.has(r);
+              return (
+                <Pressable
+                  key={r}
+                  onPress={() => toggleRoute(r)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`Filter by route ${r}`}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? t.accentSoft : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? t.accent : t.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: active ? t.accentInk : t.ink2,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
+                    {r}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* Cycle filter with explicit 'No cycle' option for orphan doses.
+            Without this chip a user filtering by any cycle would silently
+            hide their pre-cycle / ad-hoc logs. */}
+        {usedCycles.length > 0 || hasOrphans ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: space.xl, gap: 6 }}
+            style={{ flexGrow: 0, marginBottom: space.md }}
+          >
+            <FilterLabel>Cycle</FilterLabel>
+            {usedCycles.map((c) => {
+              const active = selectedCycles.has(c.id);
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => toggleCycle(c.id)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`Filter by cycle ${c.name}`}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: radius.pill,
+                    backgroundColor: active ? t.accentSoft : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? t.accent : t.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: active ? t.accentInk : t.ink2,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
+                    {c.name}
+                    {c.status !== 'active' ? ` · ${c.status}` : ''}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {hasOrphans ? (
+              <Pressable
+                onPress={() => toggleCycle('__none__')}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selectedCycles.has('__none__') }}
+                accessibilityLabel="Filter by doses with no cycle"
+                style={{
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  borderRadius: radius.pill,
+                  backgroundColor: selectedCycles.has('__none__') ? t.warnSoft : 'transparent',
+                  borderWidth: 1,
+                  borderColor: selectedCycles.has('__none__') ? t.warn : t.line,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: selectedCycles.has('__none__') ? t.warn : t.ink2,
+                    fontFamily: font.sansMed,
+                  }}
+                >
+                  No cycle
+                </Text>
+              </Pressable>
+            ) : null}
+          </ScrollView>
+        ) : null}
+
+        {/* Export filtered view → CSV. Hidden until there's something to
+            export. Filename encodes the active filter so multiple exports
+            don't collide. */}
+        {filtered.length > 0 ? (
+          <View
+            style={{
+              paddingHorizontal: space.xl,
+              flexDirection: 'row',
+              gap: 8,
+              marginBottom: space.md,
+            }}
+          >
+            <Pressable
+              onPress={exportFilteredCsv}
+              disabled={exporting}
+              accessibilityRole="button"
+              accessibilityLabel="Export filtered list as CSV"
+              style={{
+                flex: 1,
+                paddingVertical: 9,
+                paddingHorizontal: 12,
+                borderRadius: radius.md,
+                backgroundColor: exporting ? t.surfaceAlt : t.surface,
+                borderWidth: 1,
+                borderColor: t.line,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 12, fontFamily: font.sansSemi, color: t.ink }}>
+                {exporting ? 'Preparing CSV…' : `Export ${filtered.length} doses → CSV`}
+              </Text>
+            </Pressable>
+            {hasAnyFilter ? (
+              <Pressable
+                onPress={clearAllFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all filters"
+                style={{
+                  paddingVertical: 9,
+                  paddingHorizontal: 12,
+                  borderRadius: radius.md,
+                  backgroundColor: t.surface,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 12, fontFamily: font.sansMed, color: t.ink3 }}>
+                  Clear filters
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
         {/* List */}
         {loading ? (
           <Text style={{ paddingHorizontal: space.xl, color: t.ink3, fontSize: 13 }}>
@@ -423,4 +753,53 @@ export default function DoseHistoryScreen() {
       />
     </View>
   );
+}
+
+// Set toggle helper extracted because all four multi-select filters need
+// the same flip-on/flip-off behavior. Returns a NEW Set so React picks
+// up the change.
+function toggleInSet<T>(prev: Set<T>, value: T): Set<T> {
+  const next = new Set(prev);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
+
+// Mirror of the csvCell helper in app/settings/export.tsx — neutralizes
+// formula injection by prefixing any cell starting with =/+/-/@ with a
+// single quote, then double-quoting and escaping internal quotes. Kept
+// inline rather than re-exported to avoid a cross-route module import.
+// Tiny inline label for each filter row's leading chip — keeps the
+// horizontal scrollers self-explanatory at a glance ("Site · …" etc.)
+// without taking up a separate row.
+function FilterLabel({ children }: { children: string }) {
+  // Local theme hook avoids drilling tokens through props.
+  const { t } = useTheme();
+  return (
+    <View
+      style={{
+        paddingVertical: 6,
+        paddingRight: 4,
+        justifyContent: 'center',
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 10,
+          letterSpacing: 0.8,
+          color: t.ink3,
+          fontFamily: font.sansSemi,
+          textTransform: 'uppercase',
+        }}
+      >
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+function csvCell(v: unknown): string {
+  const raw = v == null ? '' : typeof v === 'string' ? v : String(v);
+  const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return '"' + s.replace(/"/g, '""') + '"';
 }
