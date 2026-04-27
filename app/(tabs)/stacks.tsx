@@ -98,6 +98,24 @@ export default function StacksScreen() {
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
+            onPress={() => router.push('/dose-history' as any)}
+            style={{
+              backgroundColor: t.surface,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: radius.pill,
+              borderWidth: 1,
+              borderColor: t.line,
+            }}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Open dose history"
+          >
+            <Text style={{ color: t.ink, fontSize: 12, fontFamily: font.sansSemi }}>
+              History
+            </Text>
+          </Pressable>
+          <Pressable
             onPress={() => router.push('/vials' as any)}
             style={{
               backgroundColor: t.surface,

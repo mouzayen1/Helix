@@ -89,6 +89,52 @@ export default function ProgressScreen() {
         </Text>
       </View>
 
+      {/* Dose history entry point — paired with Stacks → History so users
+          discover this from either framing ("what did I take" vs "what's
+          running through this protocol"). */}
+      <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+        <Pressable
+          onPress={() => router.push('/dose-history' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Open dose history"
+          style={{
+            backgroundColor: t.surface,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: t.line,
+            padding: space.md,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontSize: 10,
+                letterSpacing: 0.8,
+                color: t.ink3,
+                fontFamily: font.sansSemi,
+                textTransform: 'uppercase',
+              }}
+            >
+              Dose history
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: t.ink,
+                fontFamily: font.sansSemi,
+                marginTop: 2,
+              }}
+            >
+              Browse every dose · filter by peptide and date
+            </Text>
+          </View>
+          <IconChevronRight size={14} color={t.ink4} />
+        </Pressable>
+      </View>
+
       {/* Cost rollup — hidden entirely unless at least one vial has cost set */}
       {costSummary ? (
         <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>

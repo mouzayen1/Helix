@@ -12,11 +12,11 @@ import {
   IconCog,
   IconSyringe,
 } from '../../components/Icons';
+import { DoseDetailSheet } from '../../components/DoseDetailSheet';
 import { HCard, HSectionHeader, ResearchBanner } from '../../components/Primitives';
 import {
   createDoseSkip,
   deactivateVial,
-  deleteDose,
   deleteDoseSkip,
   deleteVial,
   getActiveCycle,
@@ -288,12 +288,6 @@ export default function TodayScreen() {
     await resumeCycle(cycle.id);
     haptic.success();
     await refresh();
-  };
-
-  const onDeleteDose = async (id: string) => {
-    await deleteDose(id);
-    setDoseSheet(null);
-    refresh();
   };
 
   const onMarkDepleted = async (id: string) => {
@@ -958,82 +952,12 @@ export default function TodayScreen() {
         </View>
       </ScrollView>
 
-      {/* Dose bottom sheet */}
-      <Modal
-        visible={!!doseSheet}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDoseSheet(null)}
-      >
-        <Pressable
-          onPress={() => setDoseSheet(null)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: t.surface,
-              paddingTop: space.lg,
-              paddingBottom: insets.bottom + space.lg,
-              paddingHorizontal: space.xl,
-              borderTopLeftRadius: radius.lg,
-              borderTopRightRadius: radius.lg,
-              gap: 8,
-            }}
-          >
-            {doseSheet ? (
-              <>
-                <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
-                  {findPeptide(doseSheet.peptide_id)?.name ?? doseSheet.peptide_id}
-                </Text>
-                <Text style={{ fontSize: 13, color: t.ink3, fontFamily: font.mono, marginBottom: space.md }}>
-                  {doseSheet.amount_mcg} mcg · {doseSheet.route} ·{' '}
-                  {new Date(doseSheet.taken_at).toLocaleString()}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setDoseSheet(null);
-                    router.push({
-                      pathname: '/log-dose',
-                      params: { peptideId: doseSheet.peptide_id, prefillDoseMcg: doseSheet.amount_mcg },
-                    } as any);
-                  }}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    backgroundColor: t.ink,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Log another
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onDeleteDose(doseSheet.id)}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.danger,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.danger, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Delete dose (restores vial)
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setDoseSheet(null)}
-                  style={{ padding: space.md, alignItems: 'center' }}
-                >
-                  <Text style={{ color: t.ink3, fontSize: 14 }}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Dose bottom sheet — shared with /dose-history */}
+      <DoseDetailSheet
+        dose={doseSheet}
+        onClose={() => setDoseSheet(null)}
+        onDeleted={() => refresh()}
+      />
 
       {/* Vial bottom sheet */}
       <Modal
