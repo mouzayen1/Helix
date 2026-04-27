@@ -416,6 +416,35 @@ export default function ReconstituteModal() {
               setBacText(String(v));
             }}
           />
+          {/* Soft capacity hint — vial physical capacity isn't knowable
+              from peptide data alone, so we never block. Tier copy puts
+              agency on the user. Silent ≤3 mL (most common). */}
+          {bacMl > 5 ? (
+            <Text
+              style={{
+                marginTop: -space.sm,
+                marginBottom: space.sm,
+                fontSize: 11,
+                color: t.warn,
+                fontFamily: font.sansMed,
+                lineHeight: 15,
+              }}
+            >
+              Most peptide vials hold 2–5 mL. Check your vial can fit this volume before reconstituting.
+            </Text>
+          ) : bacMl > 3 ? (
+            <Text
+              style={{
+                marginTop: -space.sm,
+                marginBottom: space.sm,
+                fontSize: 11,
+                color: t.ink3,
+                lineHeight: 15,
+              }}
+            >
+              Most vials hold 2–5 mL — verify yours fits.
+            </Text>
+          ) : null}
           <TypedField
             label="Target dose"
             unit="mcg"
@@ -570,6 +599,49 @@ export default function ReconstituteModal() {
             </View>
           </View>
         </View>
+
+        {/* Syringe-size guidance — passive copy, no popups. Picks the
+            right tip based on the resulting draw. The >100u case is a
+            real safety issue: a user computing a 120u draw who tries it
+            in one pull either has no syringe that holds it or
+            under-doses. Telling them HOW to split (60u + 60u) turns a
+            warning into an instruction. */}
+        {(() => {
+          const u = calc.unitsPerDose;
+          if (!isFinite(u) || u <= 0) return null;
+          let tip: string | null = null;
+          let tone: 'hint' | 'warn' = 'hint';
+          if (u < 10) {
+            tip = 'A 0.3 mL / 30u syringe gives better precision at this volume than a 100u syringe.';
+          } else if (u > 100) {
+            tone = 'warn';
+            const total = Math.round(u);
+            if (total > 200) {
+              const draws = Math.ceil(total / 100);
+              const per = Math.ceil(total / draws);
+              tip = `Exceeds a 1 mL / 100u insulin syringe. Split into ${draws} draws of ~${per}u each.`;
+            } else {
+              const half1 = Math.ceil(total / 2);
+              const half2 = total - half1;
+              tip = `Exceeds a 1 mL / 100u insulin syringe. Split into two draws (${half1}u + ${half2}u) or use a 3 mL syringe.`;
+            }
+          }
+          if (!tip) return null;
+          return (
+            <View style={{ paddingHorizontal: space.xl, marginTop: space.sm }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: tone === 'warn' ? t.warn : t.ink3,
+                  fontFamily: tone === 'warn' ? font.sansMed : font.sans,
+                  lineHeight: 16,
+                }}
+              >
+                {tip}
+              </Text>
+            </View>
+          );
+        })()}
 
         {/* Syringe */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
