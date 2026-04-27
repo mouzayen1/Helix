@@ -72,6 +72,17 @@ export default function ReconstituteModal() {
   const [beginnerMode, setBeginnerMode] = useState(false);
   const [coReconstitutePartner, setCoReconstitutePartner] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // v1.2.2 reverse-calc mode. Forward (default) computes the dose volume
+  // from a chosen BAC. Reverse flips the question: the user picks a
+  // clean target draw (e.g. 20u) and the app solves for the BAC water
+  // needed to make that draw produce their target dose.
+  //   forward:  units = (dose_mcg / 1000) * BAC / strength * 100
+  //   reverse:  BAC   = units * strength * 10 / dose_mcg
+  // PeptideFox is the only competitor with this mode — it matches how
+  // researchers actually plan a vial ("I want clean 20u draws of 1 mg").
+  const [calcMode, setCalcMode] = useState<'forward' | 'reverse'>('forward');
+  const [targetUnits, setTargetUnits] = useState(20);
+  const [targetUnitsText, setTargetUnitsText] = useState('20');
 
   const peptide = findPeptide(peptideId)!;
   const extras = getPeptideExtras(peptideId);
@@ -97,6 +108,21 @@ export default function ReconstituteModal() {
     // Clear any prior co-reconstitute partner when peptide changes
     setCoReconstitutePartner(null);
   }, [peptide.id, peptide.reconstitution]);
+
+  // In reverse mode, BAC water is computed from (target dose, target
+  // units, vial strength) and synced into bacMl so save() / the result
+  // card / the soft-warn tier all read the same value. Switching back to
+  // forward leaves the user's last computed value in place — they can
+  // tune it from there.
+  useEffect(() => {
+    if (calcMode !== 'reverse') return;
+    if (targetUnits <= 0 || targetDoseMcg <= 0 || strengthMg <= 0) return;
+    const computed = (targetUnits * strengthMg * 10) / targetDoseMcg;
+    if (!isFinite(computed) || computed <= 0) return;
+    const rounded = Math.round(computed * 100) / 100;
+    setBacMl(rounded);
+    setBacText(String(rounded));
+  }, [calcMode, targetUnits, targetDoseMcg, strengthMg]);
 
   const calc = useMemo(() => {
     const concMgPerMl = strengthMg / bacMl;
@@ -378,6 +404,66 @@ export default function ReconstituteModal() {
           </View>
         </View>
 
+        {/* Calc-mode toggle. Forward = "I'm putting X mg in Y mL, what
+            dose do I get?" Reverse = "I want a Z mcg dose at N units,
+            how much BAC do I add?" Reverse is the moat — only PeptideFox
+            had it before now. */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              padding: 3,
+              backgroundColor: t.surfaceAlt,
+              borderRadius: radius.md,
+            }}
+          >
+            {(['forward', 'reverse'] as const).map((m) => {
+              const on = calcMode === m;
+              const label = m === 'forward' ? 'Calculate concentration' : 'Find ideal BAC';
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => setCalcMode(m)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={label}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 8,
+                    borderRadius: radius.md - 3,
+                    backgroundColor: on ? t.surface : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: on ? t.ink : t.ink3,
+                      fontFamily: font.sansSemi,
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {calcMode === 'reverse' ? (
+            <Text
+              style={{
+                marginTop: space.sm,
+                fontSize: 11,
+                color: t.ink3,
+                lineHeight: 16,
+                fontStyle: 'italic',
+              }}
+            >
+              Pick the dose you want and how many units you want to draw — the app solves for the
+              BAC water needed.
+            </Text>
+          ) : null}
+        </View>
+
         {/* Typed-number inputs */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md, gap: 10 }}>
           <TypedField
@@ -415,6 +501,12 @@ export default function ReconstituteModal() {
               setBacMl(v);
               setBacText(String(v));
             }}
+            readOnly={calcMode === 'reverse'}
+            readOnlyHint={
+              calcMode === 'reverse'
+                ? 'Solved from your target dose and target draw.'
+                : undefined
+            }
           />
           {/* Soft capacity hint — vial physical capacity isn't knowable
               from peptide data alone, so we never block. Tier copy puts
@@ -464,6 +556,27 @@ export default function ReconstituteModal() {
               setTargetDoseText(String(v));
             }}
           />
+          {calcMode === 'reverse' ? (
+            <TypedField
+              label="Target draw"
+              unit="units"
+              value={targetUnitsText}
+              onChangeText={setTargetUnitsText}
+              onCommit={() =>
+                commitNum(targetUnitsText, setTargetUnits, setTargetUnitsText, 1, 100, targetUnits)
+              }
+              onMinus={() => {
+                const v = Math.max(1, targetUnits - 5);
+                setTargetUnits(v);
+                setTargetUnitsText(String(v));
+              }}
+              onPlus={() => {
+                const v = Math.min(100, targetUnits + 5);
+                setTargetUnits(v);
+                setTargetUnitsText(String(v));
+              }}
+            />
+          ) : null}
         </View>
 
         {/* Result card */}
@@ -896,6 +1009,8 @@ function TypedField({
   onCommit,
   onMinus,
   onPlus,
+  readOnly,
+  readOnlyHint,
 }: {
   label: string;
   unit: string;
@@ -904,33 +1019,58 @@ function TypedField({
   onCommit: () => void;
   onMinus: () => void;
   onPlus: () => void;
+  // v1.2.2: read-only fields render with a "computed" pill and hidden
+  // steppers — used for BAC water in reverse-calc mode where the value
+  // is solved from target dose + units.
+  readOnly?: boolean;
+  readOnlyHint?: string;
 }) {
   const { t } = useTheme();
   return (
     <View
       style={{
-        backgroundColor: t.surface,
+        backgroundColor: readOnly ? t.surfaceAlt : t.surface,
         borderRadius: radius.md,
         paddingVertical: 10,
         paddingHorizontal: 14,
         borderWidth: 1,
-        borderColor: t.line,
+        borderColor: readOnly ? t.line : t.line,
         flexDirection: 'row',
         alignItems: 'center',
       }}
     >
       <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontSize: 10,
-            color: t.ink3,
-            letterSpacing: 0.3,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-          }}
-        >
-          {label}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            style={{
+              fontSize: 10,
+              color: t.ink3,
+              letterSpacing: 0.3,
+              fontFamily: font.sansSemi,
+              textTransform: 'uppercase',
+            }}
+          >
+            {label}
+          </Text>
+          {readOnly ? (
+            <Text
+              style={{
+                fontSize: 9,
+                color: t.accentInk,
+                backgroundColor: t.accentSoft,
+                paddingHorizontal: 6,
+                paddingVertical: 1,
+                borderRadius: radius.pill,
+                fontFamily: font.sansSemi,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                overflow: 'hidden',
+              }}
+            >
+              Computed
+            </Text>
+          ) : null}
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 3 }}>
           <TextInput
             value={value}
@@ -939,10 +1079,11 @@ function TypedField({
             onSubmitEditing={onCommit}
             keyboardType="decimal-pad"
             returnKeyType="done"
+            editable={!readOnly}
             style={{
               fontSize: 17,
               fontFamily: font.monoSemi,
-              color: t.ink,
+              color: readOnly ? t.ink2 : t.ink,
               padding: 0,
               minWidth: 50,
             }}
@@ -958,7 +1099,21 @@ function TypedField({
             {unit}
           </Text>
         </View>
+        {readOnly && readOnlyHint ? (
+          <Text
+            style={{
+              fontSize: 11,
+              color: t.ink3,
+              fontFamily: font.sans,
+              marginTop: 2,
+              lineHeight: 15,
+            }}
+          >
+            {readOnlyHint}
+          </Text>
+        ) : null}
       </View>
+      {readOnly ? null : (
       <View style={{ flexDirection: 'row', gap: 6 }}>
         <Pressable
           onPress={onMinus}
@@ -989,6 +1144,7 @@ function TypedField({
           <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>+</Text>
         </Pressable>
       </View>
+      )}
     </View>
   );
 }
