@@ -21,7 +21,14 @@ import {
 import { DosingDisclaimer } from '../../components/Primitives';
 import { PEPTIDES, findPeptide } from '../../lib/peptides';
 import { getPeptideExtras } from '../../lib/peptide-extras';
-import { createCycle, listCycles, type CycleProtocolItem } from '../../lib/db';
+import {
+  attachVialToCycle,
+  createCycle,
+  listCycles,
+  matchingVialsForCycle,
+  type CycleProtocolItem,
+  type Vial,
+} from '../../lib/db';
 
 type Phase = 'loading' | 'active' | 'taper' | 'washout';
 
@@ -263,6 +270,11 @@ export default function NewCycle() {
   const [acceptConflicts, setAcceptConflicts] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [doseText, setDoseText] = useState<Record<string, string>>({});
+  // v1.2: vials that match this cycle's protocol (peptide-id keyed,
+  // active or recently depleted). Loaded when the user reaches Step 4
+  // so matching is up-to-date with their final peptide selection.
+  const [matchingVials, setMatchingVials] = useState<Vial[]>([]);
+  const [vialsToAttach, setVialsToAttach] = useState<Set<string>>(new Set());
 
   const isCustom = goal === 'Custom';
 
@@ -425,18 +437,67 @@ export default function NewCycle() {
     if (step < 4) setStep((s) => (s + 1) as 1 | 2 | 3 | 4);
   };
 
+  // Load vials whose peptide_id is in the current protocol when the user
+  // reaches Review. Runs again if they bounce back to Customize and edit.
+  useEffect(() => {
+    if (step !== 4 || items.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const vs = await matchingVialsForCycle({
+        id: '',
+        protocol_json: JSON.stringify(items),
+      });
+      if (cancelled) return;
+      setMatchingVials(vs);
+      // Default selection: every active matching vial. Users can untick
+      // ones they want to keep as free inventory.
+      setVialsToAttach(new Set(vs.filter((v) => v.is_active === 1).map((v) => v.id)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, items]);
+
+  // Peptides in the protocol that have NO matching vial — flagged so the
+  // user knows they'll need to reconstitute after creating the cycle.
+  const peptidesWithoutVial = useMemo(() => {
+    const matchedPids = new Set(matchingVials.map((v) => v.peptide_id));
+    const cyclePids = Array.from(new Set(items.map((it) => it.peptide_id)));
+    return cyclePids.filter((pid) => !matchedPids.has(pid));
+  }, [items, matchingVials]);
+
+  const toggleAttach = (vialId: string) => {
+    setVialsToAttach((prev) => {
+      const next = new Set(prev);
+      if (next.has(vialId)) next.delete(vialId);
+      else next.add(vialId);
+      return next;
+    });
+  };
+
   const handleSave = async (): Promise<void> => {
     if (saving) return;
     if (conflicts.length > 0 && !acceptConflicts) return;
     setSaving(true);
     try {
-      await createCycle({
+      const cycleId = await createCycle({
         name: cycleName.trim(),
         starts_on: isoDate(startDate),
         ends_on: isoDate(endDate),
         phase,
         protocol: items,
       });
+      // v1.2: attach selected vials to the freshly-created cycle.
+      // Single-owner — if a vial was attached to another cycle this
+      // overwrites that link, which matches the "move to new cycle"
+      // intent the user expressed by checking the box here.
+      for (const vid of vialsToAttach) {
+        try {
+          await attachVialToCycle(vid, cycleId);
+        } catch (err) {
+          if (__DEV__) console.warn('attachVialToCycle failed', err);
+        }
+      }
       router.replace('/(tabs)/stacks');
     } catch (e) {
       setSaving(false);
@@ -1862,6 +1923,139 @@ export default function NewCycle() {
         </Text>
         {items.map((it, idx) => renderReviewItem(it, idx))}
       </View>
+
+      {/* v1.2: existing vials that match this cycle's peptides. Tick the
+          ones you want this cycle to claim. Vials reconstituted before
+          the cycle starts are fine — only forward-going doses associate
+          (retroactive backdating deferred to v2). */}
+      {matchingVials.length > 0 || peptidesWithoutVial.length > 0 ? (
+        <View
+          style={{
+            padding: space.lg,
+            borderRadius: radius.lg,
+            backgroundColor: t.surface,
+            borderWidth: 1,
+            borderColor: t.line,
+            marginBottom: space.md,
+          }}
+        >
+          <Text
+            style={{
+              color: t.ink3,
+              fontFamily: font.sansSemi,
+              fontSize: 11,
+              letterSpacing: 1,
+              marginBottom: space.sm,
+            }}
+          >
+            EXISTING VIALS
+          </Text>
+          {matchingVials.map((v) => {
+            const p = findPeptide(v.peptide_id);
+            const checked = vialsToAttach.has(v.id);
+            const reconLabel = new Date(v.reconstituted_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            });
+            const remaining = `${v.remaining_mg.toFixed(2)} / ${v.strength_mg} mg`;
+            const stale =
+              v.cycle_id && v.cycle_id !== '' ? 'Currently attached to another cycle' : null;
+            return (
+              <Pressable
+                key={v.id}
+                onPress={() => toggleAttach(v.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked }}
+                accessibilityLabel={`Attach ${p?.name ?? v.peptide_id} vial`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingVertical: space.sm,
+                  borderTopWidth: 1,
+                  borderTopColor: t.line,
+                }}
+              >
+                <View
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 4,
+                    borderWidth: 1.5,
+                    borderColor: checked ? t.accent : t.line,
+                    backgroundColor: checked ? t.accent : 'transparent',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {checked ? (
+                    <Text style={{ color: t.bg, fontSize: 11, fontFamily: font.sansBold }}>✓</Text>
+                  ) : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{ color: t.ink, fontFamily: font.sansSemi, fontSize: 14 }}
+                  >
+                    {p?.name ?? v.peptide_id}
+                  </Text>
+                  <Text
+                    style={{
+                      color: t.ink3,
+                      fontFamily: font.mono,
+                      fontSize: 11,
+                      marginTop: 2,
+                    }}
+                  >
+                    {remaining} · reconstituted {reconLabel}
+                    {v.is_active === 0 ? ' · depleted' : ''}
+                  </Text>
+                  {stale ? (
+                    <Text
+                      style={{ color: t.warn, fontSize: 11, fontFamily: font.sansMed, marginTop: 2 }}
+                    >
+                      {stale} — checking will move it here
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+          {peptidesWithoutVial.length > 0 ? (
+            <View
+              style={{
+                marginTop: space.sm,
+                paddingTop: space.sm,
+                borderTopWidth: 1,
+                borderTopColor: t.line,
+                gap: 4,
+              }}
+            >
+              <Text
+                style={{
+                  color: t.ink3,
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Needs reconstitution
+              </Text>
+              {peptidesWithoutVial.map((pid) => {
+                const p = findPeptide(pid);
+                return (
+                  <Text
+                    key={pid}
+                    style={{ color: t.ink2, fontSize: 13 }}
+                  >
+                    ⚠ No vial yet for {p?.name ?? pid} — reconstitute after creating this cycle.
+                  </Text>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       {Object.keys(timingGroups).length > 0 ? (
         <View

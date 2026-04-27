@@ -11,7 +11,9 @@ import { DateTimeField } from '../components/DateTimeField';
 import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import {
+  attachVialToCycle,
   getActiveCycle,
+  getActiveCycleForPeptide,
   getActiveVial,
   getVialsForPeptide,
   INJECTION_SITES,
@@ -217,6 +219,37 @@ export default function LogDoseModal() {
         note: note.trim() || undefined,
       });
       haptic.success();
+      // v1.2: if the dose's vial isn't attached to any cycle but an
+      // active cycle covers this peptide, offer to attach. Confirms
+      // explicit user intent — we never auto-attach silently.
+      if (vial && !vial.cycle_id) {
+        const cov = await getActiveCycleForPeptide(peptideId);
+        if (cov) {
+          Alert.alert(
+            'Attach this vial to your cycle?',
+            `This ${peptide?.name ?? 'vial'} isn't linked to a cycle yet. Attach it to "${cov.name}" so future doses associate automatically?`,
+            [
+              {
+                text: 'Not now',
+                style: 'cancel',
+                onPress: () => router.back(),
+              },
+              {
+                text: 'Attach',
+                onPress: async () => {
+                  try {
+                    await attachVialToCycle(vial.id, cov.id);
+                  } catch {
+                    /* non-fatal */
+                  }
+                  router.back();
+                },
+              },
+            ]
+          );
+          return;
+        }
+      }
       router.back();
     } catch (err) {
       setSaving(false);

@@ -195,6 +195,10 @@ export async function initDatabase() {
   await addColumnIfMissing(d, 'cycles', 'paused_total_days', 'INTEGER NOT NULL DEFAULT 0');
   // v1.1 Phase 6: notification preferences (JSON blob on profile).
   await addColumnIfMissing(d, 'profile', 'notif_prefs_json', 'TEXT');
+  // v1.2: vial-cycle attachment. Nullable single-owner FK back to cycles.
+  // When a cycle completes the column is NULLed back to free inventory
+  // so the next cycle can claim the same vial.
+  await addColumnIfMissing(d, 'vials', 'cycle_id', 'TEXT');
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
@@ -299,6 +303,9 @@ export type Vial = {
   depleted_at: string | null;
   first_used_at: string | null;
   total_doses_drawn: number;
+  // v1.2: nullable, single-owner attachment to a cycle. NULL means the
+  // vial is free inventory and any cycle can claim it.
+  cycle_id: string | null;
 };
 
 // v1.1: recorded intentional skip of a scheduled dose.
@@ -422,6 +429,69 @@ export async function getVialsForPeptide(peptideId: string, activeOnly = false):
 
 // v1.1: alias matching the spec name.
 export const getVialById = getVial;
+
+// ---- v1.2: vial-cycle attachment ------------------------------------------
+//
+// Single-owner: a vial can be attached to AT MOST one cycle. The DB doesn't
+// enforce this — the application layer does, by overwriting cycle_id on
+// attach (so 'move from old cycle to new cycle' is a single UPDATE rather
+// than a two-step detach + attach).
+//
+// When a cycle ends (status flips to 'complete' or 'cancelled'), every
+// attached vial's cycle_id is NULLed back to free inventory. The dose
+// history retains the cycle linkage on each individual dose row, so cycle
+// detail can still reconstruct "which vials were used during this cycle"
+// via a join through doses.
+
+// Vials whose peptide_id appears in this cycle's protocol AND that are
+// either currently active OR depleted within the last 30 days. Past 30d
+// vials are clutter — users have moved on.
+//
+// Sorted active-first, then most-recently reconstituted.
+export async function matchingVialsForCycle(
+  cycle: Pick<Cycle, 'id' | 'protocol_json'>
+): Promise<Vial[]> {
+  let peptideIds: string[] = [];
+  try {
+    const protocol = JSON.parse(cycle.protocol_json || '[]') as { peptide_id: string }[];
+    peptideIds = Array.from(new Set(protocol.map((p) => p.peptide_id).filter(Boolean)));
+  } catch {
+    return [];
+  }
+  if (peptideIds.length === 0) return [];
+  const placeholders = peptideIds.map(() => '?').join(',');
+  const cutoff = new Date(Date.now() - 30 * 864e5).toISOString();
+  return db().getAllAsync<Vial>(
+    `SELECT * FROM vials
+       WHERE peptide_id IN (${placeholders})
+         AND (is_active = 1 OR (depleted_at IS NOT NULL AND depleted_at >= ?))
+       ORDER BY is_active DESC, reconstituted_at DESC`,
+    ...peptideIds,
+    cutoff
+  );
+}
+
+// Vials currently attached to this cycle. Used by cycle detail's "Vials"
+// section.
+export async function getVialsForCycle(cycle_id: string): Promise<Vial[]> {
+  return db().getAllAsync<Vial>(
+    `SELECT * FROM vials WHERE cycle_id = ? ORDER BY reconstituted_at DESC`,
+    cycle_id
+  );
+}
+
+// Single-owner: writes cycle_id directly. If the vial was already attached
+// to another cycle, that link is overwritten. The UI should prompt before
+// reaching this function in that case so the user understands the move.
+export async function attachVialToCycle(vial_id: string, cycle_id: string) {
+  await db().runAsync('UPDATE vials SET cycle_id = ? WHERE id = ?', cycle_id, vial_id);
+}
+
+// Returns vial back to free inventory. Doses logged from this vial keep
+// their existing cycle_id — detaching the vial doesn't rewrite history.
+export async function detachVial(vial_id: string) {
+  await db().runAsync('UPDATE vials SET cycle_id = NULL WHERE id = ?', vial_id);
+}
 
 // v1.1: all doses drawn from a specific vial (timeline on vial detail).
 export async function getDosesForVial(vialId: string): Promise<Dose[]> {
@@ -723,7 +793,14 @@ export async function listCycles(): Promise<Cycle[]> {
 }
 
 export async function endCycle(id: string) {
-  await db().runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    await d.runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+    // v1.2: when a cycle ends, attached vials return to free inventory so
+    // a follow-up cycle can claim them. Doses keep their per-row cycle_id
+    // so the historical accounting stays intact.
+    await d.runAsync(`UPDATE vials SET cycle_id = NULL WHERE cycle_id = ?`, id);
+  });
 }
 
 // v1.1: pause an active cycle. Today stops scheduling from it until resumed.
