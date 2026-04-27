@@ -1067,6 +1067,23 @@ export async function siteRecency(): Promise<SiteSuggestion[]> {
   });
 }
 
+// v1.1: most recent doses logged AT a given site, joined back to the
+// doses table so the site-detail sheet can show peptide / amount /
+// timestamp without an extra round-trip per row. Limit defaults to 10
+// — the bottom sheet has no virtualization so we don't want to hand it
+// 500 rows.
+export async function listDosesAtSite(site: string, limit = 10): Promise<Dose[]> {
+  return db().getAllAsync<Dose>(
+    `SELECT d.* FROM doses d
+       INNER JOIN injection_sites_log s ON s.dose_id = d.id
+      WHERE s.site = ?
+      ORDER BY d.taken_at DESC
+      LIMIT ?`,
+    site,
+    limit
+  );
+}
+
 // ---- Export ----------------------------------------------------------------
 
 export const SCHEMA_VERSION = 2;
