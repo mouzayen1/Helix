@@ -7,7 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DateTimeField, describeTargetDate } from '../components/DateTimeField';
+import { DateTimeField } from '../components/DateTimeField';
 import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
 import {
@@ -226,27 +226,6 @@ export default function LogDoseModal() {
     }
   };
 
-  // Pre-save backdate confirm: when the chosen timestamp is meaningfully
-  // in the past, surface the target date with a Cancel/Save choice so
-  // the user can back out of an accidentally-backdated entry BEFORE
-  // it lands. Copy is forward-looking ("This dose will be dated X") so
-  // it doesn't read like a duplicate warning.
-  const confirmBackdateThenSave = () => {
-    const minAgo = (Date.now() - takenAtDate.getTime()) / 60000;
-    if (minAgo > 60 * 6) {
-      Alert.alert(
-        'Confirm date',
-        `This dose will be dated ${describeTargetDate(takenAtDate)}. Save?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Save', onPress: () => void actuallySave() },
-        ]
-      );
-      return;
-    }
-    void actuallySave();
-  };
-
   const save = async () => {
     if (!peptideId || saving) return;
     // Soft duplicate warning: same peptide logged within ±10 minutes of the
@@ -271,7 +250,7 @@ export default function LogDoseModal() {
           `You logged ${peptide?.name ?? 'this peptide'} ${mins} min ago. Log again?`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Log anyway', onPress: () => confirmBackdateThenSave() },
+            { text: 'Log anyway', onPress: () => void actuallySave() },
           ]
         );
         return;
@@ -279,7 +258,7 @@ export default function LogDoseModal() {
     } catch {
       // If the duplicate lookup fails for any reason, fall through to save.
     }
-    confirmBackdateThenSave();
+    void actuallySave();
   };
 
   // Peptides that already have a vial vs not — used for picker sections.

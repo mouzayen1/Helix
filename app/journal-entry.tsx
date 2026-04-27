@@ -3,7 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DateTimeField, describeTargetDate } from '../components/DateTimeField';
+import { DateTimeField } from '../components/DateTimeField';
 import { IconClose } from '../components/Icons';
 import { getJournal, upsertJournal } from '../lib/db';
 import { haptic } from '../lib/haptics';
@@ -145,31 +145,12 @@ export default function JournalEntryModal() {
     }
   };
 
-  // Pre-save backdate confirm: when the chosen entry_date is meaningfully
-  // in the past, show Cancel/Save with the target date. Copy is
-  // forward-looking ("This entry will be dated X") so it doesn't read
-  // like a duplicate warning.
-  const confirmBackdateThenSave = () => {
-    const minAgo = (Date.now() - entryAt.getTime()) / 60000;
-    if (minAgo > 60 * 6) {
-      Alert.alert(
-        'Confirm date',
-        `This journal entry will be dated ${describeTargetDate(entryAt, false)}. Save?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Save', onPress: () => void performSave() },
-        ]
-      );
-      return;
-    }
-    void performSave();
-  };
-
   const save = async () => {
     if (saving) return;
-    // Existing-entry replace prompt fires first when applicable. Once the
-    // user confirms (or it's a fresh date), the backdate-confirm chain
-    // runs. Same-day entries with no existing entry skip both prompts.
+    // Only prompt when an entry already exists for the chosen date —
+    // upsertJournal does an overwrite-by-date, and silently replacing a
+    // past day's reflection would be a real foot-gun. Fresh dates save
+    // straight through with no prompt.
     if (existedAtLoad) {
       Alert.alert(
         'Replace existing entry?',
@@ -180,12 +161,12 @@ export default function JournalEntryModal() {
         })}. Saving will replace it with these values.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Replace', style: 'destructive', onPress: () => confirmBackdateThenSave() },
+          { text: 'Replace', style: 'destructive', onPress: () => void performSave() },
         ]
       );
       return;
     }
-    confirmBackdateThenSave();
+    void performSave();
   };
 
   return (
