@@ -15,7 +15,10 @@ import { findPeptide, PEPTIDES } from '../lib/peptides';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 
-const STRENGTH_PRESETS = [2, 5, 10, 15];
+// Default vial-strength chip row. Peptides with `commonVialSizes` in the
+// catalog override this — GHK-Cu shows 10/50/100/200, NAD+ shows
+// 100/250/500/1000, etc. Default covers the bulk of standard peptides.
+const STRENGTH_PRESETS_DEFAULT = [2, 5, 10, 15];
 
 // Parse strings like "5 mg + 2 mL BAC = 2.5 mg/mL · 10 units = 250 mcg" or
 // "5 mg + 1 mL BAC = 5 mg/mL · 32 units = 1.6 mg" into
@@ -369,8 +372,8 @@ export default function ReconstituteModal() {
           >
             Vial strength
           </Text>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {STRENGTH_PRESETS.map((s) => {
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {(peptide.commonVialSizes ?? STRENGTH_PRESETS_DEFAULT).map((s) => {
               const active = s === strengthMg;
               return (
                 <Pressable
