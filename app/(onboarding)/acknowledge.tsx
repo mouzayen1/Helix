@@ -53,7 +53,7 @@ export default function Acknowledge() {
             letterSpacing: -1,
           }}
         >
-          Helix doesn't give{'\n'}medical advice.
+          Helix does not give{'\n'}medical advice.
         </Text>
 
         <View style={{ gap: space.md }}>

@@ -39,6 +39,17 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       'Pre-bed dose stacks on the natural slow-wave-sleep GH pulse — this is why users report better sleep subjectively.',
       'Pair with CJC-1295 (no DAC) in separate vials, injected at the same time, for the GHRH + GHRP synergy.',
     ],
+    sideEffects: [
+      'Transient head-rush, flushing, or tingling shortly after injection',
+      'Increased water retention; mild puffiness in face / hands',
+      'Numbness or tingling in fingers (carpal-tunnel-like) at higher chronic doses',
+      'Mild blood-glucose elevation; insulin sensitivity can drift on long cycles',
+    ],
+    contraindications: [
+      'Active malignancy (GH/IGF-1 elevation is undesirable)',
+      'Severe insulin resistance or uncontrolled diabetes',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   cjc_nodac: {
@@ -66,6 +77,16 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'sermor', reason: 'Two GHRH analogs — redundant.' },
       { peptide_id: 'tesamor', reason: 'Two GHRH analogs — redundant.' },
     ],
+    sideEffects: [
+      'Brief facial flushing or warmth right after injection',
+      'Injection-site reactions (redness, mild swelling)',
+      'Mild headache or lightheadedness',
+      'When paired with a GHRP, water retention and glucose drift apply (see paired-peptide profile)',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   cjc_dac: {
@@ -88,6 +109,17 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'tesamor', reason: 'Two GHRH analogs — redundant.' },
       { peptide_id: 'mk677', reason: 'Both produce constant GH stimulation; compounding desensitization risk.' },
     ],
+    sideEffects: [
+      'Sustained water retention and mild puffiness',
+      'Numbness or tingling in hands at higher chronic doses',
+      'Mild fasting-glucose elevation; insulin sensitivity may drift',
+      'Joint achiness in some users on extended cycles',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Severe insulin resistance or uncontrolled diabetes',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   sermor: {
@@ -108,6 +140,16 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'cjc_nodac', reason: 'Same GHRH mechanism class — redundant.' },
       { peptide_id: 'cjc_dac', reason: 'Same mechanism — redundant.' },
       { peptide_id: 'tesamor', reason: 'Same mechanism — redundant.' },
+    ],
+    sideEffects: [
+      'Brief flushing or warmth post-injection',
+      'Injection-site reactions',
+      'Headache or lightheadedness in some users',
+      'When paired with a GHRP, water retention and glucose drift apply',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
     ],
   },
 
@@ -134,6 +176,17 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'cjc_dac', reason: 'Redundant GHRH.' },
       { peptide_id: 'sermor', reason: 'Redundant GHRH.' },
     ],
+    sideEffects: [
+      'Injection-site reactions (most common label finding)',
+      'Arthralgia (joint pain), peripheral edema, paresthesias',
+      'Elevated fasting glucose / IGF-1; periodic monitoring is required per label',
+      'Hypersensitivity reactions including rash and pruritus',
+    ],
+    contraindications: [
+      'Active malignancy (FDA label contraindication)',
+      'Pregnancy (label category)',
+      'Hypersensitivity to tesamorelin or mannitol',
+    ],
   },
 
   hexar: {
@@ -155,6 +208,17 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'ghrp2', reason: 'Multiple GHRPs — desensitization risk.' },
       { peptide_id: 'ghrp6', reason: 'Multiple GHRPs — desensitization risk.' },
       { peptide_id: 'mk677', reason: 'Compounding ghrelin-receptor stimulation.' },
+    ],
+    sideEffects: [
+      'Marked prolactin and cortisol elevation (more than other GHRPs)',
+      'Fast receptor desensitization on continuous dosing',
+      'Strong head-rush and flushing post-injection',
+      'Water retention; mild glucose drift',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Hyperprolactinemia or prolactin-sensitive conditions',
+      'Pregnancy and breastfeeding',
     ],
   },
 
@@ -178,6 +242,16 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'hexar', reason: 'Multiple GHRPs — desensitization.' },
       { peptide_id: 'mk677', reason: 'Compounding ghrelin agonism.' },
     ],
+    sideEffects: [
+      'Modest prolactin and cortisol elevation',
+      'Hunger spike (less than GHRP-6 but noticeable)',
+      'Flushing, mild head-rush after injection',
+      'Water retention on chronic dosing',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   ghrp6: {
@@ -200,6 +274,17 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'hexar', reason: 'Multiple GHRPs — desensitization.' },
       { peptide_id: 'mk677', reason: 'Compounding ghrelin agonism.' },
     ],
+    sideEffects: [
+      'Pronounced hunger / appetite spike (the defining side effect)',
+      'Flushing, head-rush after injection',
+      'Mild prolactin and cortisol elevation',
+      'Water retention; mild glucose drift',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+      'Eating-disorder history (appetite signal can be disruptive)',
+    ],
   },
 
   mk677: {
@@ -220,6 +305,19 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'ghrp6', reason: 'Compounding ghrelin-receptor stimulation.' },
       { peptide_id: 'hexar', reason: 'Compounding ghrelin-receptor stimulation.' },
       { peptide_id: 'cjc_dac', reason: 'Both produce constant GH elevation — over-stimulation.' },
+    ],
+    sideEffects: [
+      'Sustained appetite increase, weight gain partly from food intake',
+      'Notable water retention; puffy face, hands, ankles',
+      'Fatigue or lethargy in the morning at higher doses',
+      'Fasting glucose elevation; insulin sensitivity drift on long cycles',
+      'Vivid dreams and altered sleep architecture',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Congestive heart failure or fluid-overload conditions',
+      'Pre-diabetes / poorly controlled diabetes',
+      'Pregnancy and breastfeeding',
     ],
   },
 };

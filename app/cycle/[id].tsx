@@ -19,6 +19,13 @@ import {
   type JournalEntry,
   type Vial,
 } from '../../lib/db';
+import {
+  formatRelativeDue,
+  getNextInjectionForCycle,
+  getVialsNeededForCycle,
+  type NextInjection,
+  type VialNeed,
+} from '../../lib/cycle-helpers';
 import { haptic } from '../../lib/haptics';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
@@ -104,6 +111,10 @@ export default function CycleDetail() {
   // could be attached). Re-loaded on refresh.
   const [attachedVials, setAttachedVials] = useState<Vial[]>([]);
   const [attachableVials, setAttachableVials] = useState<Vial[]>([]);
+  // From the enhance-cycle-vial-workflow merge: countdown to next injection
+  // and the list of peptides whose vial is missing/empty for this cycle.
+  const [vialNeeds, setVialNeeds] = useState<VialNeed[]>([]);
+  const [nextInjections, setNextInjections] = useState<NextInjection[]>([]);
 
   const refresh = useCallback(async () => {
     const all = await listCycles();
@@ -136,6 +147,21 @@ export default function CycleDetail() {
       setJournalEntries([]);
       setAttachedVials([]);
       setAttachableVials([]);
+    }
+    if (c) {
+      // Vial-needed banner + next-injection countdown both pull from helpers
+      // that read protocol_json + the dose history. Only meaningful for active
+      // cycles; for completed/cancelled we still surface vial state so the
+      // user can see what they did or didn't reconstitute.
+      const [needs, next] = await Promise.all([
+        getVialsNeededForCycle(c.id),
+        c.status === 'active' ? getNextInjectionForCycle(c.id) : Promise.resolve([] as NextInjection[]),
+      ]);
+      setVialNeeds(needs);
+      setNextInjections(next);
+    } else {
+      setVialNeeds([]);
+      setNextInjections([]);
     }
     if (c) {
       setName(c.name);
@@ -456,7 +482,111 @@ export default function CycleDetail() {
         <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono, marginTop: 2 }}>
           {cycle.starts_on} → {cycle.ends_on}
         </Text>
+
+        {/* Next injection — only on active cycles, and only for non-PRN peptides */}
+        {!editing && cycle.status === 'active' && nextInjections.some((n) => n.state !== 'prn') ? (
+          <View style={{ marginTop: 8, gap: 3 }}>
+            <Text
+              style={{
+                color: t.ink3,
+                fontSize: 10,
+                fontFamily: font.sansSemi,
+                letterSpacing: 1,
+              }}
+            >
+              NEXT INJECTION
+            </Text>
+            {nextInjections
+              .filter((n) => n.state !== 'prn')
+              .map((n) => {
+                if (n.state === 'pending_first_dose') {
+                  return (
+                    <Text
+                      key={n.peptide_id}
+                      style={{ color: t.ink2, fontSize: 13, fontFamily: font.sansMed }}
+                    >
+                      {n.peptide_name} — log first dose to start tracking
+                    </Text>
+                  );
+                }
+                const overdue = n.state === 'overdue';
+                return (
+                  <Text
+                    key={n.peptide_id}
+                    style={{
+                      color: overdue ? t.danger : t.ink2,
+                      fontSize: 13,
+                      fontFamily: font.sansMed,
+                    }}
+                  >
+                    {n.peptide_name} · {n.due_at ? formatRelativeDue(n.due_at) : ''}
+                    {overdue ? ' (overdue)' : ''}
+                  </Text>
+                );
+              })}
+          </View>
+        ) : null}
       </View>
+
+      {/* Vial-needed banner — surfaces only on active cycles where any
+          protocol peptide doesn't have a reconstituted vial yet. Tap → opens
+          reconstitute pre-selected to the first needy peptide. */}
+      {!editing && cycle.status === 'active' && vialNeeds.some((v) => !v.has_active_vial) ? (
+        <Pressable
+          onPress={() => {
+            const first = vialNeeds.find((v) => !v.has_active_vial);
+            if (first) {
+              router.push({
+                pathname: '/reconstitute',
+                params: { peptideId: first.peptide_id, cycleId: cycle.id },
+              });
+            }
+          }}
+          style={{
+            marginHorizontal: space.xl,
+            marginTop: space.lg,
+            padding: space.md,
+            borderRadius: radius.md,
+            backgroundColor: t.warnSoft,
+            borderLeftWidth: 3,
+            borderLeftColor: t.warn,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space.md,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                color: t.ink,
+                fontFamily: font.sansSemi,
+                fontSize: 13,
+              }}
+            >
+              {vialNeeds.filter((v) => !v.has_active_vial).length === 1
+                ? '1 peptide needs a reconstituted vial'
+                : `${vialNeeds.filter((v) => !v.has_active_vial).length} peptides need a reconstituted vial`}
+            </Text>
+            <Text style={{ color: t.ink3, fontSize: 12, marginTop: 2 }}>
+              {vialNeeds
+                .filter((v) => !v.has_active_vial)
+                .map((v) => v.peptide_name)
+                .join(' · ')}
+            </Text>
+          </View>
+          <Text
+            style={{
+              color: t.warn,
+              fontFamily: font.sansSemi,
+              fontSize: 12,
+              letterSpacing: 0.5,
+              textTransform: 'uppercase',
+            }}
+          >
+            Reconstitute
+          </Text>
+        </Pressable>
+      ) : null}
 
       {/* Progress (view mode only) */}
       {!editing ? (

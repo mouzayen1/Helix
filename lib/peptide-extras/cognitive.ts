@@ -14,6 +14,16 @@ export const COGNITIVE_EXTRAS: PeptideExtrasMap = {
     timing: 'Morning + mid-day + optional evening. Avoid within 1 hour of sleep.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Mild nasal irritation or post-nasal drip',
+      'Transient drowsiness or sedation in some users',
+      'Headache reported anecdotally',
+      'Long-term safety outside of Russian clinical literature is limited',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+      'Active depression on medication (limited interaction data)',
+    ],
   },
 
   semax: {
@@ -29,6 +39,16 @@ export const COGNITIVE_EXTRAS: PeptideExtrasMap = {
     timing: 'Morning and early afternoon. Avoid evening dosing (can impair sleep).',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Insomnia or sleep disruption with late dosing',
+      'Nasal irritation; rhinitis with frequent intranasal use',
+      'Transient over-stimulation, headache, irritability',
+      'Long-term safety outside of Russian clinical literature is limited',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+      'Anxiety / agitation disorders (stimulation can worsen)',
+    ],
   },
 
   cerebro: {
@@ -44,6 +64,18 @@ export const COGNITIVE_EXTRAS: PeptideExtrasMap = {
     timing: 'Morning is typical in clinical protocols.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Injection-site pain (IM)',
+      'Sweating, dizziness, nausea reported in clinical use',
+      'Hypersensitivity reactions including rash',
+      'Hot flashes / vasomotor symptoms',
+    ],
+    contraindications: [
+      'Severe renal impairment',
+      'Status epilepticus',
+      'Hypersensitivity to porcine-derived products',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   dihexa: {
@@ -59,5 +91,13 @@ export const COGNITIVE_EXTRAS: PeptideExtrasMap = {
     timing: 'No established timing.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'No human safety data — this is research-only',
+      'Pre-clinical reports indicate it crosses the BBB; off-target effects in humans unknown',
+    ],
+    contraindications: [
+      'No human use data — research context only',
+      'Pregnancy and breastfeeding',
+    ],
   },
 };

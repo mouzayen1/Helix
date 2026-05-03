@@ -65,7 +65,7 @@ export default function NewStack() {
         synergy_score: synergy,
       });
       router.replace('/(tabs)/stacks');
-    } catch (e) {
+    } catch {
       setSaving(false);
     }
   };
@@ -210,7 +210,7 @@ export default function NewStack() {
               />
             </View>
             <Text style={{ fontSize: 11, color: t.ink3, marginTop: 6 }}>
-              Based on stack partnerships listed in each peptide's monograph.
+              {"Based on stack partnerships listed in each peptide's monograph."}
             </Text>
           </View>
         ) : null}

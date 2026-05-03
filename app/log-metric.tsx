@@ -39,7 +39,7 @@ export default function LogMetricModal() {
       });
       haptic.success();
       router.back();
-    } catch (e) {
+    } catch {
       setSaving(false);
       haptic.error();
     }

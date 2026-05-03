@@ -1,5 +1,5 @@
 // SVG icons — ported from prototype H_ICON. react-native-svg primitives.
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 type Props = { size?: number; color?: string };
 

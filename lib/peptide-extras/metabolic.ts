@@ -25,6 +25,20 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'cagri', note: 'CagriSema combination — phase-3 tested; GLP-1 + amylin for greater weight loss.' },
     ],
     stackConflicts: glp1ConflictsExcept('sema'),
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation (most common; usually worst right after dose increases)',
+      'Reduced appetite to the point of skipping meals',
+      'Heartburn / reflux on higher doses',
+      'Fatigue and headache during titration',
+      'Pancreatitis (rare but a known class risk)',
+      'Gallbladder disease, including cholelithiasis',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'Multiple Endocrine Neoplasia syndrome type 2 (MEN2)',
+      'Active or prior pancreatitis',
+      'Pregnancy (label: stop ≥2 months before planned conception)',
+    ],
   },
 
   tirz: {
@@ -40,6 +54,20 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     timing: 'Same day each week.',
     coAdministration: [],
     stackConflicts: glp1ConflictsExcept('tirz'),
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation — same GI cluster as semaglutide',
+      'Decreased appetite; risk of inadequate intake',
+      'Injection-site reactions',
+      'Pancreatitis (class risk)',
+      'Gallbladder disease',
+      'Hypoglycemia when used with insulin or sulfonylureas',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'MEN2 syndrome',
+      'Active or prior pancreatitis',
+      'Pregnancy',
+    ],
   },
 
   reta: {
@@ -55,6 +83,19 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     timing: 'Same day each week.',
     coAdministration: [],
     stackConflicts: glp1ConflictsExcept('reta'),
+    sideEffects: [
+      'Strong GI cluster: nausea, vomiting, diarrhea',
+      'Mild heart-rate elevation reported in trials',
+      'Decreased appetite; risk of inadequate intake',
+      'Injection-site reactions',
+      'Investigational — long-term safety profile still being characterized',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'MEN2 syndrome',
+      'Active or prior pancreatitis',
+      'Pregnancy',
+    ],
   },
 
   lira: {
@@ -70,6 +111,19 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     timing: 'Same time each day.',
     coAdministration: [],
     stackConflicts: glp1ConflictsExcept('lira'),
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation — daily GI burden often higher than once-weekly GLP-1s',
+      'Injection-site reactions',
+      'Hypoglycemia when paired with insulin or sulfonylureas',
+      'Pancreatitis (class risk)',
+      'Gallbladder disease',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'MEN2 syndrome',
+      'Active or prior pancreatitis',
+      'Pregnancy',
+    ],
   },
 
   cagri: {
@@ -87,6 +141,16 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'sema', note: 'CagriSema — the canonical pairing; separate vials, same injection day.' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Nausea (less than GLP-1 alone in trials but still common)',
+      'Decreased appetite; rapid satiety',
+      'Injection-site reactions',
+      'Investigational — long-term safety profile still being established',
+    ],
+    contraindications: [
+      'Pregnancy',
+      'Active pancreatitis',
+    ],
   },
 
   aod: {
@@ -110,6 +174,14 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     ],
     proTips: [
       'Pair with fasted morning cardio if following published fat-loss research protocols.',
+    ],
+    sideEffects: [
+      'Generally well-tolerated in trials; injection-site reactions most common',
+      'Mild headache or fatigue reported anecdotally',
+      'Effect size in human trials has been modest — disappointment is the most common "side effect"',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
     ],
   },
 
@@ -135,7 +207,20 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Ignoring blood-pressure monitoring — trial safety data required periodic checks.',
     ],
     proTips: [
-      'Start at 250 mcg for the first week to assess tolerance before moving to 500 mcg.',
+      'Starting at 250 mcg for the first week to assess tolerance before moving to 500 mcg is a common research approach.',
+    ],
+    sideEffects: [
+      'Insomnia, especially with evening dosing',
+      'Elevated blood pressure and heart rate',
+      'Dry mouth, headache',
+      'Mood changes / agitation in a subset of users',
+      'Constipation',
+    ],
+    contraindications: [
+      'Cardiovascular disease, uncontrolled hypertension, or arrhythmia',
+      'MAOI use within 14 days',
+      'Pregnancy and breastfeeding',
+      'Anxiety disorders or psychiatric history (monoamine stimulation can worsen)',
     ],
   },
 
@@ -152,6 +237,14 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     timing: 'Morning with food.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Limited human safety data — most reports come from rodent studies',
+      'Mild GI upset reported anecdotally',
+      'Long-term effects of NNMT inhibition in humans not yet characterized',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   motsc: {
@@ -169,5 +262,13 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'ss31', note: 'Dual mitochondrial-support approach.' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Injection-site reactions',
+      'Mild fatigue or headache early in a course',
+      'Long-term human safety data is limited',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+    ],
   },
 };

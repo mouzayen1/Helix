@@ -139,7 +139,7 @@ export default function JournalEntryModal() {
       });
       haptic.success();
       router.back();
-    } catch (e) {
+    } catch {
       setSaving(false);
       haptic.error();
     }

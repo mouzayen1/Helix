@@ -1,6 +1,6 @@
 // Stacks — spec v2.0 §10 "Stacks home". Active cycle, past cycles, saved stacks, templates.
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronRight, IconPlus } from '../../components/Icons';
@@ -12,6 +12,13 @@ import {
   type Cycle,
   type Stack,
 } from '../../lib/db';
+import {
+  formatRelativeDue,
+  getNextInjectionForCycle,
+  getVialsNeededForCycle,
+  type NextInjection,
+  type VialNeed,
+} from '../../lib/cycle-helpers';
 import { findPeptide } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
@@ -360,6 +367,27 @@ function ActiveCycleCard({ cycle }: { cycle: Cycle }) {
     freq: string;
   }[];
 
+  const [vialNeeds, setVialNeeds] = useState<VialNeed[]>([]);
+  const [nextInjections, setNextInjections] = useState<NextInjection[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [needs, next] = await Promise.all([
+        getVialsNeededForCycle(cycle.id),
+        getNextInjectionForCycle(cycle.id),
+      ]);
+      if (cancelled) return;
+      setVialNeeds(needs);
+      setNextInjections(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cycle.id]);
+
+  const needyCount = vialNeeds.filter((v) => !v.has_active_vial).length;
+  const upcoming = nextInjections.filter((n) => n.state !== 'prn');
+
   return (
     <Pressable
       onPress={() => router.push(`/cycle/${cycle.id}` as any)}
@@ -395,31 +423,78 @@ function ActiveCycleCard({ cycle }: { cycle: Cycle }) {
             {cycle.name}
           </Text>
         </View>
-        <View
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 8,
-            backgroundColor: t.accentSoft,
-          }}
-        >
-          <Text
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {needyCount > 0 ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                const first = vialNeeds.find((v) => !v.has_active_vial);
+                if (first) {
+                  router.push({
+                    pathname: '/reconstitute',
+                    params: { peptideId: first.peptide_id, cycleId: cycle.id },
+                  } as any);
+                }
+              }}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 8,
+                backgroundColor: t.warn,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontFamily: font.sansBold,
+                  color: t.bg,
+                  letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {needyCount} vial{needyCount === 1 ? '' : 's'} needed
+              </Text>
+            </Pressable>
+          ) : null}
+          <View
             style={{
-              fontSize: 11,
-              fontFamily: font.sansSemi,
-              color: t.accentInk,
-              letterSpacing: 0.5,
-              textTransform: 'uppercase',
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 8,
+              backgroundColor: t.accentSoft,
             }}
           >
-            {cycle.phase}
-          </Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontFamily: font.sansSemi,
+                color: t.accentInk,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+              }}
+            >
+              {cycle.phase}
+            </Text>
+          </View>
         </View>
       </View>
 
-      <Text style={{ fontSize: 13, color: t.ink3, fontFamily: font.mono, marginBottom: 8 }}>
+      <Text style={{ fontSize: 13, color: t.ink3, fontFamily: font.mono, marginBottom: 4 }}>
         Day {day} of {total} · {pct}%
       </Text>
+      {upcoming.length > 0 ? (
+        <Text style={{ fontSize: 12, color: t.ink2, marginBottom: 8 }}>
+          Next:{' '}
+          {upcoming
+            .slice(0, 2)
+            .map((n) => {
+              if (n.state === 'pending_first_dose') return `${n.peptide_name} — log first dose`;
+              const label = n.due_at ? formatRelativeDue(n.due_at) : '';
+              return `${n.peptide_name} ${label}${n.state === 'overdue' ? ' (overdue)' : ''}`;
+            })
+            .join(' · ')}
+        </Text>
+      ) : null}
 
       <View style={{ flexDirection: 'row', gap: 2, marginBottom: space.md }}>
         {Array.from({ length: Math.min(total, 56) }).map((_, i) => {

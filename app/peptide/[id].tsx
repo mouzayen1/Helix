@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
 import {
   HFormula,
-  HSectionHeader,
   HTag,
   UnapprovedChip,
 } from '../../components/Primitives';
@@ -19,7 +18,7 @@ import {
   DISCLAIMER_CITATION_FOOTER,
 } from '../../lib/disclaimers';
 import { getPeptideExtras } from '../../lib/peptide-extras';
-import { findPeptide, PEPTIDES, peptideClassTopLevel } from '../../lib/peptides';
+import { findPeptide, PEPTIDES } from '../../lib/peptides';
 import { useTheme } from '../../theme/ThemeContext';
 import { font, radius, space } from '../../theme/tokens';
 
@@ -56,6 +55,11 @@ export default function PeptideDetailScreen() {
     refreshSaved();
   }, [refreshSaved]);
 
+  const stackPartnerLinks = useMemo(
+    () => (p?.stacks ?? []).map((s) => ({ label: s, id: resolvePartnerId(s) })),
+    [p?.stacks]
+  );
+
   if (!p) {
     return (
       <View
@@ -85,11 +89,6 @@ export default function PeptideDetailScreen() {
   const mechParagraphs = p.mechanism
     ? p.mechanism.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean)
     : [];
-
-  const stackPartnerLinks = useMemo(
-    () => p.stacks.map((s) => ({ label: s, id: resolvePartnerId(s) })),
-    [p.stacks]
-  );
 
   return (
     <ScrollView
@@ -883,6 +882,78 @@ export default function PeptideDetailScreen() {
                   );
                 })}
               </View>
+            </View>
+          ) : null}
+
+          {extras && (extras.sideEffects?.length || extras.contraindications?.length) ? (
+            <View>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  color: t.warn,
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                }}
+              >
+                Side effects & cautions
+              </Text>
+              {extras.sideEffects?.length ? (
+                <View
+                  style={{
+                    backgroundColor: t.warnSoft,
+                    borderRadius: radius.md,
+                    padding: space.md,
+                    marginBottom: space.sm,
+                    borderLeftWidth: 3,
+                    borderLeftColor: t.warn,
+                    gap: 4,
+                  }}
+                >
+                  {extras.sideEffects.map((s) => (
+                    <Text
+                      key={s}
+                      style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}
+                    >
+                      · {s}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+              {extras.contraindications?.length ? (
+                <View
+                  style={{
+                    backgroundColor: t.dangerSoft,
+                    borderRadius: radius.md,
+                    padding: space.md,
+                    borderLeftWidth: 3,
+                    borderLeftColor: t.danger,
+                    gap: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontFamily: font.sansSemi,
+                      letterSpacing: 1,
+                      color: t.danger,
+                      textTransform: 'uppercase',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Contraindications
+                  </Text>
+                  {extras.contraindications.map((c) => (
+                    <Text
+                      key={c}
+                      style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}
+                    >
+                      · {c}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
 

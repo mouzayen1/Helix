@@ -111,7 +111,7 @@ export default function LogDoseModal() {
         // Param takes priority over default suggestion.
         if (!site) setSite(initialSite ?? sug.site);
       })();
-    }, [])
+    }, [initialSite, peptideId, site])
   );
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export default function LogDoseModal() {
       });
       setVial(sorted[0] ?? null);
     })();
-  }, [peptideId]);
+  }, [peptideId, vial]);
 
   // Prefill dose from active cycle's today protocol, or from query param.
   useEffect(() => {

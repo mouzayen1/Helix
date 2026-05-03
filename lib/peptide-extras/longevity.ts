@@ -21,6 +21,16 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
     proTips: [
       'Evening injection 30–60 min before bed aligns the dosing window with the natural pineal rhythm the peptide is meant to modulate.',
     ],
+    sideEffects: [
+      'Injection-site reactions',
+      'Vivid dreams or shifted sleep architecture',
+      'Mild headache or fatigue early in a course',
+      'Long-term human safety data outside Russian clinical literature is limited',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+      'Active malignancy (telomerase modulation theoretical concern)',
+    ],
   },
 
   ss31: {
@@ -38,6 +48,16 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'motsc', note: 'Complementary mitochondrial-support rationale.' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Injection-site reactions (most common trial finding)',
+      'Headache and dizziness',
+      'GI upset (nausea, diarrhea) at higher doses',
+      'Long-term safety in non-trial populations is not characterized',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+      'Severe renal impairment (clearance not fully studied)',
+    ],
   },
 
   nad: {
@@ -64,6 +84,18 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
     proTips: [
       'If flushing is intense, halve the injection rate and break the dose into 2 pushes, 30–60 seconds apart.',
     ],
+    sideEffects: [
+      'Flushing, warmth, chest pressure during injection (rate-dependent)',
+      'Nausea or queasiness during fast pushes',
+      'Headache, fatigue, mild dizziness',
+      'Injection-site bruising or soreness',
+      'Theoretical concern: NAD+ may fuel proliferation in active cancer',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+      'Severe cardiovascular disease (the flushing reaction can be intense)',
+    ],
   },
 
   foxo: {
@@ -79,6 +111,15 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
     timing: 'No established timing.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'No human safety data — pre-clinical context only',
+      'Senolytic mechanism could theoretically affect non-target tissues',
+    ],
+    contraindications: [
+      'No human use protocol — research context only',
+      'Pregnancy and breastfeeding',
+      'Active malignancy without oncologist oversight',
+    ],
   },
 
   humanin: {
@@ -94,5 +135,13 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
     timing: 'No established timing.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Limited human safety data',
+      'Injection-site reactions plausible',
+    ],
+    contraindications: [
+      'No human use protocol — research context only',
+      'Pregnancy and breastfeeding',
+    ],
   },
 };

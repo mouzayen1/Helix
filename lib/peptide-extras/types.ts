@@ -41,6 +41,11 @@ export type PeptideExtras = {
   commonMistakes?: string[];
   /** Practical research-context tips (e.g. reconstitution quirks, injection timing). */
   proTips?: string[];
+  /** Reported side effects from clinical / research literature.
+   *  Plain-language bullets; sourced from notes / mechanism / trial data. */
+  sideEffects?: string[];
+  /** Hard-no situations: pregnancy, family history, active malignancy, etc. */
+  contraindications?: string[];
 };
 
 export type PeptideExtrasMap = Record<string, PeptideExtras>;
