@@ -5,10 +5,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Line, Rect } from 'react-native-svg';
 import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
-import { createVial } from '../lib/db';
+import { SyringeDiagram } from '../components/SyringeDiagram';
+import { createVial, getActiveVial } from '../lib/db';
+import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
+import type { Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../lib/peptides';
@@ -63,6 +65,8 @@ export default function ReconstituteModal() {
 
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
   const [peptideId, setPeptideId] = useState<string>(initialId || PEPTIDES[0].id);
+  const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
+  const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
   const [strengthMg, setStrengthMg] = useState(5);
   const [strengthText, setStrengthText] = useState('5');
   const [bacMl, setBacMl] = useState(2);
@@ -79,6 +83,50 @@ export default function ReconstituteModal() {
     () => extras?.coAdministration.filter((ca) => ca.co_reconstitute) ?? [],
     [extras]
   );
+
+  // Pull active-cycle peptide list once on mount; figure out which of those
+  // peptides still need a vial. The picker uses this to:
+  //   1. Pin "needed for active cycle" peptides at the top with a NEEDED pill.
+  //   2. Pre-select the first needy peptide if no `?peptideId=` was passed.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const byPeptide = await getActiveCyclesByPeptide();
+      if (cancelled) return;
+      setActiveCycleByPeptide(byPeptide);
+
+      const needs = new Set<string>();
+      for (const pid of byPeptide.keys()) {
+        const v = await getActiveVial(pid);
+        if (!v || v.remaining_mg <= 0) needs.add(pid);
+      }
+      if (cancelled) return;
+      setNeedyPeptides(needs);
+
+      // Default-select the first needy peptide on first paint, but only if
+      // the URL did not pin a peptide.
+      if (!initialId && needs.size > 0) {
+        const first = Array.from(needs)[0];
+        setPeptideId(first);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sorted peptide list for the picker — needed (no vial) first, then needed
+  // (with vial), then everything else. Order within each bucket follows the
+  // canonical PEPTIDES array.
+  const sortedPeptides = useMemo(() => {
+    const bucket = (id: string) => {
+      if (needyPeptides.has(id)) return 0;
+      if (activeCycleByPeptide.has(id)) return 1;
+      return 2;
+    };
+    return [...PEPTIDES].sort((a, b) => bucket(a.id) - bucket(b.id));
+  }, [activeCycleByPeptide, needyPeptides]);
 
   // Auto-fill numeric fields from the selected peptide's suggested
   // reconstitution. Pass defaultDoseMcg so peptides whose example dose can't
@@ -110,8 +158,6 @@ export default function ReconstituteModal() {
       totalDoses: isFinite(totalDoses) ? totalDoses : 0,
     };
   }, [strengthMg, bacMl, targetDoseMcg]);
-
-  const fillPct = Math.max(0.02, Math.min(1, calc.unitsPerDose / 100));
 
   const commitNum = (
     text: string,
@@ -301,29 +347,56 @@ export default function ReconstituteModal() {
               }}
             >
               <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-                {PEPTIDES.map((p) => (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => {
-                      setPeptideId(p.id);
-                      setShowPeptidePicker(false);
-                    }}
-                    style={{
-                      padding: space.md,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      borderBottomWidth: 1,
-                      borderBottomColor: t.line,
-                    }}
-                  >
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
-                    <Text style={{ flex: 1, color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
-                      {p.name}
-                    </Text>
-                    <Text style={{ color: t.ink3, fontSize: 11 }}>{p.class.split('/')[0].trim()}</Text>
-                  </Pressable>
-                ))}
+                {sortedPeptides.map((p) => {
+                  const cycle = activeCycleByPeptide.get(p.id);
+                  const needed = needyPeptides.has(p.id);
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => {
+                        setPeptideId(p.id);
+                        setShowPeptidePicker(false);
+                      }}
+                      style={{
+                        padding: space.md,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 10,
+                        borderBottomWidth: 1,
+                        borderBottomColor: t.line,
+                        backgroundColor: needed ? t.warnSoft : 'transparent',
+                      }}
+                    >
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
+                          {p.name}
+                        </Text>
+                        {cycle ? (
+                          <Text style={{ color: t.ink3, fontSize: 11, marginTop: 2 }}>
+                            Active cycle: {cycle.name}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {needed ? (
+                        <View
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: radius.pill,
+                            backgroundColor: t.warn,
+                          }}
+                        >
+                          <Text style={{ color: t.bg, fontSize: 9, fontFamily: font.sansBold, letterSpacing: 0.6 }}>
+                            NEEDED
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={{ color: t.ink3, fontSize: 11 }}>{p.class.split('/')[0].trim()}</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             </View>
           ) : null}
@@ -632,36 +705,7 @@ export default function ReconstituteModal() {
               = {calc.volMlPerDose.toFixed(3)} mL · {targetDoseMcg} mcg per dose
             </Text>
           </View>
-          <View
-            style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              paddingVertical: space.lg,
-              paddingHorizontal: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            <Svg viewBox="0 0 320 60" width="100%" height={56}>
-              <Rect x={8} y={18} width={240} height={24} rx={2} fill="none" stroke={t.ink3} strokeWidth={1.5} />
-              {Array.from({ length: 11 }).map((_, i) => (
-                <Line
-                  key={i}
-                  x1={8 + i * 24}
-                  y1={14}
-                  x2={8 + i * 24}
-                  y2={18}
-                  stroke={t.ink3}
-                  strokeWidth={1}
-                />
-              ))}
-              <Rect x={9} y={19.5} width={238 * fillPct} height={21} fill={t.accent} opacity={0.8} />
-              <Rect x={248} y={18} width={6} height={24} fill={t.ink3} />
-              <Rect x={254} y={22} width={50} height={16} fill="none" stroke={t.ink3} strokeWidth={1.5} />
-              <Rect x={304} y={18} width={8} height={24} rx={1} fill={t.ink3} />
-              <Line x1={0} y1={30} x2={8} y2={30} stroke={t.ink3} strokeWidth={1.5} />
-            </Svg>
-          </View>
+          <SyringeDiagram unitsToDraw={calc.unitsPerDose} />
         </View>
 
         {/* Co-reconstitute partners */}

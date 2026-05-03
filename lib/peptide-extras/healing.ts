@@ -29,6 +29,16 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Reconstitute-compatible with TB-500 at the same BAC volume for a single co-administered shot.',
       'Short half-life forgives missed doses — just resume the next scheduled dose rather than double-up.',
     ],
+    sideEffects: [
+      'Mild injection-site irritation or transient redness',
+      'Occasional dizziness or lightheadedness shortly after dosing',
+      'Headache and mild fatigue reported in research subjects',
+      'Long-term human safety data is limited — most evidence is rodent / in-vitro',
+    ],
+    contraindications: [
+      'Active malignancy (pre-clinical angiogenic activity is a theoretical concern)',
+      'Pregnancy and breastfeeding (no human safety data)',
+    ],
   },
 
   tb500: {
@@ -60,6 +70,17 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Co-reconstitute with BPC-157 in the same BAC for a single SubQ shot when running the classic healing pair.',
       'Inject into the nearest site to the injury when treating localized tendon/ligament issues (research convention; systemic effects still dominate).',
     ],
+    sideEffects: [
+      'Transient fatigue or "head-fog" during the loading phase',
+      'Injection-site reactions (redness, mild swelling)',
+      'Mild flu-like sensation in the first week reported anecdotally',
+      'WADA-prohibited — disqualifying in-competition for athletes',
+    ],
+    contraindications: [
+      'Active or recent cancer (systemic angiogenesis is undesirable)',
+      'Pregnancy and breastfeeding',
+      'Athletes subject to WADA testing',
+    ],
   },
 
   tb4_full: {
@@ -80,6 +101,15 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
     stackConflicts: [
       { peptide_id: 'tb500', reason: 'TB-500 is a fragment of this peptide — redundant to stack both' },
     ],
+    sideEffects: [
+      'Injection-site reactions',
+      'Transient fatigue early in the course',
+      'WADA-prohibited (full-length thymosin β4)',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   ghkcu: {
@@ -98,6 +128,15 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'tb500', note: 'Broader tissue-repair coverage' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Topical: mild stinging or redness; rare contact dermatitis',
+      'SubQ: injection-site reactions, transient bruising',
+      'Copper accumulation theoretical with long-term high-dose use',
+    ],
+    contraindications: [
+      'Wilson disease or copper-overload conditions',
+      'Pregnancy and breastfeeding (no human safety data for SubQ use)',
+    ],
   },
 
   pda: {
@@ -117,6 +156,15 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
     ],
     stackConflicts: [
       { peptide_id: 'bpc157', reason: 'Same peptide sequence — stacking both is redundant' },
+    ],
+    sideEffects: [
+      'Mirrors BPC-157: mild injection-site irritation, occasional dizziness',
+      'Headache and mild fatigue reported anecdotally',
+      'Long-term human safety data is limited',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
     ],
   },
 };

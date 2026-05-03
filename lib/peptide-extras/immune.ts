@@ -16,6 +16,15 @@ export const IMMUNE_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'bpc157', note: 'GI inflammation + healing rationale' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Mild GI upset (oral route)',
+      'Injection-site reactions (SubQ route)',
+      'Limited long-term human safety data',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+      'Known autoimmune flare during dosing — limited data on bidirectional effects',
+    ],
   },
 
   ta1: {
@@ -31,6 +40,16 @@ export const IMMUNE_EXTRAS: PeptideExtrasMap = {
     timing: 'Consistent day-of-week scheduling supports adherence.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Injection-site reactions (most common trial finding)',
+      'Mild flu-like symptoms early in a course',
+      'Hypersensitivity reactions are rare but reported',
+    ],
+    contraindications: [
+      'Active immunosuppressive therapy (theoretical antagonism)',
+      'Pregnancy and breastfeeding',
+      'Known hypersensitivity to thymic peptides',
+    ],
   },
 
   ll37: {
@@ -46,5 +65,15 @@ export const IMMUNE_EXTRAS: PeptideExtrasMap = {
     timing: 'Research protocols vary; no established timing.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Pro-inflammatory at higher doses (LL-37 is a host-defense peptide)',
+      'Injection-site reactions; potential for local irritation',
+      'Limited human safety data outside research settings',
+    ],
+    contraindications: [
+      'Active autoimmune flare (pro-inflammatory potential)',
+      'Pregnancy and breastfeeding',
+      'No standardized human use protocol',
+    ],
   },
 };

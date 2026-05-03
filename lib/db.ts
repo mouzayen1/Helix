@@ -623,6 +623,19 @@ export async function listDoses(opts: { limit?: number; from?: string; to?: stri
   return db().getAllAsync<Dose>(sql, ...args as (string | number)[]);
 }
 
+export async function getLastDoseForCyclePeptide(
+  cycle_id: string,
+  peptide_id: string
+): Promise<Dose | null> {
+  return db().getFirstAsync<Dose>(
+    `SELECT * FROM doses
+      WHERE cycle_id = ? AND peptide_id = ?
+      ORDER BY taken_at DESC LIMIT 1`,
+    cycle_id,
+    peptide_id
+  );
+}
+
 export async function deleteDose(id: string) {
   const dose = await db().getFirstAsync<Dose>('SELECT * FROM doses WHERE id = ?', id);
   if (!dose) return;
