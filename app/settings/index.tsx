@@ -1,7 +1,20 @@
 // Settings — spec v2.0 §10 "Settings home".
 import Constants from 'expo-constants';
-import * as LocalAuthentication from 'expo-local-authentication';
+import type * as LocalAuthenticationType from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
+
+// Lazy + guarded require — see app/_layout.tsx for rationale. APKs built
+// before the biometric-lock feature was added don't have this native
+// module; trying to import it statically crashes module load. Setting
+// LocalAuthentication = null at runtime lets us fall back gracefully
+// (the toggle just refuses to enable when the module's missing).
+let LocalAuthentication: typeof LocalAuthenticationType | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  LocalAuthentication = require('expo-local-authentication');
+} catch {
+  LocalAuthentication = null;
+}
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
@@ -18,6 +31,13 @@ export default function Settings() {
   const setBiometricLock = async (enabled: boolean) => {
     if (!enabled) {
       await update({ biometric_lock: 0 });
+      return;
+    }
+    if (!LocalAuthentication) {
+      Alert.alert(
+        'Biometric lock unavailable',
+        'This build of Helix predates the biometric-lock feature. Reinstall the latest APK to enable it.'
+      );
       return;
     }
     const [hasHardware, enrolled] = await Promise.all([
