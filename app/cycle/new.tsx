@@ -1,23 +1,19 @@
+// New cycle wizard — editorial rebuild. Same 4-step flow:
+//   1. Goal     2. Template     3. Customize     4. Review
+// with the same data flow (template prefill, copy-from-cycle prefill,
+// conflict guard, conditional skip past step 2 for "Custom" goal).
+// Visual layer: hairline-divided lists, EyebrowLabel sections, serif
+// numerals for the dose stepper, EditorialButton + Stepper helpers.
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
-import {
-  IconChevronLeft,
-  IconClose,
-  IconPlus,
-} from '../../components/Icons';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme, type EditorialTheme } from '../../lib/design/theme';
 import { DosingDisclaimer } from '../../components/Primitives';
 import { PEPTIDES, findPeptide } from '../../lib/peptides';
 import { getPeptideExtras } from '../../lib/peptide-extras';
@@ -60,12 +56,7 @@ const FREQ_OPTIONS: string[] = [
   'weekly',
 ];
 
-const TIME_OPTIONS: string[] = [
-  'morning',
-  'evening',
-  'pre-workout',
-  'pre-bed',
-];
+const TIME_OPTIONS: string[] = ['morning', 'evening', 'pre-workout', 'pre-bed'];
 
 const PHASE_OPTIONS: { id: Phase; label: string; desc: string }[] = [
   { id: 'loading', label: 'Loading', desc: 'Ramp-up phase' },
@@ -193,11 +184,6 @@ const TEMPLATES: Template[] = [
   },
 ];
 
-// Parse a dose string into a default mcg value. Used only as a fallback when
-// a Peptide doesn't expose `defaultDoseMcg`. The leading number is read in
-// whatever unit appears anywhere in the string ("mg" anywhere → multiply by
-// 1000) — covers strings like "0.25–2.4 mg weekly" that the older parser
-// silently truncated to 0.25 mcg.
 function parseDefaultDose(dose: string): number {
   const m = dose.match(/(\d+(?:\.\d+)?)/);
   if (!m || m[1] === undefined) return 250;
@@ -245,7 +231,7 @@ function formatDate(d: Date): string {
 }
 
 export default function NewCycle() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { copyFromCycleId } = useLocalSearchParams<{ copyFromCycleId?: string }>();
@@ -266,9 +252,7 @@ export default function NewCycle() {
 
   const isCustom = goal === 'Custom';
 
-  // Pre-fill from an existing cycle when the "Copy to new cycle" entry point
-  // navigates here with copyFromCycleId. Runs once per id — jumps the flow to
-  // step 3 (Customize) with the copied protocol already loaded.
+  // Pre-fill from copy-from-cycle, jumping to step 3.
   useEffect(() => {
     if (!copyFromCycleId) return;
     let cancelled = false;
@@ -298,18 +282,12 @@ export default function NewCycle() {
     };
   }, [copyFromCycleId]);
 
-  const filteredTemplates = useMemo(
-    () => TEMPLATES.filter((tpl) => tpl.goal === goal),
-    [goal],
-  );
+  const filteredTemplates = useMemo(() => TEMPLATES.filter((tpl) => tpl.goal === goal), [goal]);
 
-  const startDate = useMemo(
-    () => addDays(new Date(), startOffset),
-    [startOffset],
-  );
+  const startDate = useMemo(() => addDays(new Date(), startOffset), [startOffset]);
   const endDate = useMemo(
     () => addDays(startDate, durationWeeks * 7),
-    [startDate, durationWeeks],
+    [startDate, durationWeeks]
   );
 
   const conflicts = useMemo(() => {
@@ -379,18 +357,10 @@ export default function NewCycle() {
   const handleBack = (): void => {
     if (step === 1) {
       if (goal !== null) {
-        Alert.alert(
-          'Discard cycle?',
-          'Your selections will be lost.',
-          [
-            { text: 'Keep editing', style: 'cancel' },
-            {
-              text: 'Discard',
-              style: 'destructive',
-              onPress: () => router.back(),
-            },
-          ],
-        );
+        Alert.alert('Discard cycle?', 'Your selections will be lost.', [
+          { text: 'Keep editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+        ]);
       } else {
         router.back();
       }
@@ -446,12 +416,7 @@ export default function NewCycle() {
           : 'Something went wrong saving your cycle. Please try again.';
       Alert.alert('Could not save cycle', msg, [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Retry',
-          onPress: () => {
-            void handleSave();
-          },
-        },
+        { text: 'Retry', onPress: () => void handleSave() },
       ]);
     }
   };
@@ -460,7 +425,6 @@ export default function NewCycle() {
     if (items.some((i) => i.peptide_id === peptide_id)) return;
     const p = findPeptide(peptide_id);
     const extras = getPeptideExtras(peptide_id);
-    // Prefer the explicit per-peptide default so we never have to guess.
     const dose = p ? p.defaultDoseMcg ?? parseDefaultDose(p.dose) : 250;
     const time = defaultTimeOfDay(extras?.timing);
     setItems((prev) => [
@@ -484,20 +448,11 @@ export default function NewCycle() {
     }
   };
 
-  const updateItem = (
-    idx: number,
-    patch: Partial<CycleProtocolItem>,
-  ): void => {
-    setItems((prev) =>
-      prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
-    );
+  const updateItem = (idx: number, patch: Partial<CycleProtocolItem>): void => {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   };
 
-  const setDoseFromInput = (
-    idx: number,
-    peptide_id: string,
-    raw: string,
-  ): void => {
+  const setDoseFromInput = (idx: number, peptide_id: string, raw: string): void => {
     const cleaned = raw.replace(/[^0-9.]/g, '');
     setDoseText((prev) => ({ ...prev, [peptide_id]: cleaned }));
     const n = parseFloat(cleaned);
@@ -508,20 +463,22 @@ export default function NewCycle() {
     idx: number,
     peptide_id: string,
     current: number,
-    delta: number,
+    delta: number
   ): void => {
     const newDose = Math.max(0, current + delta);
     updateItem(idx, { dose_mcg: newDose });
     setDoseText((prev) => ({ ...prev, [peptide_id]: String(newDose) }));
   };
 
-  const renderProgressBar = (): React.ReactElement => (
+  // ───────────────────────────────────────────────── render helpers
+
+  const ProgressBar = () => (
     <View
       style={{
         flexDirection: 'row',
         gap: 4,
-        paddingHorizontal: space.xl,
-        paddingTop: space.sm,
+        paddingHorizontal: 24,
+        paddingTop: 8,
       }}
     >
       {[1, 2, 3, 4].map((n) => {
@@ -531,9 +488,8 @@ export default function NewCycle() {
             key={n}
             style={{
               flex: 1,
-              height: 3,
-              borderRadius: 2,
-              backgroundColor: active ? t.accent : t.line,
+              height: 2,
+              backgroundColor: active ? ed.colors.brand : ed.colors.line,
             }}
           />
         );
@@ -541,664 +497,516 @@ export default function NewCycle() {
     </View>
   );
 
-  const renderStepCounter = (): React.ReactElement => (
+  const StepCounter = () => (
     <Text
       style={{
-        color: t.ink3,
-        fontSize: 11,
-        letterSpacing: 1.2,
-        fontFamily: font.sansSemi,
-        marginTop: space.lg,
+        fontFamily: ed.typography.eyebrow.fontFamily,
+        fontSize: ed.typography.eyebrow.fontSize,
+        letterSpacing: ed.typography.eyebrow.letterSpacing,
+        color: ed.colors.ink3,
+        textTransform: 'uppercase',
+        marginTop: 24,
       }}
     >
-      STEP {step} OF 4
+      Step {step} of 4
     </Text>
   );
 
-  const renderHeading = (
-    text: string,
-    subtitle?: string,
-  ): React.ReactElement => (
-    <View style={{ marginTop: space.sm, marginBottom: space.xl }}>
-      <Text
-        style={{
-          color: t.ink,
-          fontSize: 28,
-          fontFamily: font.sansBold,
-          letterSpacing: -0.6,
-        }}
-      >
-        {text}
-      </Text>
-      {subtitle !== undefined ? (
+  const Step1 = () => (
+    <View>
+      <View style={{ marginTop: 14 }}>
+        <EditorialHeadline size="title1">{`What's your *goal*?`}</EditorialHeadline>
         <Text
           style={{
-            color: t.ink2,
-            fontSize: 15,
-            fontFamily: font.sans,
-            marginTop: space.xs,
+            marginTop: 8,
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            lineHeight: ed.typography.bodySm.lineHeight,
+            color: ed.colors.ink3,
           }}
         >
-          {subtitle}
+          We'll tailor templates to match.
         </Text>
-      ) : null}
-    </View>
-  );
-
-  const renderSectionLabel = (text: string): React.ReactElement => (
-    <Text
-      style={{
-        color: t.ink3,
-        fontFamily: font.sansSemi,
-        fontSize: 11,
-        letterSpacing: 1,
-        marginBottom: space.xs,
-      }}
-    >
-      {text}
-    </Text>
-  );
-
-  const renderStep1 = (): React.ReactElement => (
-    <View>
-      {renderHeading("What's your goal?", "We'll tailor templates to match")}
-      <View style={{ gap: space.sm }}>
-        {GOALS.map((g) => {
+      </View>
+      <View style={{ marginTop: 28 }}>
+        {GOALS.map((g, idx) => {
           const selected = g.id === goal;
           return (
-            <Pressable
-              key={g.id}
-              onPress={() => handleGoalSelect(g.id)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${g.id}. ${g.subtitle}`}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: space.lg,
-                borderRadius: radius.md,
-                backgroundColor: selected ? t.accentSoft : t.surface,
-                borderWidth: 1,
-                borderColor: selected ? t.accent : t.line,
-                gap: space.md,
-              }}
-            >
-              <View
+            <View key={g.id}>
+              <Pressable
+                onPress={() => handleGoalSelect(g.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
                 style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  borderWidth: 2,
-                  borderColor: selected ? t.accent : t.ink4,
+                  flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  paddingVertical: 18,
+                  gap: 14,
                 }}
               >
-                {selected ? (
-                  <View
+                <RadioDot active={selected} ed={ed} />
+                <View style={{ flex: 1 }}>
+                  <Text
                     style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 5,
-                      backgroundColor: t.accent,
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 22,
+                      letterSpacing: -0.4,
+                      color: selected ? ed.colors.ink1 : ed.colors.ink2,
                     }}
-                  />
-                ) : null}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: t.ink,
-                    fontFamily: font.sansSemi,
-                    fontSize: 16,
-                  }}
-                >
-                  {g.id}
-                </Text>
-                <Text
-                  style={{
-                    color: t.ink3,
-                    fontFamily: font.sans,
-                    fontSize: 13,
-                    marginTop: 2,
-                  }}
-                >
-                  {g.subtitle}
-                </Text>
-              </View>
-            </Pressable>
+                  >
+                    {g.id}
+                  </Text>
+                  <Text
+                    style={{
+                      marginTop: 2,
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink3,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {g.subtitle}
+                  </Text>
+                </View>
+              </Pressable>
+              {idx < GOALS.length - 1 ? <HairlineRow /> : null}
+            </View>
           );
         })}
       </View>
     </View>
   );
 
-  const renderTemplateCard = (tpl: Template): React.ReactElement => {
-    const selected = selectionId === tpl.id;
-    return (
-      <Pressable
-        key={tpl.id}
-        onPress={() => setSelectionId(tpl.id)}
-        accessibilityRole="radio"
-        accessibilityState={{ selected }}
-        accessibilityLabel={`${tpl.name}. ${tpl.description}`}
-        style={({ pressed }) => ({
-          padding: space.lg,
-          borderRadius: radius.lg,
-          backgroundColor: selected ? t.accentSoft : t.surface,
-          borderWidth: selected ? 2 : 1,
-          borderColor: selected ? t.accent : t.line,
-          opacity: pressed ? 0.9 : 1,
-        })}
-      >
-        <Text
-          style={{
-            color: t.ink,
-            fontFamily: font.sansBold,
-            fontSize: 17,
-          }}
-        >
-          {tpl.name}
-        </Text>
-        <Text
-          style={{
-            color: t.ink2,
-            fontFamily: font.sans,
-            fontSize: 13,
-            marginTop: space.xs,
-          }}
-        >
-          {tpl.description}
-        </Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: space.xs,
-            marginTop: space.md,
-          }}
-        >
-          {tpl.items.map((it, i) => {
-            const p = findPeptide(it.peptide_id);
-            return (
-              <View
-                key={`${it.peptide_id}-${i}`}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: space.xs,
-                  paddingHorizontal: space.sm,
-                  paddingVertical: 4,
-                  borderRadius: radius.pill,
-                  backgroundColor: selected ? t.surface : t.surfaceAlt,
-                }}
-              >
+  const TemplateRow = ({ tpl, selected }: { tpl: Template; selected: boolean }) => (
+    <Pressable
+      onPress={() => setSelectionId(tpl.id)}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      style={{
+        paddingVertical: 18,
+        gap: 10,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+        <RadioDot active={selected} ed={ed} />
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 19,
+              letterSpacing: -0.3,
+              color: selected ? ed.colors.ink1 : ed.colors.ink2,
+            }}
+          >
+            {tpl.name}
+          </Text>
+          <Text
+            style={{
+              marginTop: 4,
+              fontFamily: ed.typography.bodySm.fontFamily,
+              fontSize: ed.typography.bodySm.fontSize,
+              lineHeight: ed.typography.bodySm.lineHeight,
+              color: ed.colors.ink3,
+            }}
+          >
+            {tpl.description}
+          </Text>
+          <Text
+            style={{
+              marginTop: 4,
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
+            }}
+          >
+            {tpl.duration_weeks} weeks · {tpl.phase}
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+            {tpl.items.map((it, i) => {
+              const p = findPeptide(it.peptide_id);
+              return (
                 <View
+                  key={`${it.peptide_id}-${i}`}
                   style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: p?.color ?? t.accent,
-                  }}
-                />
-                <Text
-                  style={{
-                    color: t.ink,
-                    fontFamily: font.sansMed,
-                    fontSize: 12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderWidth: 1,
+                    borderColor: ed.colors.lineStrong,
                   }}
                 >
-                  {p?.name ?? it.peptide_id}
+                  <View
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: 3,
+                      backgroundColor: p?.color ?? ed.colors.brand,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink2,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {p?.name ?? it.peptide_id}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+          {(() => {
+            const phased = tpl.items
+              .map((it) => ({
+                peptide: findPeptide(it.peptide_id),
+                phases: getPeptideExtras(it.peptide_id)?.cycleTemplate?.phases ?? [],
+              }))
+              .filter((x) => x.phases.length > 1);
+            if (phased.length === 0) return null;
+            return (
+              <View style={{ marginTop: 10, gap: 4 }}>
+                <Text
+                  style={{
+                    fontFamily: ed.typography.labelSm.fontFamily,
+                    fontSize: ed.typography.labelSm.fontSize,
+                    letterSpacing: ed.typography.labelSm.letterSpacing,
+                    color: ed.colors.brand,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Multi-phase
                 </Text>
+                {phased.map(({ peptide, phases }) => (
+                  <Text
+                    key={peptide?.id ?? 'x'}
+                    style={{
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: 12,
+                      lineHeight: 16,
+                      color: ed.colors.ink2,
+                    }}
+                  >
+                    {peptide?.name ?? ''}:{' '}
+                    {phases
+                      .map(
+                        (ph) =>
+                          `${ph.name} ${ph.weeks}w${ph.dose_modifier ? ` (${ph.dose_modifier})` : ''}`
+                      )
+                      .join(' → ')}
+                  </Text>
+                ))}
               </View>
             );
-          })}
+          })()}
         </View>
-        <Text
-          style={{
-            color: t.ink3,
-            fontFamily: font.mono,
-            fontSize: 11,
-            marginTop: space.md,
-            letterSpacing: 0.5,
-          }}
-        >
-          {tpl.duration_weeks} weeks · {tpl.phase}
-        </Text>
+      </View>
+    </Pressable>
+  );
 
-        {/* Surface any multi-phase protocols baked into this template's
-            peptides (e.g. TB-500 loading + maintenance). */}
-        {(() => {
-          const phased = tpl.items
-            .map((it) => ({
-              peptide: findPeptide(it.peptide_id),
-              phases: getPeptideExtras(it.peptide_id)?.cycleTemplate?.phases ?? [],
-            }))
-            .filter((x) => x.phases.length > 1);
-          if (phased.length === 0) return null;
-          return (
-            <View style={{ marginTop: space.sm, gap: 4 }}>
-              <Text
-                style={{
-                  fontSize: 10,
-                  color: t.accent,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                }}
-              >
-                Multi-phase protocol
-              </Text>
-              {phased.map(({ peptide, phases }) => (
-                <Text
-                  key={peptide?.id ?? 'x'}
-                  style={{
-                    fontSize: 11,
-                    color: t.ink2,
-                    fontFamily: font.mono,
-                    lineHeight: 15,
-                  }}
-                >
-                  {peptide?.name ?? ''}:{' '}
-                  {phases
-                    .map(
-                      (ph) =>
-                        `${ph.name} ${ph.weeks}w${ph.dose_modifier ? ` (${ph.dose_modifier})` : ''}`
-                    )
-                    .join(' → ')}
-                </Text>
-              ))}
-            </View>
-          );
-        })()}
-      </Pressable>
-    );
-  };
-
-  const renderStep2 = (): React.ReactElement => {
+  const Step2 = () => {
     const scratchSelected = selectionId === SCRATCH_ID;
     return (
       <View>
-        {renderHeading(
-          'Pick a starting template',
-          'Or start blank and build your own',
-        )}
-        <View style={{ gap: space.md }}>
+        <View style={{ marginTop: 14 }}>
+          <EditorialHeadline size="title1">{`Pick a *template*.`}</EditorialHeadline>
+          <Text
+            style={{
+              marginTop: 8,
+              fontFamily: ed.typography.bodySm.fontFamily,
+              fontSize: ed.typography.bodySm.fontSize,
+              lineHeight: ed.typography.bodySm.lineHeight,
+              color: ed.colors.ink3,
+            }}
+          >
+            Or start blank and build your own.
+          </Text>
+        </View>
+        <View style={{ marginTop: 24 }}>
           {filteredTemplates.length === 0 ? (
-            <View
+            <Text
               style={{
-                padding: space.xl,
-                borderRadius: radius.md,
-                backgroundColor: t.surfaceAlt,
-                borderWidth: 1,
-                borderColor: t.line,
-                alignItems: 'center',
+                paddingVertical: 24,
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 16,
+                color: ed.colors.ink3,
+                textAlign: 'center',
               }}
             >
-              <Text
-                style={{
-                  color: t.ink3,
-                  fontFamily: font.sans,
-                  fontSize: 13,
-                  textAlign: 'center',
-                }}
-              >
-                No pre-built templates for {goal}.{'\n'}
-                Start from scratch below.
-              </Text>
-            </View>
+              No pre-built templates for {goal}. Start from scratch below.
+            </Text>
           ) : (
-            filteredTemplates.map(renderTemplateCard)
+            filteredTemplates.map((tpl, idx) => (
+              <View key={tpl.id}>
+                <TemplateRow tpl={tpl} selected={selectionId === tpl.id} />
+                <HairlineRow />
+              </View>
+            ))
           )}
           <Pressable
             onPress={() => setSelectionId(SCRATCH_ID)}
             accessibilityRole="radio"
             accessibilityState={{ selected: scratchSelected }}
             style={{
-              padding: space.lg,
-              borderRadius: radius.lg,
-              backgroundColor: scratchSelected ? t.accentSoft : t.surfaceAlt,
-              borderWidth: scratchSelected ? 2 : 1,
-              borderColor: scratchSelected ? t.accent : t.line,
-              borderStyle: scratchSelected ? 'solid' : 'dashed',
+              flexDirection: 'row',
               alignItems: 'center',
+              paddingVertical: 18,
+              gap: 14,
             }}
           >
-            <Text
-              style={{
-                color: t.ink,
-                fontFamily: font.sansSemi,
-                fontSize: 15,
-              }}
-            >
-              Start from scratch
-            </Text>
-            <Text
-              style={{
-                color: t.ink3,
-                fontFamily: font.sans,
-                fontSize: 13,
-                marginTop: space.xs,
-              }}
-            >
-              Build your own protocol
-            </Text>
+            <RadioDot active={scratchSelected} ed={ed} />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                  fontSize: 19,
+                  letterSpacing: -0.3,
+                  color: scratchSelected ? ed.colors.ink1 : ed.colors.ink2,
+                }}
+              >
+                Start from scratch
+              </Text>
+              <Text
+                style={{
+                  marginTop: 2,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Build your own protocol
+              </Text>
+            </View>
           </Pressable>
         </View>
       </View>
     );
   };
 
-  const renderDoseStepper = (
-    it: CycleProtocolItem,
-    idx: number,
-  ): React.ReactElement => {
+  const ItemEditor = ({ it, idx }: { it: CycleProtocolItem; idx: number }) => {
+    const p = findPeptide(it.peptide_id);
+    const extras = getPeptideExtras(it.peptide_id);
+    const itemIds = new Set(items.map((x) => x.peptide_id));
+    const pairs = (extras?.coAdministration ?? []).filter(
+      (c) => c.co_reconstitute === true && !itemIds.has(c.peptide_id)
+    );
     const stepBy = doseStepFor(it.dose_mcg);
     const displayValue = doseText[it.peptide_id] ?? String(it.dose_mcg);
     return (
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: space.sm,
-          marginTop: space.xs,
+          paddingVertical: 18,
+          borderTopWidth: 1,
+          borderTopColor: ed.colors.line,
         }}
       >
-        <Pressable
-          onPress={() => stepDoseBy(idx, it.peptide_id, it.dose_mcg, -stepBy)}
-          accessibilityLabel={`Decrease dose by ${stepBy}`}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: radius.md,
-            backgroundColor: t.surfaceAlt,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontSize: 20,
-              fontFamily: font.sansBold,
-            }}
-          >
-            −
-          </Text>
-        </Pressable>
-        <TextInput
-          value={displayValue}
-          onChangeText={(v) => setDoseFromInput(idx, it.peptide_id, v)}
-          keyboardType="decimal-pad"
-          accessibilityLabel="Dose in micrograms"
-          style={{
-            flex: 1,
-            height: 36,
-            borderRadius: radius.md,
-            backgroundColor: t.surfaceAlt,
-            paddingHorizontal: space.md,
-            color: t.ink,
-            fontFamily: font.monoSemi,
-            fontSize: 14,
-            textAlign: 'center',
-          }}
-        />
-        <Pressable
-          onPress={() => stepDoseBy(idx, it.peptide_id, it.dose_mcg, stepBy)}
-          accessibilityLabel={`Increase dose by ${stepBy}`}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: radius.md,
-            backgroundColor: t.surfaceAlt,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontSize: 20,
-              fontFamily: font.sansBold,
-            }}
-          >
-            +
-          </Text>
-        </Pressable>
-      </View>
-    );
-  };
-
-  const renderItemCard = (
-    it: CycleProtocolItem,
-    idx: number,
-  ): React.ReactElement => {
-    const p = findPeptide(it.peptide_id);
-    const extras = getPeptideExtras(it.peptide_id);
-    const itemIds = new Set(items.map((x) => x.peptide_id));
-    const pairs = (extras?.coAdministration ?? []).filter(
-      (c) => c.co_reconstitute === true && !itemIds.has(c.peptide_id),
-    );
-    return (
-      <View
-        key={`${it.peptide_id}-${idx}`}
-        style={{
-          padding: space.lg,
-          borderRadius: radius.lg,
-          backgroundColor: t.surface,
-          borderWidth: 1,
-          borderColor: t.line,
-          marginBottom: space.md,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: space.sm,
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: p?.color ?? ed.colors.brand,
+            }}
+          />
+          <Text
+            style={{
               flex: 1,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 19,
+              letterSpacing: -0.3,
+              color: ed.colors.ink1,
             }}
           >
-            <View
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: p?.color ?? t.accent,
-              }}
-            />
+            {p?.name ?? it.peptide_id}
+          </Text>
+          <Pressable onPress={() => removeItem(idx)} hitSlop={8}>
             <Text
               style={{
-                color: t.ink,
-                fontFamily: font.sansBold,
-                fontSize: 15,
-                flex: 1,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.stateWarn,
+                textTransform: 'uppercase',
               }}
-              numberOfLines={1}
             >
-              {p?.name ?? it.peptide_id}
+              Remove
             </Text>
-          </View>
-          <Pressable
-            onPress={() => removeItem(idx)}
-            hitSlop={8}
-            accessibilityLabel={`Remove ${p?.name ?? it.peptide_id}`}
-            style={{ padding: 4 }}
-          >
-            <IconClose color={t.ink3} size={18} />
           </Pressable>
         </View>
 
         <Text
           style={{
-            color: t.ink3,
-            fontFamily: font.sansSemi,
-            fontSize: 11,
-            letterSpacing: 1,
-            marginTop: space.md,
+            marginTop: 14,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
           }}
         >
-          DOSE (MCG)
+          Dose · mcg
         </Text>
-        {renderDoseStepper(it, idx)}
-
-        <Text
-          style={{
-            color: t.ink3,
-            fontFamily: font.sansSemi,
-            fontSize: 11,
-            letterSpacing: 1,
-            marginTop: space.md,
-          }}
-        >
-          FREQUENCY
-        </Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: space.xs,
-            marginTop: space.xs,
-          }}
-        >
-          {FREQ_OPTIONS.map((f) => {
-            const selected = it.freq === f;
-            return (
-              <Pressable
-                key={f}
-                onPress={() => updateItem(idx, { freq: f })}
-                style={{
-                  paddingHorizontal: space.md,
-                  paddingVertical: 6,
-                  borderRadius: radius.pill,
-                  backgroundColor: selected ? t.accent : t.surfaceAlt,
-                }}
-              >
-                <Text
-                  style={{
-                    color: selected ? t.accentInk : t.ink,
-                    fontFamily: font.sansMed,
-                    fontSize: 12,
-                  }}
-                >
-                  {f}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+          <Pressable
+            onPress={() => stepDoseBy(idx, it.peptide_id, it.dose_mcg, -stepBy)}
+            hitSlop={8}
+          >
+            <Text
+              style={{
+                fontFamily: ed.typography.dataLg.fontFamily,
+                fontSize: 22,
+                color: ed.colors.ink3,
+                paddingHorizontal: 14,
+              }}
+            >
+              −
+            </Text>
+          </Pressable>
+          <TextInput
+            value={displayValue}
+            onChangeText={(v) => setDoseFromInput(idx, it.peptide_id, v)}
+            keyboardType="decimal-pad"
+            selectionColor={ed.colors.brand}
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 26,
+              letterSpacing: -0.5,
+              color: ed.colors.ink1,
+              paddingVertical: 6,
+              borderBottomWidth: 1,
+              borderBottomColor: ed.colors.line,
+            }}
+          />
+          <Pressable
+            onPress={() => stepDoseBy(idx, it.peptide_id, it.dose_mcg, stepBy)}
+            hitSlop={8}
+          >
+            <Text
+              style={{
+                fontFamily: ed.typography.dataLg.fontFamily,
+                fontSize: 22,
+                color: ed.colors.ink3,
+                paddingHorizontal: 14,
+              }}
+            >
+              +
+            </Text>
+          </Pressable>
         </View>
 
         <Text
           style={{
-            color: t.ink3,
-            fontFamily: font.sansSemi,
-            fontSize: 11,
-            letterSpacing: 1,
-            marginTop: space.md,
+            marginTop: 18,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
           }}
         >
-          TIME OF DAY
+          Frequency
         </Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: space.xs,
-            marginTop: space.xs,
-          }}
-        >
-          {TIME_OPTIONS.map((to) => {
-            const selected = it.time_of_day === to;
-            return (
-              <Pressable
-                key={to}
-                onPress={() => updateItem(idx, { time_of_day: to })}
-                style={{
-                  paddingHorizontal: space.md,
-                  paddingVertical: 6,
-                  borderRadius: radius.pill,
-                  backgroundColor: selected ? t.accent : t.surfaceAlt,
-                }}
-              >
-                <Text
-                  style={{
-                    color: selected ? t.accentInk : t.ink,
-                    fontFamily: font.sansMed,
-                    fontSize: 12,
-                  }}
-                >
-                  {to}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {FREQ_OPTIONS.map((f) => (
+            <Chip
+              key={f}
+              active={it.freq === f}
+              label={f}
+              onPress={() => updateItem(idx, { freq: f })}
+              ed={ed}
+            />
+          ))}
         </View>
 
-        {extras?.timing !== undefined && extras.timing !== '' ? (
+        <Text
+          style={{
+            marginTop: 18,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          Time of day
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {TIME_OPTIONS.map((to) => (
+            <Chip
+              key={to}
+              active={it.time_of_day === to}
+              label={to}
+              tone="brand"
+              onPress={() => updateItem(idx, { time_of_day: to })}
+              ed={ed}
+            />
+          ))}
+        </View>
+
+        {extras?.timing ? (
           <Text
             style={{
-              color: t.ink3,
-              fontFamily: font.sans,
-              fontSize: 12,
-              marginTop: space.md,
-              fontStyle: 'italic',
+              marginTop: 14,
+              fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+              fontSize: 13,
+              lineHeight: 19,
+              color: ed.colors.ink3,
             }}
           >
-            Suggested timing: {extras.timing}
+            Suggested: {extras.timing}
           </Text>
         ) : null}
 
         {pairs.length > 0 ? (
-          <View style={{ marginTop: space.md }}>
+          <View style={{ marginTop: 18 }}>
             <Text
               style={{
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                fontSize: 11,
-                letterSpacing: 1,
-                marginBottom: space.xs,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.brand,
+                textTransform: 'uppercase',
+                marginBottom: 8,
               }}
             >
-              PAIRS WITH
+              Pairs with
             </Text>
-            <View
-              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.xs }}
-            >
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {pairs.map((c) => {
                 const partner = findPeptide(c.peptide_id);
                 return (
                   <Pressable
                     key={c.peptide_id}
                     onPress={() => addPeptide(c.peptide_id)}
-                    accessibilityLabel={`Add ${partner?.name ?? c.peptide_id}`}
                     style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      paddingHorizontal: space.sm,
-                      paddingVertical: 4,
-                      borderRadius: radius.pill,
-                      backgroundColor: t.accentSoft,
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
                       borderWidth: 1,
-                      borderColor: t.accent,
+                      borderColor: ed.colors.brandLine,
                     }}
                   >
-                    <IconPlus color={t.accent} size={10} />
                     <Text
                       style={{
-                        color: t.accent,
-                        fontFamily: font.sansSemi,
-                        fontSize: 12,
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.brand,
+                        textTransform: 'uppercase',
                       }}
                     >
-                      {partner?.name ?? c.peptide_id}
+                      + {partner?.name ?? c.peptide_id}
                     </Text>
                   </Pressable>
                 );
@@ -1210,221 +1018,116 @@ export default function NewCycle() {
     );
   };
 
-  const renderStartDatePicker = (): React.ReactElement => (
-    <View>
-      {renderSectionLabel('STARTS ON')}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: space.sm,
-          marginBottom: space.lg,
-        }}
-      >
-        <Pressable
-          onPress={() => setStartOffset((d) => Math.max(0, d - 1))}
-          disabled={startOffset === 0}
-          accessibilityLabel="Earlier day"
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: startOffset === 0 ? 0.4 : 1,
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontSize: 20,
-              fontFamily: font.sansBold,
-            }}
-          >
-            −
-          </Text>
-        </Pressable>
-        <View
-          style={{
-            flex: 1,
-            height: 44,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontFamily: font.monoSemi,
-              fontSize: 15,
-            }}
-          >
-            {startOffset === 0
-              ? `Today · ${formatDate(startDate)}`
-              : startOffset === 1
-              ? `Tomorrow · ${formatDate(startDate)}`
-              : `${formatDate(startDate)} · +${startOffset}d`}
-          </Text>
-        </View>
-        <Pressable
-          onPress={() =>
-            setStartOffset((d) => Math.min(MAX_START_OFFSET, d + 1))
-          }
-          disabled={startOffset === MAX_START_OFFSET}
-          accessibilityLabel="Later day"
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: startOffset === MAX_START_OFFSET ? 0.4 : 1,
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontSize: 20,
-              fontFamily: font.sansBold,
-            }}
-          >
-            +
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-
-  const renderPicker = (): React.ReactElement => (
+  const PeptidePicker = () => (
     <View
       style={{
-        borderRadius: radius.md,
-        backgroundColor: t.surface,
-        borderWidth: 1,
-        borderColor: t.line,
-        marginBottom: space.md,
-        overflow: 'hidden',
+        marginVertical: 14,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: ed.colors.line,
       }}
     >
       <View
         style={{
-          padding: space.sm,
+          paddingVertical: 12,
           borderBottomWidth: 1,
-          borderBottomColor: t.line,
+          borderBottomColor: ed.colors.line,
         }}
       >
         <TextInput
           value={pickerQuery}
           onChangeText={setPickerQuery}
-          placeholder="Search peptides…"
-          placeholderTextColor={t.ink4}
-          autoCapitalize="none"
+          placeholder="SEARCH PEPTIDES"
+          placeholderTextColor={ed.colors.ink3}
+          autoCapitalize="characters"
           autoCorrect={false}
+          selectionColor={ed.colors.brand}
           style={{
-            height: 36,
-            borderRadius: radius.sm,
-            backgroundColor: t.surfaceAlt,
-            paddingHorizontal: space.md,
-            color: t.ink,
-            fontFamily: font.sans,
-            fontSize: 14,
+            fontFamily: ed.typography.dataMd.fontFamily,
+            fontSize: ed.typography.dataMd.fontSize,
+            letterSpacing: 0.4,
+            color: ed.colors.ink1,
+            padding: 0,
           }}
         />
       </View>
-      <ScrollView nestedScrollEnabled style={{ height: 300 }}>
+      <ScrollView nestedScrollEnabled style={{ height: 280 }}>
         {filteredPickerPeptides.length === 0 ? (
-          <View
+          <Text
             style={{
-              padding: space.xl,
-              alignItems: 'center',
+              paddingVertical: 28,
+              textAlign: 'center',
+              fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+              fontSize: 15,
+              color: ed.colors.ink3,
             }}
           >
-            <Text
-              style={{
-                color: t.ink3,
-                fontFamily: font.sans,
-                fontSize: 13,
-              }}
-            >
-              {`No peptides match "${pickerQuery}"`}
-            </Text>
-          </View>
+            {`No peptides match "${pickerQuery}"`}
+          </Text>
         ) : (
-          filteredPickerPeptides.map((p) => {
+          filteredPickerPeptides.map((p, idx) => {
             const already = items.some((i) => i.peptide_id === p.id);
             return (
-              <Pressable
-                key={p.id}
-                onPress={() => {
-                  if (!already) addPeptide(p.id);
-                }}
-                disabled={already}
-                accessibilityLabel={
-                  already ? `${p.name} already added` : `Add ${p.name}`
-                }
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: space.sm,
-                  paddingHorizontal: space.md,
-                  paddingVertical: space.md,
-                  borderBottomWidth: 1,
-                  borderBottomColor: t.line,
-                  opacity: already ? 0.5 : 1,
-                }}
-              >
-                <View
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 5,
-                    backgroundColor: p.color,
+              <View key={p.id}>
+                <Pressable
+                  onPress={() => {
+                    if (!already) addPeptide(p.id);
                   }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text
+                  disabled={already}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    paddingVertical: 14,
+                    opacity: already ? 0.45 : 1,
+                  }}
+                >
+                  <View
                     style={{
-                      color: t.ink,
-                      fontFamily: font.sansSemi,
-                      fontSize: 14,
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: p.color,
                     }}
-                  >
-                    {p.name}
-                  </Text>
-                  <Text
-                    style={{
-                      color: t.ink3,
-                      fontFamily: font.sans,
-                      fontSize: 12,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {p.subtitle}
-                  </Text>
-                </View>
-                {already ? (
-                  <Text
-                    style={{
-                      color: t.accent,
-                      fontFamily: font.sansSemi,
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    ✓ ADDED
-                  </Text>
-                ) : null}
-              </Pressable>
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_400Regular'),
+                        fontSize: 16,
+                        color: ed.colors.ink1,
+                      }}
+                    >
+                      {p.name}
+                    </Text>
+                    <Text
+                      style={{
+                        marginTop: 2,
+                        fontFamily: ed.typography.bodySm.fontFamily,
+                        fontSize: ed.typography.bodySm.fontSize,
+                        color: ed.colors.ink3,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {p.subtitle}
+                    </Text>
+                  </View>
+                  {already ? (
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.brand,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      ✓ Added
+                    </Text>
+                  ) : null}
+                </Pressable>
+                {idx < filteredPickerPeptides.length - 1 ? <HairlineRow /> : null}
+              </View>
             );
           })
         )}
@@ -1432,383 +1135,217 @@ export default function NewCycle() {
     </View>
   );
 
-  const renderStep3 = (): React.ReactElement => (
+  const Step3 = () => (
     <View>
-      {renderHeading('Customize your protocol')}
+      <View style={{ marginTop: 14 }}>
+        <EditorialHeadline size="title1">{`*Customize* your protocol.`}</EditorialHeadline>
+      </View>
 
-      {renderSectionLabel('CYCLE NAME')}
-      <TextInput
-        value={cycleName}
-        onChangeText={setCycleName}
-        placeholder="My cycle"
-        placeholderTextColor={t.ink4}
-        maxLength={80}
-        returnKeyType="done"
-        style={{
-          height: 48,
-          borderRadius: radius.md,
-          backgroundColor: t.surface,
-          borderWidth: 1,
-          borderColor: t.line,
-          paddingHorizontal: space.md,
-          color: t.ink,
-          fontFamily: font.sans,
-          fontSize: 15,
-          marginBottom: space.lg,
-        }}
-      />
-
-      {renderStartDatePicker()}
-
-      {renderSectionLabel('DURATION (WEEKS)')}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: space.sm,
-          marginBottom: space.lg,
-        }}
-      >
-        <Pressable
-          onPress={() => setDurationWeeks((w) => Math.max(1, w - 1))}
-          disabled={durationWeeks === 1}
-          accessibilityLabel="Decrease duration"
+      <View style={{ marginTop: 28 }}>
+        <EyebrowLabel withRule>Cycle name</EyebrowLabel>
+        <TextInput
+          value={cycleName}
+          onChangeText={setCycleName}
+          placeholder="My cycle"
+          placeholderTextColor={ed.colors.ink4}
+          maxLength={80}
+          returnKeyType="done"
+          selectionColor={ed.colors.brand}
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: durationWeeks === 1 ? 0.4 : 1,
+            marginTop: 14,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: ed.colors.line,
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 22,
+            letterSpacing: -0.4,
+            color: ed.colors.ink1,
           }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontSize: 20,
-              fontFamily: font.sansBold,
-            }}
-          >
-            −
-          </Text>
-        </Pressable>
-        <View
-          style={{
-            flex: 1,
-            height: 44,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontFamily: font.monoSemi,
-              fontSize: 16,
-            }}
-          >
-            {durationWeeks} {durationWeeks === 1 ? 'week' : 'weeks'}
-          </Text>
+        />
+      </View>
+
+      <View style={{ marginTop: 24 }}>
+        <EyebrowLabel withRule>Starts on</EyebrowLabel>
+        <Stepper
+          ed={ed}
+          minusDisabled={startOffset === 0}
+          plusDisabled={startOffset === MAX_START_OFFSET}
+          onMinus={() => setStartOffset((d) => Math.max(0, d - 1))}
+          onPlus={() => setStartOffset((d) => Math.min(MAX_START_OFFSET, d + 1))}
+          display={
+            startOffset === 0
+              ? `Today · ${formatDate(startDate)}`
+              : startOffset === 1
+              ? `Tomorrow · ${formatDate(startDate)}`
+              : `${formatDate(startDate)} · +${startOffset}d`
+          }
+        />
+      </View>
+
+      <View style={{ marginTop: 24 }}>
+        <EyebrowLabel withRule>{`Duration · ends ${formatDate(endDate)}`}</EyebrowLabel>
+        <Stepper
+          ed={ed}
+          minusDisabled={durationWeeks === 1}
+          plusDisabled={durationWeeks === 52}
+          onMinus={() => setDurationWeeks((w) => Math.max(1, w - 1))}
+          onPlus={() => setDurationWeeks((w) => Math.min(52, w + 1))}
+          display={`${durationWeeks} ${durationWeeks === 1 ? 'week' : 'weeks'}`}
+        />
+      </View>
+
+      <View style={{ marginTop: 24 }}>
+        <EyebrowLabel withRule>Phase</EyebrowLabel>
+        <View style={{ marginTop: 4 }}>
+          {PHASE_OPTIONS.map((p, idx) => {
+            const selected = p.id === phase;
+            return (
+              <View key={p.id}>
+                <Pressable
+                  onPress={() => setPhase(p.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 14,
+                    gap: 14,
+                  }}
+                >
+                  <RadioDot active={selected} ed={ed} />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_400Regular'),
+                        fontSize: 17,
+                        letterSpacing: -0.2,
+                        color: selected ? ed.colors.ink1 : ed.colors.ink2,
+                      }}
+                    >
+                      {p.label}
+                    </Text>
+                    <Text
+                      style={{
+                        marginTop: 2,
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {p.desc}
+                    </Text>
+                  </View>
+                </Pressable>
+                {idx < PHASE_OPTIONS.length - 1 ? <HairlineRow /> : null}
+              </View>
+            );
+          })}
         </View>
-        <Pressable
-          onPress={() => setDurationWeeks((w) => Math.min(52, w + 1))}
-          disabled={durationWeeks === 52}
-          accessibilityLabel="Increase duration"
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: durationWeeks === 52 ? 0.4 : 1,
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink,
-              fontSize: 20,
-              fontFamily: font.sansBold,
-            }}
-          >
-            +
-          </Text>
-        </Pressable>
       </View>
 
-      {renderSectionLabel('PHASE')}
-      <View style={{ gap: space.xs, marginBottom: space.lg }}>
-        {PHASE_OPTIONS.map((p) => {
-          const selected = p.id === phase;
-          return (
-            <Pressable
-              key={p.id}
-              onPress={() => setPhase(p.id)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected }}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: space.md,
-                borderRadius: radius.md,
-                backgroundColor: selected ? t.accentSoft : t.surface,
-                borderWidth: 1,
-                borderColor: selected ? t.accent : t.line,
-                gap: space.md,
-              }}
-            >
-              <View
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 9,
-                  borderWidth: 2,
-                  borderColor: selected ? t.accent : t.ink4,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {selected ? (
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: t.accent,
-                    }}
-                  />
-                ) : null}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: t.ink,
-                    fontFamily: font.sansSemi,
-                    fontSize: 14,
-                  }}
-                >
-                  {p.label}
-                </Text>
-                <Text
-                  style={{
-                    color: t.ink3,
-                    fontFamily: font.sans,
-                    fontSize: 12,
-                  }}
-                >
-                  {p.desc}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: space.md,
-        }}
-      >
-        <Text
-          style={{
-            color: t.ink3,
-            fontFamily: font.sansSemi,
-            fontSize: 11,
-            letterSpacing: 1,
-          }}
-        >
-          PROTOCOL ({items.length})
-        </Text>
+      <View style={{ marginTop: 32, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <EyebrowLabel withRule>{`Protocol · ${items.length}`}</EyebrowLabel>
         <Pressable
           onPress={() => {
             setShowPicker((s) => !s);
             setPickerQuery('');
           }}
-          accessibilityLabel={showPicker ? 'Close picker' : 'Add peptide'}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: space.md,
-            paddingVertical: 6,
-            borderRadius: radius.pill,
-            backgroundColor: showPicker ? t.surfaceAlt : t.accent,
-          }}
+          hitSlop={6}
         >
-          {showPicker ? (
-            <IconClose color={t.ink} size={14} />
-          ) : (
-            <IconPlus color={t.accentInk} size={14} />
-          )}
           <Text
             style={{
-              color: showPicker ? t.ink : t.accentInk,
-              fontFamily: font.sansSemi,
-              fontSize: 12,
+              marginLeft: 12,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.brand,
+              textTransform: 'uppercase',
             }}
           >
-            {showPicker ? 'Close' : 'Add peptide'}
+            {showPicker ? 'Close' : '+ Add'}
           </Text>
         </Pressable>
       </View>
 
-      {showPicker ? renderPicker() : null}
+      {showPicker ? <PeptidePicker /> : null}
 
       {items.length === 0 ? (
-        <View
+        <Text
           style={{
-            padding: space.xl,
-            borderRadius: radius.md,
-            backgroundColor: t.surfaceAlt,
-            borderWidth: 1,
-            borderColor: t.line,
-            borderStyle: 'dashed',
-            alignItems: 'center',
+            marginTop: 18,
+            fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+            fontSize: 16,
+            color: ed.colors.ink3,
+            textAlign: 'center',
           }}
         >
-          <Text
-            style={{
-              color: t.ink3,
-              fontFamily: font.sans,
-              fontSize: 13,
-              textAlign: 'center',
-            }}
-          >
-            {'No peptides yet. Tap "Add peptide" above.'}
-          </Text>
-        </View>
+          No peptides yet. Tap "Add" to get started.
+        </Text>
       ) : (
-        items.map((it, idx) => renderItemCard(it, idx))
+        items.map((it, idx) => <ItemEditor key={`${it.peptide_id}-${idx}`} it={it} idx={idx} />)
       )}
 
-      <View style={{ marginTop: space.lg }}>
+      <View style={{ marginTop: 24 }}>
         <DosingDisclaimer />
       </View>
     </View>
   );
 
-  const renderReviewItem = (
-    it: CycleProtocolItem,
-    idx: number,
-  ): React.ReactElement => {
-    const p = findPeptide(it.peptide_id);
-    return (
-      <View
-        key={`${it.peptide_id}-${idx}`}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          gap: space.sm,
-          paddingVertical: space.sm,
-          borderBottomWidth: idx === items.length - 1 ? 0 : 1,
-          borderBottomColor: t.line,
-        }}
-      >
-        <View
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            marginTop: 6,
-            backgroundColor: p?.color ?? t.accent,
-          }}
-        />
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{
-              color: t.ink,
-              fontFamily: font.sansSemi,
-              fontSize: 14,
-            }}
-          >
-            {p?.name ?? it.peptide_id}
-          </Text>
-          <Text
-            style={{
-              color: t.ink3,
-              fontFamily: font.mono,
-              fontSize: 12,
-              marginTop: 2,
-              letterSpacing: 0.3,
-            }}
-          >
-            {it.dose_mcg} mcg · {it.freq} · {it.time_of_day}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderStep4 = (): React.ReactElement => (
+  const Step4 = () => (
     <View>
-      {renderHeading('Review and save')}
+      <View style={{ marginTop: 14 }}>
+        <EditorialHeadline size="title1">{`Review and *save*.`}</EditorialHeadline>
+      </View>
 
-      <View
-        style={{
-          padding: space.lg,
-          borderRadius: radius.lg,
-          backgroundColor: t.surface,
-          borderWidth: 1,
-          borderColor: t.line,
-          marginBottom: space.md,
-        }}
-      >
+      {/* Cycle summary */}
+      <View style={{ marginTop: 28 }}>
+        <EyebrowLabel withRule>Cycle</EyebrowLabel>
         <Text
           style={{
-            color: t.ink,
-            fontFamily: font.sansBold,
-            fontSize: 18,
-            marginBottom: space.xs,
+            marginTop: 14,
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 28,
+            letterSpacing: -0.6,
+            color: ed.colors.ink1,
           }}
         >
           {cycleName.trim() === '' ? 'Unnamed cycle' : cycleName}
         </Text>
         <Text
           style={{
-            color: t.ink2,
-            fontFamily: font.sans,
-            fontSize: 13,
-            marginBottom: space.md,
+            marginTop: 4,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.brand,
+            textTransform: 'uppercase',
           }}
         >
-          {PHASE_OPTIONS.find((p) => p.id === phase)?.label ?? phase} ·{' '}
-          {durationWeeks} {durationWeeks === 1 ? 'week' : 'weeks'}
+          {PHASE_OPTIONS.find((p) => p.id === phase)?.label ?? phase} · {durationWeeks}{' '}
+          {durationWeeks === 1 ? 'week' : 'weeks'}
         </Text>
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: space.md,
-          }}
-        >
+        <View style={{ flexDirection: 'row', gap: 24, marginTop: 18 }}>
           <View style={{ flex: 1 }}>
             <Text
               style={{
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                fontSize: 10,
-                letterSpacing: 1,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
               }}
             >
-              STARTS
+              Starts
             </Text>
             <Text
               style={{
-                color: t.ink,
-                fontFamily: font.monoSemi,
-                fontSize: 13,
-                marginTop: 2,
+                marginTop: 4,
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 19,
+                letterSpacing: -0.3,
+                color: ed.colors.ink1,
               }}
             >
               {formatDate(startDate)}
@@ -1817,20 +1354,22 @@ export default function NewCycle() {
           <View style={{ flex: 1 }}>
             <Text
               style={{
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                fontSize: 10,
-                letterSpacing: 1,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
               }}
             >
-              ENDS
+              Ends
             </Text>
             <Text
               style={{
-                color: t.ink,
-                fontFamily: font.monoSemi,
-                fontSize: 13,
-                marginTop: 2,
+                marginTop: 4,
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 19,
+                letterSpacing: -0.3,
+                color: ed.colors.ink1,
               }}
             >
               {formatDate(endDate)}
@@ -1839,149 +1378,163 @@ export default function NewCycle() {
         </View>
       </View>
 
-      <View
-        style={{
-          padding: space.lg,
-          borderRadius: radius.lg,
-          backgroundColor: t.surface,
-          borderWidth: 1,
-          borderColor: t.line,
-          marginBottom: space.md,
-        }}
-      >
-        <Text
-          style={{
-            color: t.ink3,
-            fontFamily: font.sansSemi,
-            fontSize: 11,
-            letterSpacing: 1,
-            marginBottom: space.xs,
-          }}
-        >
-          PROTOCOL ({items.length})
-        </Text>
-        {items.map((it, idx) => renderReviewItem(it, idx))}
+      {/* Protocol list */}
+      <View style={{ marginTop: 28 }}>
+        <EyebrowLabel withRule>{`Protocol · ${items.length}`}</EyebrowLabel>
+        <View style={{ marginTop: 4 }}>
+          {items.map((it, idx) => {
+            const p = findPeptide(it.peptide_id);
+            return (
+              <View key={`${it.peptide_id}-${idx}`}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 14,
+                    gap: 12,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: p?.color ?? ed.colors.brand,
+                    }}
+                  />
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 17,
+                      letterSpacing: -0.2,
+                      color: ed.colors.ink1,
+                    }}
+                  >
+                    {p?.name ?? it.peptide_id}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: ed.typography.dataMd.fontSize,
+                      color: ed.colors.ink3,
+                    }}
+                  >
+                    {it.dose_mcg} mcg · {it.freq} · {it.time_of_day}
+                  </Text>
+                </View>
+                {idx < items.length - 1 ? <HairlineRow /> : null}
+              </View>
+            );
+          })}
+        </View>
       </View>
 
+      {/* Timing breakdown */}
       {Object.keys(timingGroups).length > 0 ? (
-        <View
-          style={{
-            padding: space.lg,
-            borderRadius: radius.lg,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            marginBottom: space.md,
-          }}
-        >
-          <Text
-            style={{
-              color: t.ink3,
-              fontFamily: font.sansSemi,
-              fontSize: 11,
-              letterSpacing: 1,
-              marginBottom: space.sm,
-            }}
-          >
-            TIMING
-          </Text>
-          <View style={{ gap: space.xs }}>
-            {Object.entries(timingGroups).map(([k, v]) => (
-              <View
-                key={k}
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Text
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>Timing</EyebrowLabel>
+          <View style={{ marginTop: 4 }}>
+            {Object.entries(timingGroups).map(([k, v], idx, arr) => (
+              <View key={k}>
+                <View
                   style={{
-                    color: t.ink,
-                    fontFamily: font.sansMed,
-                    fontSize: 14,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
                   }}
                 >
-                  {k}
-                </Text>
-                <Text
-                  style={{
-                    color: t.ink2,
-                    fontFamily: font.monoSemi,
-                    fontSize: 14,
-                  }}
-                >
-                  {v} {v === 1 ? 'dose' : 'doses'}
-                </Text>
+                  <Text
+                    style={{
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 17,
+                      color: ed.colors.ink1,
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {k}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: ed.typography.dataMd.fontSize,
+                      color: ed.colors.ink3,
+                    }}
+                  >
+                    {v} {v === 1 ? 'dose' : 'doses'}
+                  </Text>
+                </View>
+                {idx < arr.length - 1 ? <HairlineRow /> : null}
               </View>
             ))}
           </View>
         </View>
       ) : null}
 
+      {/* Conflicts vs all-clear */}
       {conflicts.length > 0 ? (
-        <>
-          <View
+        <View style={{ marginTop: 28 }}>
+          <Text
             style={{
-              padding: space.lg,
-              borderRadius: radius.lg,
-              backgroundColor: t.dangerSoft,
-              borderWidth: 1,
-              borderColor: t.danger,
-              marginBottom: space.md,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.stateWarn,
+              textTransform: 'uppercase',
+              marginBottom: 12,
             }}
           >
-            <Text
-              style={{
-                color: t.danger,
-                fontFamily: font.sansBold,
-                fontSize: 13,
-                letterSpacing: 0.5,
-                marginBottom: space.sm,
-              }}
-            >
-              STACKING CONFLICTS DETECTED
-            </Text>
-            <View style={{ gap: space.xs }}>
-              {conflicts.map((c) => {
-                const a = findPeptide(c.a);
-                const b = findPeptide(c.b);
-                return (
-                  <Text
-                    key={`${c.a}-${c.b}`}
-                    style={{
-                      color: t.ink,
-                      fontFamily: font.sans,
-                      fontSize: 13,
-                    }}
-                  >
-                    <Text style={{ fontFamily: font.sansBold }}>
-                      {a?.name ?? c.a} + {b?.name ?? c.b}:
-                    </Text>{' '}
-                    {c.reason}
-                  </Text>
-                );
-              })}
-            </View>
+            Stacking conflicts
+          </Text>
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.stateWarn,
+              paddingVertical: 14,
+              gap: 8,
+            }}
+          >
+            {conflicts.map((c) => {
+              const a = findPeptide(c.a);
+              const b = findPeptide(c.b);
+              return (
+                <Text
+                  key={`${c.a}-${c.b}`}
+                  style={{
+                    fontFamily: ed.typography.bodyMd.fontFamily,
+                    fontSize: 14,
+                    lineHeight: 21,
+                    color: ed.colors.ink1,
+                  }}
+                >
+                  <Text style={{ fontFamily: ed.fraunces('Fraunces_400Regular_Italic') }}>
+                    {a?.name ?? c.a} + {b?.name ?? c.b}.
+                  </Text>{' '}
+                  {c.reason}
+                </Text>
+              );
+            })}
           </View>
           <Pressable
             onPress={() => setAcceptConflicts((v) => !v)}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: acceptConflicts }}
             style={{
+              marginTop: 16,
               flexDirection: 'row',
-              alignItems: 'center',
-              gap: space.sm,
-              marginBottom: space.md,
+              alignItems: 'flex-start',
+              gap: 14,
             }}
           >
             <View
               style={{
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                borderWidth: 2,
-                borderColor: acceptConflicts ? t.accent : t.ink4,
-                backgroundColor: acceptConflicts ? t.accent : 'transparent',
+                width: 18,
+                height: 18,
+                marginTop: 2,
+                borderWidth: 1,
+                borderColor: acceptConflicts ? ed.colors.brand : ed.colors.lineStrong,
+                backgroundColor: acceptConflicts ? ed.colors.brand : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -1989,10 +1542,10 @@ export default function NewCycle() {
               {acceptConflicts ? (
                 <Text
                   style={{
-                    color: t.accentInk,
-                    fontSize: 14,
-                    fontFamily: font.sansBold,
-                    lineHeight: 16,
+                    color: ed.colors.bg,
+                    fontFamily: ed.typography.dataMd.fontFamily,
+                    fontSize: 12,
+                    lineHeight: 14,
                   }}
                 >
                   ✓
@@ -2001,211 +1554,280 @@ export default function NewCycle() {
             </View>
             <Text
               style={{
-                color: t.ink,
-                fontFamily: font.sansMed,
-                fontSize: 13,
                 flex: 1,
+                fontFamily: ed.typography.bodyMd.fontFamily,
+                fontSize: 14,
+                lineHeight: 21,
+                color: ed.colors.ink1,
               }}
             >
-              I understand these conflicts and accept the risk
+              I understand these conflicts and accept the risk.
             </Text>
           </Pressable>
-        </>
+        </View>
       ) : (
-        <View
+        <Text
           style={{
-            padding: space.md,
-            borderRadius: radius.lg,
-            backgroundColor: t.successSoft,
-            borderWidth: 1,
-            borderColor: t.success,
-            marginBottom: space.md,
+            marginTop: 24,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.stateOptimal,
+            textTransform: 'uppercase',
           }}
         >
-          <Text
-            style={{
-              color: t.success,
-              fontFamily: font.sansSemi,
-              fontSize: 13,
-            }}
-          >
-            ✓ No stacking conflicts detected
-          </Text>
-        </View>
+          ✓ No stacking conflicts detected
+        </Text>
       )}
 
-      <DosingDisclaimer />
+      <View style={{ marginTop: 24 }}>
+        <DosingDisclaimer />
+      </View>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <View style={[styles.topBar, { borderBottomColor: t.line }]}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
+      {/* Top bar */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
+          borderBottomWidth: 1,
+          borderBottomColor: ed.colors.line,
+        }}
+      >
         <Pressable
           onPress={handleBack}
-          hitSlop={8}
+          hitSlop={10}
           disabled={saving}
-          accessibilityLabel="Back"
-          style={[styles.topBarBtn, saving ? { opacity: 0.4 } : null]}
+          style={{ opacity: saving ? 0.4 : 1 }}
         >
-          <IconChevronLeft color={t.ink} size={22} />
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
         <Text
-          style={[
-            styles.topBarTitle,
-            { color: t.ink, fontFamily: font.sansSemi },
-          ]}
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
         >
           New cycle
         </Text>
-        <View style={styles.topBarBtn}>
+        <View style={{ width: 16 }}>
           {step === 4 ? (
-            <Pressable
-              onPress={handleSave}
-              disabled={!canAdvance}
-              hitSlop={8}
-              accessibilityLabel="Save cycle"
-            >
+            <Pressable onPress={handleSave} disabled={!canAdvance} hitSlop={8}>
               <Text
                 style={{
-                  color: canAdvance ? t.accent : t.ink4,
-                  fontFamily: font.sansSemi,
-                  fontSize: 15,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: canAdvance ? ed.colors.brand : ed.colors.ink4,
+                  textTransform: 'uppercase',
                 }}
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? 'Saving' : 'Save'}
               </Text>
             </Pressable>
           ) : null}
         </View>
       </View>
 
-      {renderProgressBar()}
+      <ProgressBar />
 
       <ScrollView
         contentContainerStyle={{
-          paddingHorizontal: space.xl,
+          paddingHorizontal: 24,
           paddingBottom: insets.bottom + 40,
         }}
         keyboardShouldPersistTaps="handled"
       >
-        {renderStepCounter()}
-        {step === 1 ? renderStep1() : null}
-        {step === 2 ? renderStep2() : null}
-        {step === 3 ? renderStep3() : null}
-        {step === 4 ? renderStep4() : null}
+        <StepCounter />
+        {step === 1 ? <Step1 /> : null}
+        {step === 2 ? <Step2 /> : null}
+        {step === 3 ? <Step3 /> : null}
+        {step === 4 ? <Step4 /> : null}
       </ScrollView>
 
+      {/* Bottom action bar */}
       <View
         style={{
           flexDirection: 'row',
-          gap: space.sm,
-          paddingHorizontal: space.xl,
-          paddingTop: space.md,
-          paddingBottom: insets.bottom + space.md,
+          gap: 12,
+          paddingHorizontal: 24,
+          paddingTop: 12,
+          paddingBottom: insets.bottom + 12,
           borderTopWidth: 1,
-          borderTopColor: t.line,
-          backgroundColor: t.bg,
+          borderTopColor: ed.colors.line,
+          backgroundColor: ed.colors.bg,
         }}
       >
         {step > 1 ? (
-          <Pressable
-            onPress={handleBack}
-            disabled={saving}
-            accessibilityLabel="Back"
-            style={{
-              flex: 1,
-              height: 52,
-              borderRadius: radius.md,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'transparent',
-              opacity: saving ? 0.4 : 1,
-            }}
-          >
-            <Text
-              style={{
-                color: t.ink,
-                fontFamily: font.sansSemi,
-                fontSize: 15,
-              }}
-            >
+          <View style={{ flex: 1 }}>
+            <EditorialButton variant="secondary" fullWidth disabled={saving} onPress={handleBack}>
               Back
-            </Text>
-          </Pressable>
+            </EditorialButton>
+          </View>
         ) : null}
-
-        {step === 4 ? (
-          <Pressable
-            onPress={handleSave}
-            disabled={!canAdvance}
-            accessibilityLabel="Save cycle"
-            style={{
-              flex: 2,
-              height: 52,
-              borderRadius: radius.md,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: canAdvance ? t.ink : t.ink4,
-              opacity: canAdvance ? 1 : 0.6,
-            }}
-          >
-            <Text
-              style={{
-                color: t.bg,
-                fontFamily: font.sansSemi,
-                fontSize: 15,
-              }}
-            >
+        <View style={{ flex: 2 }}>
+          {step === 4 ? (
+            <EditorialButton fullWidth disabled={!canAdvance} onPress={handleSave}>
               {saving ? 'Saving…' : 'Save cycle'}
-            </Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={handleNext}
-            disabled={!canAdvance}
-            accessibilityLabel="Next"
-            style={{
-              flex: 2,
-              height: 52,
-              borderRadius: radius.md,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: canAdvance ? t.ink : t.ink4,
-              opacity: canAdvance ? 1 : 0.6,
-            }}
-          >
-            <Text
-              style={{
-                color: t.bg,
-                fontFamily: font.sansSemi,
-                fontSize: 15,
-              }}
-            >
+            </EditorialButton>
+          ) : (
+            <EditorialButton fullWidth disabled={!canAdvance} onPress={handleNext}>
               Next
-            </Text>
-          </Pressable>
-        )}
+            </EditorialButton>
+          )}
+        </View>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    borderBottomWidth: 1,
-  },
-  topBarBtn: {
-    width: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarTitle: {
-    fontSize: 15,
-  },
-});
+// ──────────────────────────────────────────── small inline helpers
+
+function RadioDot({ active, ed }: { active: boolean; ed: EditorialTheme }) {
+  return (
+    <View
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 1,
+        borderColor: active ? ed.colors.brand : ed.colors.lineStrong,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {active ? (
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: ed.colors.brand,
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function Chip({
+  active,
+  label,
+  tone = 'ink',
+  onPress,
+  ed,
+}: {
+  active: boolean;
+  label: string;
+  tone?: 'ink' | 'brand';
+  onPress: () => void;
+  ed: EditorialTheme;
+}) {
+  const fill = tone === 'brand' ? ed.colors.brand : ed.colors.ink1;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        backgroundColor: active ? fill : 'transparent',
+        borderWidth: 1,
+        borderColor: active ? fill : ed.colors.lineStrong,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: active ? ed.colors.bg : ed.colors.ink2,
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function Stepper({
+  ed,
+  display,
+  onMinus,
+  onPlus,
+  minusDisabled,
+  plusDisabled,
+}: {
+  ed: EditorialTheme;
+  display: string;
+  onMinus: () => void;
+  onPlus: () => void;
+  minusDisabled?: boolean;
+  plusDisabled?: boolean;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+      }}
+    >
+      <Pressable onPress={onMinus} hitSlop={8} disabled={minusDisabled}>
+        <Text
+          style={{
+            fontFamily: ed.typography.dataLg.fontFamily,
+            fontSize: 22,
+            color: minusDisabled ? ed.colors.ink4 : ed.colors.ink3,
+            paddingHorizontal: 14,
+          }}
+        >
+          −
+        </Text>
+      </Pressable>
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <Text
+          style={{
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 19,
+            letterSpacing: -0.3,
+            color: ed.colors.ink1,
+          }}
+        >
+          {display}
+        </Text>
+      </View>
+      <Pressable onPress={onPlus} hitSlop={8} disabled={plusDisabled}>
+        <Text
+          style={{
+            fontFamily: ed.typography.dataLg.fontFamily,
+            fontSize: 22,
+            color: plusDisabled ? ed.colors.ink4 : ed.colors.ink3,
+            paddingHorizontal: 14,
+          }}
+        >
+          +
+        </Text>
+      </Pressable>
+    </View>
+  );
+}

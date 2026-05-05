@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DataRow } from '../../components/editorial/DataRow';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EditorialSheet, SheetHeader } from '../../components/editorial/EditorialSheet';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { HeroRing } from '../../components/editorial/HeroRing';
@@ -36,8 +37,6 @@ import { isScheduledOnDay } from '../../lib/freq';
 import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
 import { useProfile } from '../../lib/profile-context';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 type CycleProtocolItem = {
   peptide_id: string;
@@ -85,7 +84,6 @@ function isScheduledToday(row: CycleProtocolItem, dayOfCycle: number): boolean {
 
 export default function TodayScreen() {
   const ed = useEditorialTheme();
-  const { t } = useTheme(); // legacy palette — still drives the modals.
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useProfile();
@@ -638,301 +636,195 @@ export default function TodayScreen() {
         </View>
       </ScrollView>
 
-      {/* Dose bottom sheet — legacy palette. Will rebuild in Phase B. */}
-      <Modal
-        visible={!!doseSheet}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDoseSheet(null)}
-      >
-        <Pressable
-          onPress={() => setDoseSheet(null)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: t.surface,
-              paddingTop: space.lg,
-              paddingBottom: insets.bottom + space.lg,
-              paddingHorizontal: space.xl,
-              borderTopLeftRadius: radius.lg,
-              borderTopRightRadius: radius.lg,
-              gap: 8,
-            }}
-          >
-            {doseSheet ? (
-              <>
-                <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
-                  {findPeptide(doseSheet.peptide_id)?.name ?? doseSheet.peptide_id}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: t.ink3,
-                    fontFamily: font.mono,
-                    marginBottom: space.md,
-                  }}
-                >
-                  {doseSheet.amount_mcg} mcg · {doseSheet.route} ·{' '}
-                  {new Date(doseSheet.taken_at).toLocaleString()}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setDoseSheet(null);
-                    router.push({
-                      pathname: '/log-dose',
-                      params: {
-                        peptideId: doseSheet.peptide_id,
-                        prefillDoseMcg: doseSheet.amount_mcg,
-                      },
-                    } as any);
-                  }}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    backgroundColor: t.ink,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Log another
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onDeleteDose(doseSheet.id)}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.danger,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.danger, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Delete dose (restores vial)
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setDoseSheet(null)}
-                  style={{ padding: space.md, alignItems: 'center' }}
-                >
-                  <Text style={{ color: t.ink3, fontSize: 14 }}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Dose action sheet */}
+      <EditorialSheet visible={!!doseSheet} onClose={() => setDoseSheet(null)}>
+        {doseSheet ? (
+          <>
+            <SheetHeader
+              title={findPeptide(doseSheet.peptide_id)?.name ?? doseSheet.peptide_id}
+              detail={`${doseSheet.amount_mcg} mcg · ${doseSheet.route} · ${new Date(
+                doseSheet.taken_at
+              ).toLocaleString()}`}
+            />
+            <View style={{ marginTop: 18, gap: 12 }}>
+              <EditorialButton
+                fullWidth
+                onPress={() => {
+                  setDoseSheet(null);
+                  router.push({
+                    pathname: '/log-dose',
+                    params: {
+                      peptideId: doseSheet.peptide_id,
+                      prefillDoseMcg: doseSheet.amount_mcg,
+                    },
+                  } as any);
+                }}
+              >
+                Log another
+              </EditorialButton>
+              <EditorialButton
+                variant="secondary"
+                fullWidth
+                onPress={() => onDeleteDose(doseSheet.id)}
+              >
+                Delete dose (restores vial)
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={() => setDoseSheet(null)}>
+                Cancel
+              </EditorialButton>
+            </View>
+          </>
+        ) : null}
+      </EditorialSheet>
 
-      {/* Vial bottom sheet — legacy palette. */}
-      <Modal
-        visible={!!vialSheet}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setVialSheet(null)}
-      >
-        <Pressable
-          onPress={() => setVialSheet(null)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: t.surface,
-              paddingTop: space.lg,
-              paddingBottom: insets.bottom + space.lg,
-              paddingHorizontal: space.xl,
-              borderTopLeftRadius: radius.lg,
-              borderTopRightRadius: radius.lg,
-              gap: 8,
-            }}
-          >
-            {vialSheet ? (
-              <>
-                <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
-                  {findPeptide(vialSheet.peptide_id)?.name ?? vialSheet.peptide_id} vial
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: t.ink3,
-                    fontFamily: font.mono,
-                    marginBottom: space.md,
-                  }}
-                >
-                  {vialSheet.remaining_mg.toFixed(2)} / {vialSheet.strength_mg} mg ·{' '}
-                  {vialSheet.concentration.toFixed(2)} mg/mL
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setVialSheet(null);
-                    router.push({
-                      pathname: '/log-dose',
-                      params: { peptideId: vialSheet.peptide_id },
-                    } as any);
-                  }}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    backgroundColor: t.ink,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Log a dose from this vial
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onMarkDepleted(vialSheet.id)}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.lineStrong,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Mark depleted
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onDeleteVial(vialSheet.id)}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.danger,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.danger, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Delete vial
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setVialSheet(null)}
-                  style={{ padding: space.md, alignItems: 'center' }}
-                >
-                  <Text style={{ color: t.ink3, fontSize: 14 }}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Vial action sheet */}
+      <EditorialSheet visible={!!vialSheet} onClose={() => setVialSheet(null)}>
+        {vialSheet ? (
+          <>
+            <SheetHeader
+              title={`${findPeptide(vialSheet.peptide_id)?.name ?? vialSheet.peptide_id} vial`}
+              detail={`${vialSheet.remaining_mg.toFixed(2)} / ${vialSheet.strength_mg} mg · ${vialSheet.concentration.toFixed(
+                2
+              )} mg/mL`}
+            />
+            <View style={{ marginTop: 18, gap: 12 }}>
+              <EditorialButton
+                fullWidth
+                onPress={() => {
+                  setVialSheet(null);
+                  router.push({
+                    pathname: '/log-dose',
+                    params: { peptideId: vialSheet.peptide_id },
+                  } as any);
+                }}
+              >
+                Log a dose from this vial
+              </EditorialButton>
+              <EditorialButton
+                variant="secondary"
+                fullWidth
+                onPress={() => onMarkDepleted(vialSheet.id)}
+              >
+                Mark depleted
+              </EditorialButton>
+              <EditorialButton
+                variant="secondary"
+                fullWidth
+                onPress={() => onDeleteVial(vialSheet.id)}
+              >
+                Delete vial
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={() => setVialSheet(null)}>
+                Cancel
+              </EditorialButton>
+            </View>
+          </>
+        ) : null}
+      </EditorialSheet>
 
-      {/* Skip sheet — legacy palette. */}
-      <Modal
-        visible={!!skipSheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSkipSheet(null)}
-      >
-        <Pressable
-          onPress={() => setSkipSheet(null)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: t.bg,
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
-              padding: space.lg,
-              paddingBottom: insets.bottom + space.lg,
-              gap: space.md,
-            }}
-          >
-            {skipSheet ? (
-              <>
-                <Text style={{ fontSize: 18, fontFamily: font.sansBold, color: t.ink }}>
-                  Why skip {skipSheet.peptideName}
-                  {skipSheet.window !== 'ALL' ? ` (${skipSheet.window})` : ''} today?
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {[
-                    { key: 'forgot', label: 'Forgot' },
-                    { key: 'traveling', label: 'Traveling' },
-                    { key: 'side_effect', label: 'Side effect' },
-                    { key: 'running_low', label: 'Running low' },
-                    { key: 'rest_day', label: 'Rest day' },
-                    { key: 'other', label: 'Other' },
-                  ].map((r) => {
-                    const on = skipReason === r.key;
-                    return (
-                      <Pressable
-                        key={r.key}
-                        onPress={() => setSkipReason(r.key)}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: on }}
-                        style={{
-                          paddingVertical: 8,
-                          paddingHorizontal: 12,
-                          borderRadius: radius.pill,
-                          backgroundColor: on ? t.ink : t.surface,
-                          borderWidth: 1,
-                          borderColor: on ? t.ink : t.line,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontFamily: font.sansMed,
-                            color: on ? t.bg : t.ink,
-                          }}
-                        >
-                          {r.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <TextInput
-                  value={skipNote}
-                  onChangeText={setSkipNote}
-                  placeholder="Optional note"
-                  placeholderTextColor={t.ink4}
-                  multiline
-                  maxLength={300}
-                  style={{
-                    borderWidth: 1,
-                    borderColor: t.line,
-                    borderRadius: radius.md,
-                    padding: space.md,
-                    color: t.ink,
-                    fontSize: 14,
-                    minHeight: 48,
-                    textAlignVertical: 'top',
-                  }}
-                />
-                <Pressable
-                  onPress={confirmSkip}
-                  accessibilityRole="button"
-                  accessibilityLabel="Confirm skip"
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    backgroundColor: t.ink,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Confirm skip
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setSkipSheet(null)}
-                  style={{ padding: space.md, alignItems: 'center' }}
-                >
-                  <Text style={{ color: t.ink3, fontSize: 14 }}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Skip sheet */}
+      <EditorialSheet visible={!!skipSheet} onClose={() => setSkipSheet(null)}>
+        {skipSheet ? (
+          <>
+            <Text
+              style={{
+                fontFamily: ed.typography.eyebrow.fontFamily,
+                fontSize: ed.typography.eyebrow.fontSize,
+                letterSpacing: ed.typography.eyebrow.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+                marginBottom: 12,
+              }}
+            >
+              Skip · {skipSheet.window !== 'ALL' ? skipSheet.window : 'today'}
+            </Text>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 24,
+                lineHeight: 30,
+                letterSpacing: -0.4,
+                color: ed.colors.ink1,
+              }}
+            >
+              Why skip{' '}
+              <Text style={{ fontFamily: ed.fraunces('Fraunces_400Regular_Italic') }}>
+                {skipSheet.peptideName}
+              </Text>
+              ?
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 18 }}>
+              {[
+                { key: 'forgot', label: 'Forgot' },
+                { key: 'traveling', label: 'Traveling' },
+                { key: 'side_effect', label: 'Side effect' },
+                { key: 'running_low', label: 'Running low' },
+                { key: 'rest_day', label: 'Rest day' },
+                { key: 'other', label: 'Other' },
+              ].map((r) => {
+                const on = skipReason === r.key;
+                return (
+                  <Pressable
+                    key={r.key}
+                    onPress={() => setSkipReason(r.key)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                    style={{
+                      paddingVertical: 8,
+                      paddingHorizontal: 14,
+                      backgroundColor: on ? ed.colors.ink1 : 'transparent',
+                      borderWidth: 1,
+                      borderColor: on ? ed.colors.ink1 : ed.colors.lineStrong,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: on ? ed.colors.bg : ed.colors.ink2,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {r.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <TextInput
+              value={skipNote}
+              onChangeText={setSkipNote}
+              placeholder="Optional note"
+              placeholderTextColor={ed.colors.ink4}
+              multiline
+              maxLength={300}
+              selectionColor={ed.colors.brand}
+              style={{
+                marginTop: 14,
+                paddingVertical: 14,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: ed.colors.line,
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 16,
+                lineHeight: 24,
+                color: ed.colors.ink1,
+                minHeight: 60,
+                textAlignVertical: 'top',
+              }}
+            />
+            <View style={{ marginTop: 18, gap: 12 }}>
+              <EditorialButton fullWidth onPress={confirmSkip}>
+                Confirm skip
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={() => setSkipSheet(null)}>
+                Cancel
+              </EditorialButton>
+            </View>
+          </>
+        ) : null}
+      </EditorialSheet>
     </>
   );
 }
