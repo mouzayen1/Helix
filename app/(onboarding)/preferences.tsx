@@ -1,17 +1,21 @@
-// Preferences — spec v2.0 onboarding step 3. Safe defaults; all skippable.
+// Preferences — editorial rebuild. Sharp-corner segmented toggles
+// (mono labels) replace the soft-fill pills. Three sections share the
+// same component for visual rhythm.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { useProfile } from '../../lib/profile-context';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 type Unit = 'lb' | 'kg';
 type Vol = 'units' | 'mL';
 type Theme = 'system' | 'light' | 'dark';
 
-function Toggle<T extends string>({
+function Segmented<T extends string>({
   label,
   value,
   options,
@@ -22,29 +26,11 @@ function Toggle<T extends string>({
   options: { id: T; label: string }[];
   onChange: (v: T) => void;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   return (
-    <View style={{ gap: space.sm }}>
-      <Text
-        style={{
-          color: t.ink3,
-          fontSize: 11,
-          fontFamily: font.sansSemi,
-          letterSpacing: 1.1,
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
-      </Text>
-      <View
-        style={{
-          flexDirection: 'row',
-          gap: 4,
-          padding: 4,
-          borderRadius: radius.md,
-          backgroundColor: t.surfaceAlt,
-        }}
-      >
+    <View style={{ gap: 12 }}>
+      <EyebrowLabel withRule>{label}</EyebrowLabel>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
         {options.map((opt) => {
           const active = opt.id === value;
           return (
@@ -53,17 +39,20 @@ function Toggle<T extends string>({
               onPress={() => onChange(opt.id)}
               style={{
                 flex: 1,
-                padding: space.md,
-                borderRadius: radius.sm,
-                backgroundColor: active ? t.surface : 'transparent',
+                paddingVertical: 14,
                 alignItems: 'center',
+                backgroundColor: active ? ed.colors.ink1 : 'transparent',
+                borderWidth: 1,
+                borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
               }}
             >
               <Text
                 style={{
-                  color: active ? t.ink : t.ink2,
-                  fontSize: 14,
-                  fontFamily: active ? font.sansSemi : font.sansMed,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: active ? ed.colors.bg : ed.colors.ink2,
+                  textTransform: 'uppercase',
                 }}
               >
                 {opt.label}
@@ -77,17 +66,13 @@ function Toggle<T extends string>({
 }
 
 export default function Preferences() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, update } = useProfile();
 
-  const [weightUnit, setWeightUnit] = useState<Unit>(
-    (profile?.unit_weight as Unit) ?? 'lb'
-  );
-  const [volUnit, setVolUnit] = useState<Vol>(
-    (profile?.unit_volume as Vol) ?? 'units'
-  );
+  const [weightUnit, setWeightUnit] = useState<Unit>((profile?.unit_weight as Unit) ?? 'lb');
+  const [volUnit, setVolUnit] = useState<Vol>((profile?.unit_volume as Vol) ?? 'units');
   const [theme, setTheme] = useState<Theme>((profile?.theme as Theme) ?? 'system');
 
   const proceed = async () => {
@@ -103,59 +88,58 @@ export default function Preferences() {
     <View
       style={{
         flex: 1,
-        backgroundColor: t.bg,
-        paddingTop: insets.top + space.xl,
-        paddingBottom: insets.bottom + space.xl,
-        paddingHorizontal: space.xl,
+        backgroundColor: ed.colors.bg,
+        paddingTop: insets.top + 28,
+        paddingBottom: insets.bottom + 24,
+        paddingHorizontal: 24,
       }}
     >
-      <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 4 OF 5
-      </Text>
-
       <Text
         style={{
-          marginTop: space.lg,
-          fontSize: 34,
-          lineHeight: 40,
-          fontFamily: font.sansBold,
-          color: t.ink,
-          letterSpacing: -1,
+          fontFamily: ed.typography.eyebrow.fontFamily,
+          fontSize: ed.typography.eyebrow.fontSize,
+          letterSpacing: ed.typography.eyebrow.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
         }}
       >
-        Quick preferences.
+        Step 4 of 5
       </Text>
-      <Text
-        style={{
-          marginTop: space.sm,
-          color: t.ink2,
-          fontSize: 15,
-          lineHeight: 22,
-        }}
-      >
-        You can change any of this later in Settings.
-      </Text>
+      <View style={{ marginTop: 18 }}>
+        <EditorialHeadline size="title1">{`Quick *preferences*.`}</EditorialHeadline>
+        <Text
+          style={{
+            marginTop: 8,
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            lineHeight: ed.typography.bodySm.lineHeight,
+            color: ed.colors.ink3,
+          }}
+        >
+          Change any of this later in Settings.
+        </Text>
+      </View>
 
-      <View style={{ flex: 1, gap: space.xl, paddingTop: space['2xl'] }}>
-        <Toggle
+      <View style={{ flex: 1, gap: 32, paddingTop: 36 }}>
+        <Segmented
           label="Weight"
           value={weightUnit}
           options={[
-            { id: 'lb', label: 'Pounds (lb)' },
-            { id: 'kg', label: 'Kilograms (kg)' },
+            { id: 'lb', label: 'Pounds' },
+            { id: 'kg', label: 'Kilograms' },
           ]}
           onChange={setWeightUnit}
         />
-        <Toggle
+        <Segmented
           label="Syringe volume"
           value={volUnit}
           options={[
-            { id: 'units', label: 'Insulin units' },
+            { id: 'units', label: 'Units' },
             { id: 'mL', label: 'Milliliters' },
           ]}
           onChange={setVolUnit}
         />
-        <Toggle
+        <Segmented
           label="Theme"
           value={theme}
           options={[
@@ -167,19 +151,9 @@ export default function Preferences() {
         />
       </View>
 
-      <Pressable
-        onPress={proceed}
-        style={{
-          backgroundColor: t.ink,
-          padding: space.lg,
-          borderRadius: radius.lg,
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: t.bg, fontSize: 16, fontFamily: font.sansSemi }}>
-          Continue
-        </Text>
-      </Pressable>
+      <EditorialButton fullWidth onPress={proceed}>
+        Continue
+      </EditorialButton>
     </View>
   );
 }

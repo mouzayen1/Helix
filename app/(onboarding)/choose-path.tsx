@@ -1,14 +1,14 @@
-// Choose path — spec v2.0 onboarding step 4.
-// Phase 1 is local-only so the "Create account" option is shown disabled for now.
+// Choose path — editorial rebuild. Two stacked options framed by
+// hairlines instead of fills; brass eyebrow on the recommended one.
 import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { useProfile } from '../../lib/profile-context';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function ChoosePath() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, update } = useProfile();
@@ -30,100 +30,129 @@ export default function ChoosePath() {
     <View
       style={{
         flex: 1,
-        backgroundColor: t.bg,
-        paddingTop: insets.top + space.xl,
-        paddingBottom: insets.bottom + space.xl,
-        paddingHorizontal: space.xl,
+        backgroundColor: ed.colors.bg,
+        paddingTop: insets.top + 28,
+        paddingBottom: insets.bottom + 24,
+        paddingHorizontal: 24,
       }}
     >
-      <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 5 OF 5
-      </Text>
-
       <Text
         style={{
-          marginTop: space.lg,
-          fontSize: 34,
-          lineHeight: 40,
-          fontFamily: font.sansBold,
-          color: t.ink,
-          letterSpacing: -1,
+          fontFamily: ed.typography.eyebrow.fontFamily,
+          fontSize: ed.typography.eyebrow.fontSize,
+          letterSpacing: ed.typography.eyebrow.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
         }}
       >
-        How do you want{'\n'}to use Helix?
+        Step 5 of 5
       </Text>
+      <View style={{ marginTop: 18 }}>
+        <EditorialHeadline size="display">{`How do you want to *use* Helix?`}</EditorialHeadline>
+      </View>
 
-      <View style={{ flex: 1, gap: space.md, paddingTop: space['2xl'] }}>
+      <View style={{ flex: 1, gap: 18, paddingTop: 36 }}>
         <Pressable
           onPress={useLocally}
+          accessibilityRole="button"
           style={{
-            borderRadius: radius.lg,
-            borderWidth: 2,
-            borderColor: t.accent,
-            backgroundColor: t.accentSoft,
-            padding: space.xl,
-            gap: space.sm,
+            borderTopWidth: 2,
+            borderBottomWidth: 1,
+            borderTopColor: ed.colors.brand,
+            borderBottomColor: ed.colors.brandLine,
+            paddingVertical: 24,
+            gap: 10,
           }}
         >
           <Text
             style={{
-              color: t.accentInk,
-              fontSize: 11,
-              fontFamily: font.sansSemi,
-              letterSpacing: 1.1,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.brand,
+              textTransform: 'uppercase',
             }}
           >
-            RECOMMENDED
+            Recommended
           </Text>
-          <Text style={{ color: t.ink, fontSize: 20, fontFamily: font.sansBold }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 26,
+              letterSpacing: -0.5,
+              color: ed.colors.ink1,
+            }}
+          >
             Use Helix locally
           </Text>
-          <Text style={{ color: t.ink2, fontSize: 14, lineHeight: 20 }}>
-            Your data stays on this device. No sign-in required. You can create an
-            account later to sync across devices.
+          <Text
+            style={{
+              fontFamily: ed.typography.bodyMd.fontFamily,
+              fontSize: 15,
+              lineHeight: 23,
+              color: ed.colors.ink2,
+            }}
+          >
+            Your data stays on this device. No sign-in required. Create an account later to sync
+            across devices.
           </Text>
         </Pressable>
 
         <View
           style={{
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.xl,
-            gap: space.sm,
-            opacity: 0.6,
+            borderTopWidth: 1,
+            borderBottomWidth: 1,
+            borderColor: ed.colors.line,
+            paddingVertical: 24,
+            gap: 10,
+            opacity: 0.55,
           }}
         >
           <Text
             style={{
-              color: t.ink3,
-              fontSize: 11,
-              fontFamily: font.sansSemi,
-              letterSpacing: 1.1,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
             }}
           >
-            COMING SOON
+            Coming soon
           </Text>
-          <Text style={{ color: t.ink, fontSize: 20, fontFamily: font.sansBold }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 26,
+              letterSpacing: -0.5,
+              color: ed.colors.ink2,
+            }}
+          >
             Create an account
           </Text>
-          <Text style={{ color: t.ink2, fontSize: 14, lineHeight: 20 }}>
-            Sync across iOS, Android, and web. Export. Backup. Available in a
-            future update.
+          <Text
+            style={{
+              fontFamily: ed.typography.bodyMd.fontFamily,
+              fontSize: 15,
+              lineHeight: 23,
+              color: ed.colors.ink3,
+            }}
+          >
+            Sync across iOS, Android, and web. Export. Backup. Available in a future update.
           </Text>
         </View>
       </View>
 
       <Text
         style={{
-          color: t.ink3,
-          fontSize: 12,
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
           textAlign: 'center',
-          fontFamily: font.sansMed,
-          marginBottom: space.sm,
         }}
       >
-        You can change your mind anytime from Settings.
+        Change your mind anytime in Settings.
       </Text>
     </View>
   );

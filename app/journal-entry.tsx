@@ -1,12 +1,15 @@
-// Journal entry — spec v2.0 §10. Upsert by entry_date.
+// Journal entry — editorial rebuild. Same upsertJournal flow. Visual:
+// editorial modal header, serif headline, mood as 5 sharp-corner tiles
+// with eyebrow labels, sliders rendered as 11 hairline ticks per row,
+// sleep-hours stepper, hairline-bordered tags, hairline-framed body.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconClose } from '../components/Icons';
+import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
+import { useEditorialTheme } from '../lib/design/theme';
 import { getJournal, upsertJournal } from '../lib/db';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
 
 const MOODS = [
   { value: 1, label: 'Rough' },
@@ -23,7 +26,7 @@ const TAGS = [
 ];
 
 export default function JournalEntryModal() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const today = new Date().toISOString().slice(0, 10);
@@ -82,219 +85,250 @@ export default function JournalEntryModal() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       <View
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <IconClose size={16} color={t.ink3} />
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ×
+          </Text>
         </Pressable>
-        <Text style={{ color: t.ink, fontSize: 15, fontFamily: font.sansSemi }}>Journal</Text>
+        <Text
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          Journal
+        </Text>
         <Pressable onPress={save} disabled={saving} hitSlop={10}>
-          <Text style={{ color: saving ? t.ink3 : t.accent, fontSize: 14, fontFamily: font.sansSemi }}>
-            Save
+          <Text
+            style={{
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: saving ? ed.colors.ink3 : ed.colors.brand,
+              textTransform: 'uppercase',
+            }}
+          >
+            {saving ? 'Saving' : 'Save'}
           </Text>
         </Pressable>
       </View>
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 64 }}
       >
         <Text
           style={{
-            fontSize: 24,
-            fontFamily: font.sansBold,
-            color: t.ink,
-            letterSpacing: -0.5,
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
           }}
         >
-          How are you today?
-        </Text>
-        <Text style={{ color: t.ink3, fontSize: 12, fontFamily: font.mono, marginTop: 2 }}>
           {today}
         </Text>
+        <EditorialHeadline size="title1">{`How are *you* today?`}</EditorialHeadline>
 
         {/* Mood */}
-        <Text
-          style={{
-            marginTop: space.xl,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-            marginBottom: 8,
-          }}
-        >
-          Mood
-        </Text>
-        <View style={{ flexDirection: 'row', gap: 4 }}>
-          {MOODS.map((m) => {
-            const active = m.value === mood;
-            return (
-              <Pressable
-                key={m.value}
-                onPress={() => setMood(m.value)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: radius.md,
-                  backgroundColor: active ? t.ink : t.surface,
-                  borderWidth: 1,
-                  borderColor: active ? t.ink : t.line,
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <Text style={{ fontSize: 14, fontFamily: font.sansBold, color: active ? t.bg : t.ink }}>
-                  {m.value}
-                </Text>
-                <Text style={{ fontSize: 10, color: active ? t.bg : t.ink3, fontFamily: font.sansMed }}>
-                  {m.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={{ marginTop: 32 }}>
+          <EyebrowLabel withRule>Mood</EyebrowLabel>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 14 }}>
+            {MOODS.map((m) => {
+              const active = m.value === mood;
+              return (
+                <Pressable
+                  key={m.value}
+                  onPress={() => setMood(m.value)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 14,
+                    alignItems: 'center',
+                    backgroundColor: active ? ed.colors.ink1 : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
+                    gap: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: ed.fraunces(active ? 'Fraunces_400Regular' : 'Fraunces_300Light'),
+                      fontSize: 22,
+                      color: active ? ed.colors.bg : ed.colors.ink1,
+                    }}
+                  >
+                    {m.value}
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink3,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {m.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Sliders */}
         <SliderRow label="Energy" value={energy} onChange={setEnergy} />
         <SliderRow label="Sleep quality" value={sleepQuality} onChange={setSleepQuality} />
         <SliderRow label="Libido" value={libido} onChange={setLibido} />
         <SliderRow label="Recovery" value={recovery} onChange={setRecovery} />
 
-        {/* Sleep hours */}
-        <View style={{ marginTop: space.md }}>
-          <Text
-            style={{
-              fontSize: 11,
-              color: t.ink3,
-              letterSpacing: 0.9,
-              fontFamily: font.sansSemi,
-              textTransform: 'uppercase',
-              marginBottom: 6,
-            }}
-          >
-            Sleep hours
-          </Text>
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>Sleep hours</EyebrowLabel>
           <View
             style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-              padding: space.md,
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 8,
+              paddingVertical: 14,
             }}
           >
             <Pressable
               onPress={() => setSleepHours((v) => Math.max(0, Math.round((v - 0.25) * 4) / 4))}
-              hitSlop={6}
+              hitSlop={8}
             >
-              <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi, paddingHorizontal: 8 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.dataLg.fontFamily,
+                  fontSize: 22,
+                  color: ed.colors.ink3,
+                  paddingHorizontal: 14,
+                }}
+              >
                 −
               </Text>
             </Pressable>
-            <Text style={{ flex: 1, textAlign: 'center', fontSize: 18, fontFamily: font.monoSemi, color: t.ink }}>
-              {sleepHours.toFixed(2)} h
-            </Text>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' }}>
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_300Light'),
+                  fontSize: 36,
+                  letterSpacing: -0.6,
+                  color: ed.colors.ink1,
+                }}
+              >
+                {sleepHours.toFixed(2)}
+              </Text>
+              <Text
+                style={{
+                  marginLeft: 8,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                h
+              </Text>
+            </View>
             <Pressable
               onPress={() => setSleepHours((v) => Math.min(24, Math.round((v + 0.25) * 4) / 4))}
-              hitSlop={6}
+              hitSlop={8}
             >
-              <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi, paddingHorizontal: 8 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.dataLg.fontFamily,
+                  fontSize: 22,
+                  color: ed.colors.ink3,
+                  paddingHorizontal: 14,
+                }}
+              >
                 +
               </Text>
             </Pressable>
           </View>
         </View>
 
-        {/* Tags */}
-        <Text
-          style={{
-            marginTop: space.md,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-            marginBottom: 6,
-          }}
-        >
-          Tags
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-          {TAGS.map((tag) => {
-            const active = tags.includes(tag);
-            return (
-              <Pressable
-                key={tag}
-                onPress={() => toggleTag(tag)}
-                style={{
-                  paddingVertical: 6,
-                  paddingHorizontal: 10,
-                  borderRadius: radius.pill,
-                  backgroundColor: active ? t.accent : 'transparent',
-                  borderWidth: 1,
-                  borderColor: active ? t.accent : t.line,
-                }}
-              >
-                <Text
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>Tags</EyebrowLabel>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+            {TAGS.map((tag) => {
+              const active = tags.includes(tag);
+              return (
+                <Pressable
+                  key={tag}
+                  onPress={() => toggleTag(tag)}
                   style={{
-                    fontSize: 12,
-                    color: active ? '#fff' : t.ink2,
-                    fontFamily: font.sansMed,
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    backgroundColor: active ? ed.colors.brand : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? ed.colors.brand : ed.colors.lineStrong,
                   }}
                 >
-                  {tag}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {tag}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Body */}
-        <Text
-          style={{
-            marginTop: space.md,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-            marginBottom: 6,
-          }}
-        >
-          Notes
-        </Text>
-        <TextInput
-          value={body}
-          onChangeText={setBody}
-          placeholder="What did today feel like?"
-          placeholderTextColor={t.ink4}
-          multiline
-          style={{
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            color: t.ink,
-            fontSize: 14,
-            minHeight: 120,
-            textAlignVertical: 'top',
-          }}
-        />
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>Notes</EyebrowLabel>
+          <TextInput
+            value={body}
+            onChangeText={setBody}
+            placeholder="What did today feel like?"
+            placeholderTextColor={ed.colors.ink4}
+            multiline
+            selectionColor={ed.colors.brand}
+            style={{
+              marginTop: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 0,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.line,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 16,
+              lineHeight: 24,
+              letterSpacing: -0.2,
+              color: ed.colors.ink1,
+              minHeight: 140,
+              textAlignVertical: 'top',
+            }}
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -309,33 +343,52 @@ function SliderRow({
   value: number;
   onChange: (v: number) => void;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   return (
-    <View style={{ marginTop: space.md }}>
+    <View style={{ marginTop: 28 }}>
       <View
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 6,
+          alignItems: 'baseline',
+          marginBottom: 12,
         }}
       >
         <Text
           style={{
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
             textTransform: 'uppercase',
           }}
         >
           {label}
         </Text>
-        <Text style={{ fontSize: 14, color: t.ink, fontFamily: font.monoSemi }}>
-          {value} / 10
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 22,
+              letterSpacing: -0.3,
+              color: ed.colors.ink1,
+            }}
+          >
+            {value}
+          </Text>
+          <Text
+            style={{
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
+              marginLeft: 4,
+            }}
+          >
+            /10
+          </Text>
+        </View>
       </View>
-      <View style={{ flexDirection: 'row', gap: 3 }}>
+      <View style={{ flexDirection: 'row', gap: 4 }}>
         {Array.from({ length: 11 }).map((_, i) => {
           const active = i <= value;
           return (
@@ -345,9 +398,9 @@ function SliderRow({
               style={{
                 flex: 1,
                 height: 28,
-                borderRadius: 4,
-                backgroundColor: active ? t.accent : t.surfaceAlt,
-                opacity: active ? 0.5 + i / 20 : 1,
+                backgroundColor: active ? ed.colors.brand : 'transparent',
+                borderWidth: 1,
+                borderColor: active ? ed.colors.brand : ed.colors.line,
               }}
               hitSlop={4}
             />

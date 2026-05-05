@@ -1,11 +1,12 @@
-// Tab bar — spec v2.0 §09. 4 tabs + center quick-log FAB.
+// Tab bar — editorial v1. Sharp-cornered, hairline-topped, mono-cap
+// labels. Center quick-log control loses the floating pill in favor of
+// a square brass tile that aligns with the bar baseline. Icons are
+// retained as 1.2-px hairline glyphs for scan speed.
 import { Tabs, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { IconChart, IconHome, IconPlus } from '../../components/Icons';
-import { useTheme } from '../../theme/ThemeContext';
-import { font } from '../../theme/tokens';
+import { useEditorialTheme } from '../../lib/design/theme';
 
 type TabItem = {
   name: string;
@@ -14,37 +15,68 @@ type TabItem = {
   Icon: (p: { size?: number; color?: string }) => React.ReactElement;
 };
 
-function IconLibrary({ size = 22, color = '#000' }: { size?: number; color?: string }) {
+function HairlineSvg({
+  size,
+  color,
+  d,
+}: {
+  size: number;
+  color: string;
+  d: string | string[];
+}) {
+  const paths = Array.isArray(d) ? d : [d];
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M4 3h6a2 2 0 012 2v14a2 2 0 00-2-2H4V3z" />
-      <Path d="M20 3h-6a2 2 0 00-2 2v14a2 2 0 012-2h6V3z" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {paths.map((path, i) => (
+        <Path
+          key={i}
+          d={path}
+          stroke={color}
+          strokeWidth={1.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
     </Svg>
   );
 }
 
-function IconStacks({ size = 22, color = '#000' }: { size?: number; color?: string }) {
+function IconToday({ size = 18, color = '#000' }: { size?: number; color?: string }) {
+  return <HairlineSvg size={size} color={color} d={['M3 12L12 4l9 8', 'M5 10v10h14V10']} />;
+}
+function IconLibrary({ size = 18, color = '#000' }: { size?: number; color?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M3 8l9-5 9 5-9 5-9-5z" />
-      <Path d="M3 13l9 5 9-5" />
-      <Path d="M3 18l9 5 9-5" />
-    </Svg>
+    <HairlineSvg
+      size={size}
+      color={color}
+      d={['M4 3h6a2 2 0 012 2v14a2 2 0 00-2-2H4V3z', 'M20 3h-6a2 2 0 00-2 2v14a2 2 0 012-2h6V3z']}
+    />
   );
+}
+function IconStacks({ size = 18, color = '#000' }: { size?: number; color?: string }) {
+  return (
+    <HairlineSvg
+      size={size}
+      color={color}
+      d={['M3 8l9-5 9 5-9 5-9-5z', 'M3 13l9 5 9-5', 'M3 18l9 5 9-5']}
+    />
+  );
+}
+function IconChart({ size = 18, color = '#000' }: { size?: number; color?: string }) {
+  return <HairlineSvg size={size} color={color} d={['M4 20V10', 'M10 20V4', 'M16 20v-7', 'M22 20H2']} />;
 }
 
 const LEFT: TabItem[] = [
-  { name: 'index', route: '/(tabs)', label: 'Today', Icon: IconHome },
-  { name: 'library', route: '/(tabs)/library', label: 'Library', Icon: IconLibrary as any },
+  { name: 'index', route: '/(tabs)', label: 'Today', Icon: IconToday },
+  { name: 'library', route: '/(tabs)/library', label: 'Library', Icon: IconLibrary },
 ];
-
 const RIGHT: TabItem[] = [
-  { name: 'stacks', route: '/(tabs)/stacks', label: 'Stacks', Icon: IconStacks as any },
+  { name: 'stacks', route: '/(tabs)/stacks', label: 'Stacks', Icon: IconStacks },
   { name: 'progress', route: '/(tabs)/progress', label: 'Progress', Icon: IconChart },
 ];
 
 function CustomTabBar({ state, navigation }: any) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentName = state.routes[state.index]?.name;
@@ -57,15 +89,19 @@ function CustomTabBar({ state, navigation }: any) {
         onPress={() => navigation.navigate(item.name)}
         style={styles.tab}
         hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={item.label}
+        accessibilityState={{ selected: active }}
       >
-        <item.Icon size={22} color={active ? t.ink : t.ink3} />
+        <item.Icon size={18} color={active ? ed.colors.ink1 : ed.colors.ink3} />
         <Text
           style={{
-            fontSize: 10,
-            fontFamily: active ? font.sansSemi : font.sansMed,
-            color: active ? t.ink : t.ink3,
-            letterSpacing: 0.2,
-            marginTop: 3,
+            marginTop: 6,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: active ? ed.colors.ink1 : ed.colors.ink3,
+            textTransform: 'uppercase',
           }}
         >
           {item.label}
@@ -79,8 +115,8 @@ function CustomTabBar({ state, navigation }: any) {
       style={[
         styles.bar,
         {
-          backgroundColor: t.surface,
-          borderTopColor: t.line,
+          backgroundColor: ed.colors.bg,
+          borderTopColor: ed.colors.line,
           paddingBottom: Math.max(insets.bottom, 10),
         },
       ]}
@@ -88,10 +124,21 @@ function CustomTabBar({ state, navigation }: any) {
       {LEFT.map(renderTab)}
       <Pressable
         onPress={() => router.push('/log-dose')}
-        style={[styles.fab, { backgroundColor: t.ink, shadowColor: t.ink }]}
+        accessibilityRole="button"
+        accessibilityLabel="Log a dose"
         hitSlop={8}
+        style={[styles.fab, { backgroundColor: ed.colors.brand }]}
       >
-        <IconPlus size={24} color={t.bg} />
+        <Text
+          style={{
+            fontFamily: ed.fraunces('Fraunces_300Light'),
+            fontSize: 32,
+            color: ed.colors.bg,
+            lineHeight: 32,
+          }}
+        >
+          +
+        </Text>
       </Pressable>
       {RIGHT.map(renderTab)}
     </View>
@@ -118,18 +165,13 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
   },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 6 },
   fab: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
+    width: 56,
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -20,
+    marginTop: -18,
     marginHorizontal: 6,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 8,
   },
 });

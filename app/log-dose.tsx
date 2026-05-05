@@ -1,14 +1,18 @@
-// Log dose — spec v2.0 §10 + extras.
-// Sections: Your vials (top) + All peptides (below). Tap non-vial -> recon.
-// Typed dose input + smart preset chips from peptide's research range.
-// Prefill dose from active cycle's today protocol when peptide matches.
-// Site card opens /injection-sites modal.
+// Log dose — editorial rebuild. Same data flow (logDose, vial picking,
+// duplicate guard, prefill from cycle, back-dating to 30 days). Visual
+// is the editorial modal pattern throughout: hairline-divided sections,
+// large serif dose input, sharp-corner chips, mono uppercase labels,
+// EditorialButton primary save.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronRight, IconClock, IconClose } from '../components/Icons';
-import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
+import { EditorialButton } from '../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../components/editorial/HairlineRow';
+import { DosingDisclaimer } from '../components/Primitives';
+import { useEditorialTheme } from '../lib/design/theme';
 import {
   getActiveCycle,
   getVialsForPeptide,
@@ -22,25 +26,13 @@ import {
 } from '../lib/db';
 import { haptic } from '../lib/haptics';
 import { findPeptide, PEPTIDES } from '../lib/peptides';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
 
 const ROUTES = ['SubQ', 'IM', 'Oral', 'Topical', 'Intranasal'] as const;
 type Route = (typeof ROUTES)[number];
 
-// Parse a peptide's research dose string like "200–500 mcg/day" or
-// "0.25–2.4 mg weekly" into a numeric range in mcg.
-//
-// Caller note: when a Peptide has `defaultDoseMcg`, prefer that — this
-// parser is only used for the LO / HI range chips. The unit detection
-// here is intentionally lenient: any "mg" appearing anywhere after the
-// last digit converts the whole range from mg to mcg.
 function parseDoseRange(dose: string): { lo: number; mid: number; hi: number } {
   const nums = [...dose.matchAll(/(\d+(?:\.\d+)?)/g)].map((m) => parseFloat(m[1]));
   if (nums.length === 0) return { lo: 100, mid: 250, hi: 500 };
-  // Treat the dose as mg-denominated if "mg" appears anywhere — covers
-  // "0.25–2.4 mg weekly", "1–12 mg weekly", "100–500 mg SubQ", etc.
-  // Without this, "0.25 mg" was parsed as 0.25 mcg.
   const isMg = /\bmg\b/i.test(dose);
   const factor = isMg ? 1000 : 1;
   const vals = nums.map((n) => n * factor);
@@ -54,7 +46,7 @@ function parseDoseRange(dose: string): { lo: number; mid: number; hi: number } {
 }
 
 export default function LogDoseModal() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { peptideId: initialId, prefillDoseMcg, site: initialSite } = useLocalSearchParams<{
@@ -72,15 +64,9 @@ export default function LogDoseModal() {
   const [note, setNote] = useState('');
   const [vial, setVial] = useState<Vial | null>(null);
   const [vials, setVials] = useState<Vial[]>([]);
-  // All active vials for the currently selected peptide. When >1 we show
-  // a small picker so the user can choose which vial the dose came from.
   const [peptideVials, setPeptideVials] = useState<Vial[]>([]);
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // When the dose was actually administered. Defaults to now; user can
-  // back-date within the last 30 days (forgetting to log yesterday's dose,
-  // logging a dose taken earlier today, etc.).
   const [takenAtDate, setTakenAtDate] = useState<Date>(new Date());
   const [editingTime, setEditingTime] = useState<boolean>(false);
 
@@ -97,7 +83,6 @@ export default function LogDoseModal() {
         setVials(vs);
         setActiveCycle(c);
         if (!peptideId) {
-          // Default: first vial's peptide if any, else first peptide in catalog.
           if (vs.length) {
             setPeptideId(vs[0].peptide_id);
             setVial(vs[0]);
@@ -105,7 +90,6 @@ export default function LogDoseModal() {
             setPeptideId(PEPTIDES[0].id);
           }
         }
-        // Param takes priority over default suggestion.
         if (!site) setSite(initialSite ?? sug.site);
       })();
     }, [initialSite, peptideId, site])
@@ -120,9 +104,6 @@ export default function LogDoseModal() {
         setVial(null);
         return;
       }
-      // Default to the current selection if it's still in the active list,
-      // otherwise pick the one closest to expiry (oldest expires_at first,
-      // nulls last) — this matches logDose's server-side fallback.
       const keep = vial && active.find((v) => v.id === vial.id);
       if (keep) return;
       const sorted = [...active].sort((a, b) => {
@@ -135,7 +116,6 @@ export default function LogDoseModal() {
     })();
   }, [peptideId, vial]);
 
-  // Prefill dose from active cycle's today protocol, or from query param.
   useEffect(() => {
     if (!peptideId) return;
     if (prefillDoseMcg) {
@@ -160,8 +140,6 @@ export default function LogDoseModal() {
         }
       } catch {}
     }
-    // Fall back to the peptide's explicit defaultDoseMcg, then to a
-    // parsed range midpoint as a last resort.
     const p = findPeptide(peptideId);
     if (p) {
       const fallback = p.defaultDoseMcg ?? parseDoseRange(p.dose).mid;
@@ -178,11 +156,7 @@ export default function LogDoseModal() {
   }, [vial, amountMcg]);
 
   const vialInsufficient = !!vial && amountMcg / 1000 > vial.remaining_mg;
-  // Preset chips: lo / explicit-default / hi. The middle value uses the
-  // peptide's authoritative defaultDoseMcg so it always lines up with
-  // the amount Reset / Cycle pre-fill produces. The lo/hi come from the
-  // research-range string (mg-aware) and are clamped to be different
-  // from the middle value when the parser collapses to one number.
+
   const presets = useMemo(() => {
     if (!peptide) return [100, 250, 500];
     const range = parseDoseRange(peptide.dose);
@@ -227,9 +201,6 @@ export default function LogDoseModal() {
 
   const save = async () => {
     if (!peptideId || saving) return;
-    // Soft duplicate warning: same peptide logged within ±10 minutes of the
-    // chosen timestamp. Prevents accidental double-taps and duplicate entries
-    // when back-dating.
     try {
       const recent = await listDoses({ limit: 20 });
       const target = takenAtDate.getTime();
@@ -253,13 +224,10 @@ export default function LogDoseModal() {
         );
         return;
       }
-    } catch {
-      // If the duplicate lookup fails for any reason, fall through to save.
-    }
+    } catch {}
     await actuallySave();
   };
 
-  // Peptides that already have a vial vs not — used for picker sections.
   const vialPeptideIds = useMemo(() => new Set(vials.map((v) => v.peptide_id)), [vials]);
   const peptidesWithoutVial = useMemo(
     () => PEPTIDES.filter((p) => !vialPeptideIds.has(p.id)),
@@ -267,432 +235,458 @@ export default function LogDoseModal() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
+      {/* Header */}
       <View
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: insets.top + space.md,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-        >
-          <IconClose size={16} color={t.ink3} />
+        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Close">
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ×
+          </Text>
         </Pressable>
-        <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>Log dose</Text>
+        <Text
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          Log dose
+        </Text>
         <Pressable
           onPress={save}
           disabled={saving || vialInsufficient || !peptideId}
           hitSlop={10}
-          accessibilityRole="button"
           accessibilityLabel="Save dose"
-          accessibilityState={{ disabled: saving || vialInsufficient || !peptideId }}
         >
           <Text
             style={{
-              fontSize: 14,
-              color: saving || vialInsufficient || !peptideId ? t.ink3 : t.accent,
-              fontFamily: font.sansSemi,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color:
+                saving || vialInsufficient || !peptideId
+                  ? ed.colors.ink3
+                  : ed.colors.brand,
+              textTransform: 'uppercase',
             }}
           >
-            Save
+            {saving ? 'Saving' : 'Save'}
           </Text>
         </Pressable>
       </View>
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
       >
-        {/* Peptide selector card */}
-        <View style={{ paddingHorizontal: space.xl }}>
+        {/* Peptide selector */}
+        <View style={{ paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Peptide</EyebrowLabel>
           <Pressable
-            onPress={() => setShowPeptidePicker(!showPeptidePicker)}
+            onPress={() => setShowPeptidePicker((v) => !v)}
+            accessibilityRole="button"
             style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.lg,
-              padding: space.lg,
-              borderWidth: 1,
-              borderColor: t.line,
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 14,
+              paddingVertical: 18,
+              gap: 12,
             }}
           >
-            {peptide ? (
-              <>
-                <HCodeAvatar id={peptide.name.replace(/[^A-Za-z]/g, '').slice(0, 3)} color={peptide.color} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontFamily: font.sansSemi, color: t.ink }}>
+            <View style={{ flex: 1 }}>
+              {peptide ? (
+                <>
+                  <Text
+                    style={{
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 24,
+                      letterSpacing: -0.4,
+                      color: ed.colors.ink1,
+                    }}
+                  >
                     {peptide.name}
                   </Text>
-                  <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
+                  <Text
+                    style={{
+                      marginTop: 2,
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: ed.typography.dataMd.fontSize,
+                      color: ed.colors.ink3,
+                    }}
+                  >
                     {peptide.formula}
                   </Text>
-                </View>
-              </>
-            ) : (
-              <Text style={{ flex: 1, color: t.ink3, fontSize: 14 }}>Select peptide</Text>
-            )}
-            <IconChevronRight size={14} color={t.ink3} />
+                </>
+              ) : (
+                <Text
+                  style={{
+                    fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                    fontSize: 22,
+                    color: ed.colors.ink3,
+                  }}
+                >
+                  Select peptide
+                </Text>
+              )}
+            </View>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 22,
+                color: ed.colors.ink3,
+              }}
+            >
+              {showPeptidePicker ? '▴' : '▾'}
+            </Text>
           </Pressable>
+          <HairlineRow strong />
         </View>
 
         {showPeptidePicker ? (
           <View
             style={{
-              marginHorizontal: space.xl,
+              marginHorizontal: 24,
               marginTop: 4,
-              height: 380,
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
+              height: 360,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.line,
             }}
           >
             <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-              {/* Your vials section */}
               {vials.length > 0 ? (
                 <View>
-                  <Text
-                    style={{
-                      padding: 10,
-                      paddingBottom: 4,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                      color: t.ink3,
-                      fontFamily: font.sansSemi,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Your vials
-                  </Text>
-                  {vials.map((v) => {
+                  <View style={{ paddingTop: 14, paddingBottom: 6 }}>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.eyebrow.fontFamily,
+                        fontSize: ed.typography.eyebrow.fontSize,
+                        letterSpacing: ed.typography.eyebrow.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Your vials
+                    </Text>
+                  </View>
+                  {vials.map((v, idx) => {
                     const p = findPeptide(v.peptide_id);
                     if (!p) return null;
                     return (
-                      <Pressable
-                        key={v.id}
-                        onPress={() => {
-                          setPeptideId(p.id);
-                          setVial(v);
-                          setShowPeptidePicker(false);
-                        }}
-                        style={{
-                          padding: space.md,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 10,
-                          borderBottomWidth: 1,
-                          borderBottomColor: t.line,
-                        }}
-                      >
-                        <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: p.color,
+                      <View key={v.id}>
+                        <Pressable
+                          onPress={() => {
+                            setPeptideId(p.id);
+                            setVial(v);
+                            setShowPeptidePicker(false);
                           }}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={{
-                              color: t.ink,
-                              fontSize: 14,
-                              fontFamily: font.sansSemi,
-                            }}
-                          >
-                            {p.name}
-                          </Text>
-                          <Text
-                            style={{
-                              color: t.ink3,
-                              fontSize: 11,
-                              fontFamily: font.mono,
-                              marginTop: 2,
-                            }}
-                          >
-                            {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg
-                          </Text>
-                        </View>
-                        <Text
                           style={{
-                            color: t.accent,
-                            fontSize: 11,
-                            fontFamily: font.sansSemi,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 14,
+                            gap: 12,
                           }}
                         >
-                          Vial
-                        </Text>
-                      </Pressable>
+                          <View
+                            style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.color }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                                fontSize: 17,
+                                color: ed.colors.ink1,
+                              }}
+                            >
+                              {p.name}
+                            </Text>
+                            <Text
+                              style={{
+                                marginTop: 3,
+                                fontFamily: ed.typography.dataMd.fontFamily,
+                                fontSize: ed.typography.dataMd.fontSize,
+                                color: ed.colors.ink3,
+                              }}
+                            >
+                              {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg
+                            </Text>
+                          </View>
+                          <Text
+                            style={{
+                              fontFamily: ed.typography.labelSm.fontFamily,
+                              fontSize: ed.typography.labelSm.fontSize,
+                              letterSpacing: ed.typography.labelSm.letterSpacing,
+                              color: ed.colors.brand,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Vial
+                          </Text>
+                        </Pressable>
+                        {idx < vials.length - 1 ? <HairlineRow /> : null}
+                      </View>
                     );
                   })}
                 </View>
               ) : null}
 
-              {/* All peptides section */}
-              <Text
-                style={{
-                  padding: 10,
-                  paddingBottom: 4,
-                  marginTop: vials.length > 0 ? 4 : 0,
-                  fontSize: 10,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  fontFamily: font.sansSemi,
-                  textTransform: 'uppercase',
-                }}
-              >
-                {vials.length > 0 ? 'Other peptides · tap to reconstitute' : 'All peptides'}
-              </Text>
-              {peptidesWithoutVial.map((p) => (
-                <Pressable
-                  key={p.id}
-                  onPress={() => {
-                    setShowPeptidePicker(false);
-                    router.replace({
-                      pathname: '/reconstitute',
-                      params: { peptideId: p.id },
-                    } as any);
-                  }}
+              <View style={{ paddingTop: 18, paddingBottom: 6 }}>
+                <Text
                   style={{
-                    padding: space.md,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    borderBottomWidth: 1,
-                    borderBottomColor: t.line,
+                    fontFamily: ed.typography.eyebrow.fontFamily,
+                    fontSize: ed.typography.eyebrow.fontSize,
+                    letterSpacing: ed.typography.eyebrow.letterSpacing,
+                    color: ed.colors.ink3,
+                    textTransform: 'uppercase',
                   }}
                 >
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: p.color,
+                  {vials.length > 0 ? 'Other · tap to reconstitute' : 'All peptides'}
+                </Text>
+              </View>
+              {peptidesWithoutVial.map((p, idx) => (
+                <View key={p.id}>
+                  <Pressable
+                    onPress={() => {
+                      setShowPeptidePicker(false);
+                      router.replace({
+                        pathname: '/reconstitute',
+                        params: { peptideId: p.id },
+                      } as any);
                     }}
-                  />
-                  <Text
                     style={{
-                      flex: 1,
-                      color: t.ink,
-                      fontSize: 14,
-                      fontFamily: font.sansMed,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 14,
+                      gap: 12,
                     }}
                   >
-                    {p.name}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: t.ink3 }}>
-                    {p.class.split('/')[0].trim()}
-                  </Text>
-                  <IconChevronRight size={12} color={t.ink4} />
-                </Pressable>
+                    <View
+                      style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.color }}
+                    />
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontFamily: ed.fraunces('Fraunces_400Regular'),
+                        fontSize: 16,
+                        color: ed.colors.ink2,
+                      }}
+                    >
+                      {p.name}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {p.class.split('/')[0].trim()}
+                    </Text>
+                  </Pressable>
+                  {idx < peptidesWithoutVial.length - 1 ? <HairlineRow /> : null}
+                </View>
               ))}
             </ScrollView>
           </View>
         ) : null}
 
         {/* Dose */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.xl }}>
-          <Text
-            style={{
-              fontSize: 11,
-              fontFamily: font.sansSemi,
-              letterSpacing: 1.2,
-              color: t.ink3,
-              marginBottom: 10,
-              textTransform: 'uppercase',
-            }}
-          >
-            Dose
-          </Text>
-          <View
-            style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.lg,
-              paddingVertical: space.xl,
-              paddingHorizontal: space.lg,
-              borderWidth: 1,
-              borderColor: t.line,
-              alignItems: 'center',
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-              <TextInput
-                value={amountText}
-                onChangeText={setAmountText}
-                onBlur={commitDose}
-                onSubmitEditing={commitDose}
-                keyboardType="decimal-pad"
-                returnKeyType="done"
-                style={{
-                  fontSize: 48,
-                  fontFamily: font.monoSemi,
-                  color: t.ink,
-                  letterSpacing: -1,
-                  padding: 0,
-                  minWidth: 100,
-                  textAlign: 'center',
-                }}
-              />
-              <Text
-                style={{
-                  fontSize: 18,
-                  color: t.ink3,
-                  fontFamily: font.sansMed,
-                  marginLeft: 6,
-                }}
-              >
-                mcg
-              </Text>
-            </View>
-
-            {/* Smart preset chips from peptide's research range */}
-            <View style={{ flexDirection: 'row', gap: 6, marginTop: space.md, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {presets.map((preset) => {
-                const active = preset === amountMcg;
-                return (
-                  <Pressable
-                    key={preset}
-                    onPress={() => {
-                      setAmountMcg(preset);
-                      setAmountText(String(preset));
-                    }}
-                    style={{
-                      paddingVertical: 7,
-                      paddingHorizontal: 12,
-                      borderRadius: radius.pill,
-                      backgroundColor: active ? t.ink : t.surfaceAlt,
-                      borderWidth: 1,
-                      borderColor: active ? t.ink : t.line,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontFamily: font.monoSemi,
-                        color: active ? t.bg : t.ink,
-                      }}
-                    >
-                      {preset} mcg
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {peptide?.dose ? (
-              <Text
-                style={{
-                  marginTop: 6,
-                  fontSize: 10,
-                  color: t.ink3,
-                  fontFamily: font.mono,
-                  textAlign: 'center',
-                }}
-              >
-                Research range: {peptide.dose}
-              </Text>
-            ) : null}
-
-            {volumeUnits ? (
-              <Text
-                style={{
-                  marginTop: space.md,
-                  fontSize: 12,
-                  color: t.ink3,
-                  fontFamily: font.mono,
-                }}
-              >
-                ≈ {volumeUnits.units.toFixed(1)} units · {volumeUnits.volume_ml.toFixed(2)} mL
-              </Text>
-            ) : null}
-
-            {vial ? (
-              <View
-                style={{
-                  marginTop: space.md,
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  backgroundColor: vialInsufficient ? t.dangerSoft : t.surfaceAlt,
-                  borderRadius: 10,
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  width: '100%',
-                }}
-              >
-                <Text style={{ fontSize: 11, color: t.ink3, letterSpacing: 0.3 }}>
-                  {vialInsufficient ? 'NOT ENOUGH IN VIAL' : 'Vial remaining'}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontFamily: font.monoSemi,
-                    color: vialInsufficient ? t.danger : t.ink,
-                  }}
-                >
-                  {vial.remaining_mg.toFixed(2)} / {vial.strength_mg} mg
-                </Text>
-              </View>
-            ) : (
-              <View
-                style={{
-                  marginTop: space.md,
-                  width: '100%',
-                  padding: space.md,
-                  borderRadius: radius.md,
-                  backgroundColor: t.warnSoft + '80',
-                  borderWidth: 1,
-                  borderColor: t.warn + '40',
-                }}
-              >
-                <Text style={{ fontSize: 12, color: t.ink2, marginBottom: 6 }}>
-                  No active vial for {peptide?.name ?? 'this peptide'}.
-                </Text>
-                <Pressable
-                  onPress={() =>
-                    router.replace({
-                      pathname: '/reconstitute',
-                      params: { peptideId },
-                    } as any)
-                  }
-                >
-                  <Text style={{ fontSize: 13, color: t.accent, fontFamily: font.sansSemi }}>
-                    Reconstitute a new vial →
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Vial picker — only when the selected peptide has multiple active vials */}
-        {peptideVials.length > 1 ? (
-          <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Dose</EyebrowLabel>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 16 }}>
+            <TextInput
+              value={amountText}
+              onChangeText={setAmountText}
+              onBlur={commitDose}
+              onSubmitEditing={commitDose}
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              selectionColor={ed.colors.brand}
+              style={{
+                flex: 1,
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 64,
+                lineHeight: 64,
+                letterSpacing: -2,
+                color: ed.colors.ink1,
+                padding: 0,
+              }}
+            />
             <Text
               style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
+                marginLeft: 12,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink3,
                 textTransform: 'uppercase',
-                marginBottom: 8,
               }}
             >
-              Vial · {peptideVials.length} active
+              mcg
             </Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {presets.map((preset) => {
+              const active = preset === amountMcg;
+              return (
+                <Pressable
+                  key={preset}
+                  onPress={() => {
+                    setAmountMcg(preset);
+                    setAmountText(String(preset));
+                  }}
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 14,
+                    backgroundColor: active ? ed.colors.ink1 : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {preset} mcg
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {peptide?.dose ? (
+            <Text
+              style={{
+                marginTop: 10,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              Research range: {peptide.dose}
+            </Text>
+          ) : null}
+
+          {volumeUnits ? (
+            <Text
+              style={{
+                marginTop: 6,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              ≈ {volumeUnits.units.toFixed(1)} units · {volumeUnits.volume_ml.toFixed(2)} mL
+            </Text>
+          ) : null}
+
+          {vial ? (
+            <View
+              style={{
+                marginTop: 14,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                borderWidth: 1,
+                borderColor: vialInsufficient ? ed.colors.stateWarn : ed.colors.lineStrong,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: vialInsufficient ? ed.colors.stateWarn : ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {vialInsufficient ? 'Not enough in vial' : 'Vial remaining'}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: ed.typography.dataMd.fontFamily,
+                  fontSize: ed.typography.dataMd.fontSize,
+                  color: vialInsufficient ? ed.colors.stateWarn : ed.colors.ink1,
+                }}
+              >
+                {vial.remaining_mg.toFixed(2)} / {vial.strength_mg} mg
+              </Text>
+            </View>
+          ) : (
+            <View
+              style={{
+                marginTop: 14,
+                paddingVertical: 14,
+                paddingHorizontal: 14,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: ed.colors.brandLine,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.typography.bodySm.fontFamily,
+                  fontSize: ed.typography.bodySm.fontSize,
+                  color: ed.colors.ink2,
+                  marginBottom: 8,
+                }}
+              >
+                No active vial for {peptide?.name ?? 'this peptide'}.
+              </Text>
+              <Pressable
+                onPress={() =>
+                  router.replace({ pathname: '/reconstitute', params: { peptideId } } as any)
+                }
+                hitSlop={4}
+              >
+                <Text
+                  style={{
+                    fontFamily: ed.typography.label.fontFamily,
+                    fontSize: ed.typography.label.fontSize,
+                    letterSpacing: ed.typography.label.letterSpacing,
+                    color: ed.colors.brand,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Reconstitute a new vial →
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* Vial picker — only shown when multiple */}
+        {peptideVials.length > 1 ? (
+          <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+            <EyebrowLabel withRule>{`Vial · ${peptideVials.length} active`}</EyebrowLabel>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, paddingRight: space.md }}
+              contentContainerStyle={{ gap: 8, paddingVertical: 14 }}
             >
               {peptideVials.map((v) => {
                 const active = vial?.id === v.id;
@@ -707,30 +701,31 @@ export default function LogDoseModal() {
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active }}
                     style={{
-                      paddingVertical: 10,
+                      paddingVertical: 12,
                       paddingHorizontal: 14,
-                      borderRadius: radius.md,
-                      backgroundColor: active ? t.ink : t.surface,
+                      backgroundColor: active ? ed.colors.ink1 : 'transparent',
                       borderWidth: 1,
-                      borderColor: active ? t.ink : t.line,
-                      minWidth: 140,
+                      borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
+                      minWidth: 150,
                     }}
                   >
                     <Text
                       style={{
-                        fontSize: 12,
-                        fontFamily: font.monoSemi,
-                        color: active ? t.bg : t.ink,
+                        fontFamily: ed.typography.dataMd.fontFamily,
+                        fontSize: ed.typography.dataMd.fontSize,
+                        color: active ? ed.colors.bg : ed.colors.ink1,
                       }}
                     >
                       {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg
                     </Text>
                     <Text
                       style={{
-                        marginTop: 3,
-                        fontSize: 10,
-                        color: active ? t.bg : t.ink3,
-                        fontFamily: font.mono,
+                        marginTop: 4,
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: active ? ed.colors.bg : ed.colors.ink3,
+                        textTransform: 'uppercase',
                       }}
                     >
                       Recon {reconDate}
@@ -748,32 +743,27 @@ export default function LogDoseModal() {
           </View>
         ) : null}
 
-        {/* Injection site — inline chip picker */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+        {/* Injection site */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
           <View
             style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
-              alignItems: 'baseline',
-              marginBottom: 8,
+              alignItems: 'center',
             }}
           >
-            <Text
-              style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                textTransform: 'uppercase',
-              }}
-            >
-              Injection site{site ? ` · ${site}` : ''}
-            </Text>
-            <Pressable
-              onPress={() => router.push('/injection-sites' as any)}
-              hitSlop={6}
-            >
-              <Text style={{ fontSize: 11, color: t.accent, fontFamily: font.sansSemi }}>
+            <EyebrowLabel withRule>{site ? `Site · ${site}` : 'Injection site'}</EyebrowLabel>
+            <Pressable onPress={() => router.push('/injection-sites' as any)} hitSlop={6}>
+              <Text
+                style={{
+                  marginLeft: 12,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.brand,
+                  textTransform: 'uppercase',
+                }}
+              >
                 Body map
               </Text>
             </Pressable>
@@ -781,7 +771,7 @@ export default function LogDoseModal() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6, paddingRight: space.md }}
+            contentContainerStyle={{ gap: 6, paddingVertical: 14 }}
           >
             {INJECTION_SITES.map((s) => {
               const active = s === site;
@@ -793,18 +783,19 @@ export default function LogDoseModal() {
                   accessibilityState={{ selected: active }}
                   style={{
                     paddingVertical: 8,
-                    paddingHorizontal: 12,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.accent : t.surface,
+                    paddingHorizontal: 14,
+                    backgroundColor: active ? ed.colors.brand : 'transparent',
                     borderWidth: 1,
-                    borderColor: active ? t.accent : t.line,
+                    borderColor: active ? ed.colors.brand : ed.colors.lineStrong,
                   }}
                 >
                   <Text
                     style={{
-                      fontSize: 12,
-                      color: active ? '#fff' : t.ink,
-                      fontFamily: font.sansMed,
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
                     }}
                   >
                     {s}
@@ -813,28 +804,25 @@ export default function LogDoseModal() {
               );
             })}
           </ScrollView>
-          <Pressable onPress={() => setSite(null)} hitSlop={6} style={{ marginTop: 6 }}>
-            <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.sansMed }}>
+          <Pressable onPress={() => setSite(null)} hitSlop={6}>
+            <Text
+              style={{
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+              }}
+            >
               Clear site
             </Text>
           </Pressable>
         </View>
 
         {/* Route */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <Text
-            style={{
-              fontSize: 10,
-              letterSpacing: 0.8,
-              color: t.ink3,
-              fontFamily: font.sansSemi,
-              textTransform: 'uppercase',
-              marginBottom: 8,
-            }}
-          >
-            Route
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Route</EyebrowLabel>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
             {ROUTES.map((r) => {
               const active = r === route;
               return (
@@ -842,19 +830,20 @@ export default function LogDoseModal() {
                   key={r}
                   onPress={() => setRoute(r)}
                   style={{
-                    paddingHorizontal: 12,
                     paddingVertical: 8,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.ink : 'transparent',
+                    paddingHorizontal: 14,
+                    backgroundColor: active ? ed.colors.ink1 : 'transparent',
                     borderWidth: 1,
-                    borderColor: active ? t.ink : t.line,
+                    borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
                   }}
                 >
                   <Text
                     style={{
-                      fontSize: 12,
-                      color: active ? t.bg : t.ink2,
-                      fontFamily: font.sansMed,
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
                     }}
                   >
                     {r}
@@ -865,72 +854,75 @@ export default function LogDoseModal() {
           </View>
         </View>
 
-        {/* When — editable day + time */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+        {/* When */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>When</EyebrowLabel>
           <Pressable
             onPress={() => setEditingTime((v) => !v)}
             style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              padding: space.md,
-              borderWidth: 1,
-              borderColor: editingTime ? t.accent : t.line,
               flexDirection: 'row',
               alignItems: 'center',
+              paddingVertical: 14,
               gap: 12,
             }}
           >
-            <IconClock size={16} color={t.ink3} />
             <View style={{ flex: 1 }}>
               <Text
                 style={{
-                  fontSize: 10,
-                  color: t.ink3,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 0.8,
-                  textTransform: 'uppercase',
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 22,
+                  letterSpacing: -0.4,
+                  color: ed.colors.ink1,
                 }}
               >
-                When
-              </Text>
-              <Text style={{ fontSize: 14, color: t.ink, fontFamily: font.sansSemi, marginTop: 2 }}>
                 {takenAtDate.toLocaleDateString('en-US', {
                   weekday: 'short',
                   month: 'short',
                   day: 'numeric',
-                })}{' '}
-                ·{' '}
+                })}
+              </Text>
+              <Text
+                style={{
+                  marginTop: 2,
+                  fontFamily: ed.typography.dataMd.fontFamily,
+                  fontSize: ed.typography.dataMd.fontSize,
+                  color: ed.colors.ink3,
+                }}
+              >
                 {takenAtDate.toLocaleTimeString('en-US', {
                   hour: 'numeric',
                   minute: '2-digit',
                 })}
               </Text>
             </View>
-            <Text style={{ fontSize: 12, color: t.accent, fontFamily: font.sansSemi }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.brand,
+                textTransform: 'uppercase',
+              }}
+            >
               {editingTime ? 'Done' : 'Edit'}
             </Text>
           </Pressable>
-
           {editingTime ? (
             <View
               style={{
-                marginTop: 6,
-                padding: space.md,
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                gap: space.md,
+                paddingVertical: 14,
+                borderTopWidth: 1,
+                borderColor: ed.colors.line,
+                gap: 18,
               }}
             >
-              {/* Quick presets for common back-dating */}
-              <View style={{ gap: 6 }}>
+              <View style={{ gap: 8 }}>
                 <Text
                   style={{
-                    fontSize: 10,
-                    color: t.ink3,
-                    fontFamily: font.sansSemi,
-                    letterSpacing: 0.8,
+                    fontFamily: ed.typography.labelSm.fontFamily,
+                    fontSize: ed.typography.labelSm.fontSize,
+                    letterSpacing: ed.typography.labelSm.letterSpacing,
+                    color: ed.colors.ink3,
                     textTransform: 'uppercase',
                   }}
                 >
@@ -963,15 +955,21 @@ export default function LogDoseModal() {
                       key={p.label}
                       onPress={() => setTakenAtDate(p.offset())}
                       style={{
+                        paddingVertical: 6,
                         paddingHorizontal: 12,
-                        paddingVertical: 7,
-                        borderRadius: radius.pill,
                         borderWidth: 1,
-                        borderColor: t.line,
-                        backgroundColor: t.surfaceAlt,
+                        borderColor: ed.colors.lineStrong,
                       }}
                     >
-                      <Text style={{ fontSize: 12, color: t.ink, fontFamily: font.sansMed }}>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.ink2,
+                          textTransform: 'uppercase',
+                        }}
+                      >
                         {p.label}
                       </Text>
                     </Pressable>
@@ -979,281 +977,236 @@ export default function LogDoseModal() {
                 </View>
               </View>
 
-              {/* Day stepper */}
-              <View style={{ gap: 6 }}>
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: t.ink3,
-                    fontFamily: font.sansSemi,
-                    letterSpacing: 0.8,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Day
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Pressable
-                    onPress={() => {
-                      const d = new Date(takenAtDate);
-                      d.setDate(d.getDate() - 1);
-                      // cap at 30 days back
-                      const earliest = new Date();
-                      earliest.setDate(earliest.getDate() - 30);
-                      earliest.setHours(0, 0, 0, 0);
-                      if (d.getTime() < earliest.getTime()) return;
-                      setTakenAtDate(d);
-                    }}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: radius.md,
-                      backgroundColor: t.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>−</Text>
-                  </Pressable>
-                  <View
-                    style={{
-                      flex: 1,
-                      height: 40,
-                      borderRadius: radius.md,
-                      backgroundColor: t.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
-                      {takenAtDate.toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => {
-                      const d = new Date(takenAtDate);
-                      d.setDate(d.getDate() + 1);
-                      // cap at today's date (can't log future doses)
-                      const latest = new Date();
-                      if (d.getTime() > latest.getTime()) return;
-                      setTakenAtDate(d);
-                    }}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: radius.md,
-                      backgroundColor: t.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>+</Text>
-                  </Pressable>
-                </View>
-              </View>
+              <DayStepper date={takenAtDate} setDate={setTakenAtDate} />
 
-              {/* Time steppers (hour + minute) */}
-              <View style={{ flexDirection: 'row', gap: space.md }}>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: t.ink3,
-                      fontFamily: font.sansSemi,
-                      letterSpacing: 0.8,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Hour
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setHours((d.getHours() + 23) % 24);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>−</Text>
-                    </Pressable>
-                    <Text
-                      style={{
-                        flex: 1,
-                        textAlign: 'center',
-                        fontSize: 16,
-                        fontFamily: font.monoSemi,
-                        color: t.ink,
-                      }}
-                    >
-                      {takenAtDate.getHours().toString().padStart(2, '0')}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setHours((d.getHours() + 1) % 24);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>+</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: t.ink3,
-                      fontFamily: font.sansSemi,
-                      letterSpacing: 0.8,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Min
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setMinutes((d.getMinutes() + 55) % 60);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>−5</Text>
-                    </Pressable>
-                    <Text
-                      style={{
-                        flex: 1,
-                        textAlign: 'center',
-                        fontSize: 16,
-                        fontFamily: font.monoSemi,
-                        color: t.ink,
-                      }}
-                    >
-                      {takenAtDate.getMinutes().toString().padStart(2, '0')}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        const d = new Date(takenAtDate);
-                        d.setMinutes((d.getMinutes() + 5) % 60);
-                        setTakenAtDate(d);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: radius.sm,
-                        backgroundColor: t.surfaceAlt,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, color: t.ink }}>+5</Text>
-                    </Pressable>
-                  </View>
-                </View>
+              <View style={{ flexDirection: 'row', gap: 14 }}>
+                <UnitStepper
+                  label="Hour"
+                  value={takenAtDate.getHours().toString().padStart(2, '0')}
+                  onMinus={() => {
+                    const d = new Date(takenAtDate);
+                    d.setHours((d.getHours() + 23) % 24);
+                    setTakenAtDate(d);
+                  }}
+                  onPlus={() => {
+                    const d = new Date(takenAtDate);
+                    d.setHours((d.getHours() + 1) % 24);
+                    setTakenAtDate(d);
+                  }}
+                />
+                <UnitStepper
+                  label="Min"
+                  value={takenAtDate.getMinutes().toString().padStart(2, '0')}
+                  minusLabel="−5"
+                  plusLabel="+5"
+                  onMinus={() => {
+                    const d = new Date(takenAtDate);
+                    d.setMinutes((d.getMinutes() + 55) % 60);
+                    setTakenAtDate(d);
+                  }}
+                  onPlus={() => {
+                    const d = new Date(takenAtDate);
+                    d.setMinutes((d.getMinutes() + 5) % 60);
+                    setTakenAtDate(d);
+                  }}
+                />
               </View>
             </View>
           ) : null}
         </View>
 
         {/* Note */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <View
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Note · optional</EyebrowLabel>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="How do you feel? Side effects, observations…"
+            placeholderTextColor={ed.colors.ink4}
+            multiline
+            selectionColor={ed.colors.brand}
             style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              padding: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
+              marginTop: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 0,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.line,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 16,
+              lineHeight: 24,
+              letterSpacing: -0.2,
+              color: ed.colors.ink1,
+              minHeight: 100,
+              textAlignVertical: 'top',
             }}
-          >
-            <Text
-              style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                textTransform: 'uppercase',
-                marginBottom: 6,
-              }}
-            >
-              Note (optional)
-            </Text>
-            <TextInput
-              value={note}
-              onChangeText={setNote}
-              placeholder="How do you feel? Side effects, observations…"
-              placeholderTextColor={t.ink4}
-              multiline
-              style={{
-                color: t.ink,
-                fontSize: 14,
-                minHeight: 40,
-                padding: 0,
-                textAlignVertical: 'top',
-              }}
-            />
-          </View>
+          />
         </View>
 
-        {/* Inline disclaimer */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+        {/* Disclaimer + save */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
           <DosingDisclaimer />
         </View>
-
-        {/* Confirm */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <Pressable
+        <View style={{ marginTop: 24, paddingHorizontal: 24 }}>
+          <EditorialButton
+            fullWidth
             onPress={save}
             disabled={saving || vialInsufficient || !peptideId}
-            style={{
-              padding: space.lg,
-              borderRadius: radius.lg,
-              backgroundColor:
-                saving || vialInsufficient || !peptideId ? t.surfaceAlt : t.ink,
-              alignItems: 'center',
-            }}
           >
-            <Text
-              style={{
-                fontSize: 15,
-                fontFamily: font.sansSemi,
-                color:
-                  saving || vialInsufficient || !peptideId ? t.ink3 : t.bg,
-              }}
-            >
-              {saving ? 'Logging…' : 'Log dose'}
-            </Text>
-          </Pressable>
+            {saving ? 'Logging…' : 'Log dose'}
+          </EditorialButton>
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function DayStepper({ date, setDate }: { date: Date; setDate: (d: Date) => void }) {
+  const ed = useEditorialTheme();
+  return (
+    <View style={{ gap: 8 }}>
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+        }}
+      >
+        Day
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable
+          onPress={() => {
+            const d = new Date(date);
+            d.setDate(d.getDate() - 1);
+            const earliest = new Date();
+            earliest.setDate(earliest.getDate() - 30);
+            earliest.setHours(0, 0, 0, 0);
+            if (d.getTime() < earliest.getTime()) return;
+            setDate(d);
+          }}
+          hitSlop={8}
+        >
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 22,
+              color: ed.colors.ink3,
+              paddingHorizontal: 14,
+            }}
+          >
+            −
+          </Text>
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 18,
+              color: ed.colors.ink1,
+            }}
+          >
+            {date.toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => {
+            const d = new Date(date);
+            d.setDate(d.getDate() + 1);
+            const latest = new Date();
+            if (d.getTime() > latest.getTime()) return;
+            setDate(d);
+          }}
+          hitSlop={8}
+        >
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 22,
+              color: ed.colors.ink3,
+              paddingHorizontal: 14,
+            }}
+          >
+            +
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function UnitStepper({
+  label,
+  value,
+  onMinus,
+  onPlus,
+  minusLabel = '−',
+  plusLabel = '+',
+}: {
+  label: string;
+  value: string;
+  onMinus: () => void;
+  onPlus: () => void;
+  minusLabel?: string;
+  plusLabel?: string;
+}) {
+  const ed = useEditorialTheme();
+  return (
+    <View style={{ flex: 1, gap: 8 }}>
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable onPress={onMinus} hitSlop={8}>
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 18,
+              color: ed.colors.ink3,
+              paddingHorizontal: 10,
+            }}
+          >
+            {minusLabel}
+          </Text>
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 22,
+              color: ed.colors.ink1,
+            }}
+          >
+            {value}
+          </Text>
+        </View>
+        <Pressable onPress={onPlus} hitSlop={8}>
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 18,
+              color: ed.colors.ink3,
+              paddingHorizontal: 10,
+            }}
+          >
+            {plusLabel}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

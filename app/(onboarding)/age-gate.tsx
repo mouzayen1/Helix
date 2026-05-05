@@ -1,13 +1,15 @@
-// Age gate — spec v2.0 onboarding step 1. Hard compliance checkpoint.
+// Age gate — editorial rebuild. Mono step indicator, italic-emphasis
+// serif headline, body in serif. CTAs use the editorial pair.
 import { useRouter } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { useProfile } from '../../lib/profile-context';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function AgeGate() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { update } = useProfile();
@@ -21,59 +23,46 @@ export default function AgeGate() {
     <View
       style={{
         flex: 1,
-        backgroundColor: t.bg,
-        paddingTop: insets.top + space.xl,
-        paddingBottom: insets.bottom + space.xl,
-        paddingHorizontal: space.xl,
+        backgroundColor: ed.colors.bg,
+        paddingTop: insets.top + 28,
+        paddingBottom: insets.bottom + 24,
+        paddingHorizontal: 24,
       }}
     >
-      <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 1 OF 5
+      <Text
+        style={{
+          fontFamily: ed.typography.eyebrow.fontFamily,
+          fontSize: ed.typography.eyebrow.fontSize,
+          letterSpacing: ed.typography.eyebrow.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+        }}
+      >
+        Step 1 of 5
       </Text>
-
-      <View style={{ flex: 1, justifyContent: 'center', gap: space.lg }}>
+      <View style={{ flex: 1, justifyContent: 'center', gap: 18 }}>
+        <EditorialHeadline size="display">{`Are you *18* or older?`}</EditorialHeadline>
         <Text
           style={{
-            fontSize: 34,
-            lineHeight: 40,
-            fontFamily: font.sansBold,
-            color: t.ink,
-            letterSpacing: -1,
+            fontFamily: ed.typography.bodyMd.fontFamily,
+            fontSize: 15,
+            lineHeight: 23,
+            color: ed.colors.ink2,
+            maxWidth: 360,
           }}
         >
-          Are you 18{'\n'}or older?
-        </Text>
-        <Text style={{ color: t.ink2, fontSize: 15, lineHeight: 22 }}>
-          Helix is only for adults. We store the time of your acknowledgement for
-          compliance — we never see your age itself.
+          Helix is only for adults. We store the time of your acknowledgement for compliance — we
+          never see your age itself.
         </Text>
       </View>
 
-      <View style={{ gap: space.md }}>
-        <Pressable
-          onPress={yes}
-          style={{
-            backgroundColor: t.ink,
-            padding: space.lg,
-            borderRadius: radius.lg,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: t.bg, fontSize: 16, fontFamily: font.sansSemi }}>
-            Yes, I am 18+
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => router.replace('/welcome')}
-          style={{
-            padding: space.lg,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: t.ink3, fontSize: 14, fontFamily: font.sansMed }}>
-            No, I am not
-          </Text>
-        </Pressable>
+      <View style={{ gap: 14 }}>
+        <EditorialButton fullWidth onPress={yes}>
+          Yes, I am 18+
+        </EditorialButton>
+        <EditorialButton variant="secondary" fullWidth onPress={() => router.replace('/welcome')}>
+          No, I am not
+        </EditorialButton>
       </View>
     </View>
   );

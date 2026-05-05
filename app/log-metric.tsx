@@ -1,15 +1,18 @@
-// Log metric — spec v2.0 §10. Modal. Insert a single reading.
+// Log metric — editorial rebuild. Same insertMetric flow; visual layer
+// is the editorial modal pattern: × close, mono uppercase title, save
+// link in mono brass, serif headline, sharp-corner kind chips, large
+// serif value entry, hairline-framed note.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconClose } from '../components/Icons';
+import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
+import { useEditorialTheme } from '../lib/design/theme';
 import { METRIC_KINDS, insertMetric } from '../lib/db';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
 
 export default function LogMetricModal() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [kind, setKind] = useState<string>('weight');
@@ -38,136 +41,150 @@ export default function LogMetricModal() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       <View
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <IconClose size={16} color={t.ink3} />
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ×
+          </Text>
         </Pressable>
-        <Text style={{ color: t.ink, fontSize: 15, fontFamily: font.sansSemi }}>Log metric</Text>
+        <Text
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          Log metric
+        </Text>
         <Pressable onPress={save} disabled={!valid || saving} hitSlop={10}>
-          <Text style={{ color: !valid || saving ? t.ink3 : t.accent, fontSize: 14, fontFamily: font.sansSemi }}>
-            Save
+          <Text
+            style={{
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: !valid || saving ? ed.colors.ink3 : ed.colors.brand,
+              textTransform: 'uppercase',
+            }}
+          >
+            {saving ? 'Saving' : 'Save'}
           </Text>
         </Pressable>
       </View>
 
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 64 }}
       >
-        <Text style={{ fontSize: 28, fontFamily: font.sansBold, color: t.ink, letterSpacing: -0.6 }}>
-          New reading
-        </Text>
+        <EditorialHeadline size="title1">{`A *new* reading.`}</EditorialHeadline>
 
-        {/* Metric selector */}
-        <Text
-          style={{
-            marginTop: space.xl,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-            marginBottom: 6,
-          }}
-        >
-          Metric
-        </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-          {METRIC_KINDS.map((k) => {
-            const active = k.id === kind;
-            return (
-              <Pressable
-                key={k.id}
-                onPress={() => setKind(k.id)}
-                style={{
-                  paddingVertical: 7,
-                  paddingHorizontal: 12,
-                  borderRadius: radius.pill,
-                  backgroundColor: active ? t.ink : 'transparent',
-                  borderWidth: 1,
-                  borderColor: active ? t.ink : t.line,
-                }}
-              >
-                <Text style={{ fontSize: 12, color: active ? t.bg : t.ink2, fontFamily: font.sansMed }}>
-                  {k.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <View style={{ marginTop: 32 }}>
+          <EyebrowLabel withRule>Metric</EyebrowLabel>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+            {METRIC_KINDS.map((k) => {
+              const active = k.id === kind;
+              return (
+                <Pressable
+                  key={k.id}
+                  onPress={() => setKind(k.id)}
+                  style={{
+                    paddingVertical: 8,
+                    paddingHorizontal: 14,
+                    backgroundColor: active ? ed.colors.ink1 : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {k.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Value */}
-        <Text
-          style={{
-            marginTop: space.xl,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-            marginBottom: 6,
-          }}
-        >
-          Value ({selected.unit})
-        </Text>
-        <TextInput
-          value={value}
-          onChangeText={setValue}
-          keyboardType="decimal-pad"
-          placeholder="0.00"
-          placeholderTextColor={t.ink4}
-          autoFocus
-          style={{
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            color: t.ink,
-            fontSize: 32,
-            fontFamily: font.monoSemi,
-          }}
-        />
+        <View style={{ marginTop: 32 }}>
+          <EyebrowLabel withRule>{`Value · ${selected.unit}`}</EyebrowLabel>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 16 }}>
+            <TextInput
+              value={value}
+              onChangeText={setValue}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={ed.colors.ink4}
+              autoFocus
+              selectionColor={ed.colors.brand}
+              style={{
+                flex: 1,
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 64,
+                lineHeight: 64,
+                letterSpacing: -2,
+                color: ed.colors.ink1,
+                padding: 0,
+              }}
+            />
+            <Text
+              style={{
+                marginLeft: 12,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+              }}
+            >
+              {selected.unit}
+            </Text>
+          </View>
+        </View>
 
-        {/* Note */}
-        <Text
-          style={{
-            marginTop: space.md,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 0.9,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-            marginBottom: 6,
-          }}
-        >
-          Note (optional)
-        </Text>
-        <TextInput
-          value={note}
-          onChangeText={setNote}
-          placeholder="Context or conditions"
-          placeholderTextColor={t.ink4}
-          style={{
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            color: t.ink,
-            fontSize: 14,
-          }}
-        />
+        <View style={{ marginTop: 24 }}>
+          <EyebrowLabel withRule>Note · optional</EyebrowLabel>
+          <TextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Context or conditions"
+            placeholderTextColor={ed.colors.ink4}
+            selectionColor={ed.colors.brand}
+            style={{
+              marginTop: 14,
+              paddingVertical: 14,
+              borderBottomWidth: 1,
+              borderBottomColor: ed.colors.line,
+              fontFamily: ed.typography.bodyMd.fontFamily,
+              fontSize: ed.typography.bodyMd.fontSize,
+              color: ed.colors.ink1,
+            }}
+          />
+        </View>
       </ScrollView>
     </View>
   );
