@@ -1,17 +1,20 @@
-// Peptide detail — spec v2.0 §10 + extras.
-// Clickable stack partners, UnapprovedChip, new Benefits/Beginner/Cycle/Timing/
-// Co-admin/Conflicts sections from lib/peptide-extras.
+// Peptide detail — editorial rebuild. Drops the colored hero block in
+// favor of a colored hairline above the title; quick facts grid is
+// replaced with a hairline-divided DataRow list; cycle template uses
+// the PhaseTimeline primitive (its first proper home); citations use
+// hanging serif index marks. Tabs are mono uppercase with a hairline
+// rule beneath the active label. Save toggles a star eyebrow.
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
-import {
-  HFormula,
-  HTag,
-  UnapprovedChip,
-} from '../../components/Primitives';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { PhaseTimeline } from '../../components/editorial/PhaseTimeline';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { isSaved, savePeptide, unsavePeptide } from '../../lib/db';
 import {
   DISCLAIMER_BEGINNER,
@@ -19,8 +22,6 @@ import {
 } from '../../lib/disclaimers';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 type TabId = 'overview' | 'dosing' | 'research' | 'notes';
 
@@ -37,7 +38,7 @@ function resolvePartnerId(label: string): string | null {
 }
 
 export default function PeptideDetailScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -65,15 +66,30 @@ export default function PeptideDetailScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: t.bg,
-          paddingTop: insets.top + space.xl,
-          paddingHorizontal: space.xl,
+          backgroundColor: ed.colors.bg,
+          paddingTop: insets.top + 24,
+          paddingHorizontal: 24,
         }}
       >
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <IconChevronLeft size={18} color={t.ink2} />
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Text style={{ marginTop: space.xl, color: t.ink, fontFamily: font.sansSemi, fontSize: 18 }}>
+        <Text
+          style={{
+            marginTop: 36,
+            fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+            fontSize: 22,
+            color: ed.colors.ink2,
+          }}
+        >
           Peptide not found.
         </Text>
       </View>
@@ -92,201 +108,163 @@ export default function PeptideDetailScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* Hero */}
+      {/* Top bar */}
       <View
         style={{
-          backgroundColor: p.color + '20',
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.lg,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingHorizontal: space.xl,
-          }}
-        >
-          <Pressable
-            onPress={() => router.back()}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: t.surface,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-            hitSlop={8}
-          >
-            <IconChevronLeft size={16} color={t.ink2} />
-          </Pressable>
-          <Pressable
-            onPress={toggleSave}
-            style={{
-              height: 36,
-              paddingHorizontal: 14,
-              borderRadius: 18,
-              backgroundColor: saved ? t.accent : t.surface,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: saved ? t.accent : t.line,
-            }}
-            hitSlop={8}
-          >
-            <Text
-              style={{
-                color: saved ? '#fff' : t.ink2,
-                fontSize: 13,
-                fontFamily: font.sansSemi,
-              }}
-            >
-              {saved ? '★ Saved' : '☆ Save'}
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={{ paddingHorizontal: space.xl, paddingTop: space.lg }}>
-          <View style={{ marginBottom: 8 }}>
-            <UnapprovedChip />
-          </View>
+        <Pressable onPress={() => router.back()} hitSlop={10}>
           <Text
             style={{
-              fontSize: 11,
-              fontFamily: font.sansBold,
-              letterSpacing: 1.2,
-              color: p.color,
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
+        </Pressable>
+        <Pressable onPress={toggleSave} hitSlop={6}>
+          <Text
+            style={{
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: saved ? ed.colors.brand : ed.colors.ink3,
               textTransform: 'uppercase',
             }}
           >
-            {p.class}
+            {saved ? '★ Saved' : '☆ Save'}
           </Text>
-          <Text
-            style={{
-              fontSize: 34,
-              fontFamily: font.sansBold,
-              color: t.ink,
-              letterSpacing: -1,
-              lineHeight: 38,
-              marginTop: 6,
-            }}
-          >
-            {p.name}
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: t.ink2,
-              marginTop: 4,
-              fontStyle: 'italic',
-            }}
-          >
-            {p.subtitle}
-          </Text>
-          <View style={{ marginTop: space.md }}>
-            <HFormula formula={p.formula} />
-            <Text style={{ fontSize: 11, color: t.ink4, fontFamily: font.mono, marginTop: 2 }}>
-              {p.mw} · t½ {p.halfLife}
-            </Text>
-          </View>
-        </View>
+        </Pressable>
       </View>
 
-      {/* Quick facts grid */}
-      <View
-        style={{
-          paddingHorizontal: space.xl,
-          paddingTop: space.lg,
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
-      >
+      {/* Title block — colored hairline above class eyebrow + serif name */}
+      <View style={{ paddingHorizontal: 24 }}>
+        <View style={{ height: 2, backgroundColor: p.color, marginBottom: 18, width: 56 }} />
+        <Text
+          style={{
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: p.color,
+            textTransform: 'uppercase',
+            marginBottom: 14,
+          }}
+        >
+          {p.class}
+        </Text>
+        <EditorialHeadline size="display">{p.name}</EditorialHeadline>
+        <Text
+          style={{
+            marginTop: 12,
+            fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+            fontSize: 17,
+            lineHeight: 24,
+            color: ed.colors.ink2,
+          }}
+        >
+          {p.subtitle}
+        </Text>
+        <Text
+          style={{
+            marginTop: 14,
+            fontFamily: ed.typography.dataMd.fontFamily,
+            fontSize: ed.typography.dataMd.fontSize,
+            color: ed.colors.ink3,
+          }}
+        >
+          {p.formula} · {p.mw} · t½ {p.halfLife}
+        </Text>
+        <Text
+          style={{
+            marginTop: 8,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.stateWarn,
+            textTransform: 'uppercase',
+          }}
+        >
+          Not FDA-approved · research only
+        </Text>
+      </View>
+
+      {/* Quick facts — hairline-divided DataRow list. */}
+      <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+        <HairlineRow strong />
         {[
-          { label: 'Dose (research)', val: p.dose || '—' },
+          { label: 'Dose · research', val: p.dose || '—' },
           { label: 'Frequency', val: p.freq || '—' },
           { label: 'Route', val: p.route || '—' },
           { label: 'Half-life', val: p.halfLife || '—' },
-        ].map((f) => (
-          <View
-            key={f.label}
-            style={{
-              width: '48.5%',
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              padding: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            <Text
+        ].map((f, idx, arr) => (
+          <View key={f.label}>
+            <View
               style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                textTransform: 'uppercase',
+                flexDirection: 'row',
+                alignItems: 'baseline',
+                paddingVertical: 16,
+                gap: 14,
               }}
             >
-              {f.label}
-            </Text>
-            <Text
-              style={{
-                fontSize: 14,
-                fontFamily: font.monoSemi,
-                color: t.ink,
-                marginTop: 6,
-                letterSpacing: -0.1,
-              }}
-            >
-              {f.val}
-            </Text>
+              <Text
+                style={{
+                  flex: 1,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {f.label}
+              </Text>
+              <Text
+                style={{
+                  flex: 2,
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 17,
+                  letterSpacing: -0.2,
+                  color: ed.colors.ink1,
+                  textAlign: 'right',
+                }}
+              >
+                {f.val}
+              </Text>
+            </View>
+            {idx < arr.length - 1 ? <HairlineRow /> : null}
           </View>
         ))}
+        <HairlineRow strong />
       </View>
 
       {/* Suggested reconstitution */}
       {p.reconstitution ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <View
+        <View style={{ marginTop: 24, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Suggested reconstitution</EyebrowLabel>
+          <Text
             style={{
-              padding: space.md,
-              borderRadius: radius.md,
-              backgroundColor: t.accentSoft,
-              borderLeftWidth: 3,
-              borderLeftColor: t.accent,
+              marginTop: 14,
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 18,
+              lineHeight: 26,
+              color: ed.colors.ink1,
             }}
           >
-            <Text
-              style={{
-                fontSize: 10,
-                color: t.accentInk,
-                fontFamily: font.sansSemi,
-                letterSpacing: 0.8,
-                textTransform: 'uppercase',
-              }}
-            >
-              Suggested reconstitution
-            </Text>
-            <Text
-              style={{
-                marginTop: 4,
-                color: t.ink,
-                fontFamily: font.monoSemi,
-                fontSize: 14,
-              }}
-            >
-              {p.reconstitution}
-            </Text>
-          </View>
+            {p.reconstitution}
+          </Text>
         </View>
       ) : null}
 
@@ -294,10 +272,10 @@ export default function PeptideDetailScreen() {
       <View
         style={{
           flexDirection: 'row',
-          paddingHorizontal: space.xl,
-          marginTop: space.lg,
+          paddingHorizontal: 24,
+          marginTop: 32,
           borderBottomWidth: 1,
-          borderBottomColor: t.line,
+          borderBottomColor: ed.colors.line,
         }}
       >
         {(['overview', 'dosing', 'research', 'notes'] as TabId[]).map((tid) => {
@@ -307,20 +285,20 @@ export default function PeptideDetailScreen() {
               key={tid}
               onPress={() => setTab(tid)}
               style={{
-                paddingVertical: space.md,
-                paddingHorizontal: 2,
-                marginRight: space.lg,
+                paddingVertical: 14,
+                marginRight: 24,
                 borderBottomWidth: 2,
-                borderBottomColor: active ? t.ink : 'transparent',
+                borderBottomColor: active ? ed.colors.ink1 : 'transparent',
                 marginBottom: -1,
               }}
             >
               <Text
                 style={{
-                  fontSize: 14,
-                  fontFamily: active ? font.sansSemi : font.sansMed,
-                  color: active ? t.ink : t.ink3,
-                  textTransform: 'capitalize',
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: active ? ed.colors.ink1 : ed.colors.ink3,
+                  textTransform: 'uppercase',
                 }}
               >
                 {tid}
@@ -330,176 +308,145 @@ export default function PeptideDetailScreen() {
         })}
       </View>
 
-      {/* OVERVIEW tab */}
+      {/* OVERVIEW */}
       {tab === 'overview' ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.lg }}>
+        <View style={{ paddingHorizontal: 24, marginTop: 24, gap: 28 }}>
           {p.sequence ? (
             <View>
+              <EyebrowLabel withRule>Sequence</EyebrowLabel>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
-                }}
-              >
-                Sequence
-              </Text>
-              <Text
-                style={{
+                  marginTop: 12,
+                  fontFamily: ed.typography.dataMd.fontFamily,
                   fontSize: 13,
-                  fontFamily: font.mono,
-                  color: t.ink2,
                   lineHeight: 20,
+                  color: ed.colors.ink2,
                 }}
               >
                 {p.sequence}
               </Text>
             </View>
           ) : null}
-
           <View>
+            <EyebrowLabel withRule>Research summary</EyebrowLabel>
             <Text
               style={{
-                fontSize: 11,
-                fontFamily: font.sansSemi,
-                letterSpacing: 1,
-                color: t.ink3,
-                textTransform: 'uppercase',
-                marginBottom: 6,
+                marginTop: 14,
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 17,
+                lineHeight: 26,
+                color: ed.colors.ink2,
               }}
             >
-              Research summary
-            </Text>
-            <Text style={{ fontSize: 15, color: t.ink2, lineHeight: 23 }}>
               {p.summary || 'Research summary is being prepared for this entry.'}
             </Text>
           </View>
-
           {extras?.benefits ? (
             <View>
+              <EyebrowLabel withRule>What this peptide is for</EyebrowLabel>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
+                  marginTop: 14,
+                  fontFamily: ed.typography.bodyMd.fontFamily,
+                  fontSize: 15,
+                  lineHeight: 23,
+                  color: ed.colors.ink2,
                 }}
               >
-                What this peptide is for
-              </Text>
-              <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
                 {extras.benefits}
               </Text>
             </View>
           ) : null}
-
-          {/* Clickable stack partners (from monograph stacks[]) */}
           {stackPartnerLinks.length > 0 ? (
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                }}
-              >
-                Common stack partners
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {stackPartnerLinks.map(({ label, id: pid }) =>
-                  pid ? (
-                    <Pressable
+              <EyebrowLabel withRule>Common stack partners</EyebrowLabel>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+                {stackPartnerLinks.map(({ label, id: pid }) => {
+                  const isLink = !!pid;
+                  const Wrap: any = isLink ? Pressable : View;
+                  return (
+                    <Wrap
                       key={label}
-                      onPress={() => router.push(`/peptide/${pid}` as any)}
+                      onPress={isLink ? () => router.push(`/peptide/${pid}` as any) : undefined}
+                      style={{
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderWidth: 1,
+                        borderColor: isLink ? ed.colors.brandLine : ed.colors.lineStrong,
+                      }}
                     >
-                      <HTag>{label}</HTag>
-                    </Pressable>
-                  ) : (
-                    <HTag key={label} color={t.ink3}>
-                      {label}
-                    </HTag>
-                  )
-                )}
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: isLink ? ed.colors.brand : ed.colors.ink3,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </Wrap>
+                  );
+                })}
               </View>
             </View>
           ) : null}
         </View>
       ) : null}
 
-      {/* DOSING tab */}
+      {/* DOSING */}
       {tab === 'dosing' ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.md }}>
-          <View
-            style={{
-              padding: space.md,
-              borderRadius: radius.md,
-              backgroundColor: t.surface,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
+        <View style={{ paddingHorizontal: 24, marginTop: 24, gap: 28 }}>
+          <View>
+            <EyebrowLabel withRule>Research range</EyebrowLabel>
             <Text
               style={{
-                fontSize: 10,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                letterSpacing: 0.8,
-                textTransform: 'uppercase',
-              }}
-            >
-              Research range
-            </Text>
-            <Text
-              style={{
-                marginTop: 6,
-                fontSize: 20,
-                fontFamily: font.monoSemi,
-                color: t.ink,
+                marginTop: 12,
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 36,
+                lineHeight: 38,
+                letterSpacing: -1,
+                color: ed.colors.ink1,
               }}
             >
               {p.dose || '—'}
             </Text>
-            <Text style={{ fontSize: 13, color: t.ink2, marginTop: 4 }}>{p.freq}</Text>
-            <Text style={{ fontSize: 13, color: t.ink2 }}>{p.route}</Text>
+            <Text
+              style={{
+                marginTop: 8,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink2,
+              }}
+            >
+              {p.freq} · {p.route}
+            </Text>
           </View>
 
           {extras?.beginnerProtocol ? (
             <View>
+              <EyebrowLabel withRule>Beginner protocol</EyebrowLabel>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
+                  marginTop: 14,
+                  fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                  fontSize: 14,
+                  lineHeight: 21,
+                  color: ed.colors.stateWarn,
                 }}
               >
-                Beginner protocol
+                {DISCLAIMER_BEGINNER}
               </Text>
-              <View
+              <Text
                 style={{
-                  padding: space.md,
-                  borderRadius: radius.md,
-                  backgroundColor: t.warnSoft,
-                  borderLeftWidth: 3,
-                  borderLeftColor: t.warn,
-                  marginBottom: 8,
+                  marginTop: 12,
+                  fontFamily: ed.typography.bodyMd.fontFamily,
+                  fontSize: 15,
+                  lineHeight: 23,
+                  color: ed.colors.ink2,
                 }}
               >
-                <Text style={{ fontSize: 12, color: t.ink2, lineHeight: 17 }}>
-                  {DISCLAIMER_BEGINNER}
-                </Text>
-              </View>
-              <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
                 {extras.beginnerProtocol}
               </Text>
             </View>
@@ -507,114 +454,86 @@ export default function PeptideDetailScreen() {
 
           {extras?.cycleTemplate ? (
             <View>
+              <EyebrowLabel withRule>Suggested cycle</EyebrowLabel>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
+                  marginTop: 14,
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 19,
+                  letterSpacing: -0.3,
+                  color: ed.colors.ink1,
                 }}
               >
-                Suggested cycle
+                {extras.cycleTemplate.duration_weeks > 0
+                  ? `${extras.cycleTemplate.duration_weeks}-week cycle`
+                  : 'As-needed (no continuous cycle)'}
               </Text>
-              <View
+              <Text
                 style={{
-                  backgroundColor: t.surface,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: t.line,
-                  padding: space.md,
-                  gap: 8,
+                  marginTop: 6,
+                  fontFamily: ed.typography.bodySm.fontFamily,
+                  fontSize: ed.typography.bodySm.fontSize,
+                  lineHeight: ed.typography.bodySm.lineHeight,
+                  color: ed.colors.ink2,
                 }}
               >
-                <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
-                  {extras.cycleTemplate.duration_weeks > 0
-                    ? `${extras.cycleTemplate.duration_weeks}-week cycle`
-                    : 'As-needed (no continuous cycle)'}
+                {extras.cycleTemplate.phase_notes}
+              </Text>
+              {extras.cycleTemplate.phases && extras.cycleTemplate.phases.length > 0 ? (
+                <PhaseTimeline
+                  phases={extras.cycleTemplate.phases.map((ph) => ({
+                    name: ph.name,
+                    days: Math.max(1, ph.weeks * 7),
+                  }))}
+                  currentDay={0}
+                />
+              ) : (
+                <Text
+                  style={{
+                    marginTop: 10,
+                    fontFamily: ed.typography.dataMd.fontFamily,
+                    fontSize: ed.typography.dataMd.fontSize,
+                    lineHeight: 20,
+                    color: ed.colors.ink3,
+                  }}
+                >
+                  {extras.cycleTemplate.schedule}
                 </Text>
-                <Text style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}>
-                  {extras.cycleTemplate.phase_notes}
-                </Text>
-                {/* Prefer phases when available; fall back to schedule string. */}
-                {extras.cycleTemplate.phases && extras.cycleTemplate.phases.length > 0 ? (
-                  <View style={{ gap: 6, marginTop: 4 }}>
-                    {extras.cycleTemplate.phases.map((ph, i) => (
-                      <View
+              )}
+              {extras.cycleTemplate.phases?.some((ph) => ph.dose_modifier) ? (
+                <View style={{ marginTop: 10, gap: 4 }}>
+                  {extras.cycleTemplate.phases.map((ph, i) =>
+                    ph.dose_modifier ? (
+                      <Text
                         key={i}
                         style={{
-                          flexDirection: 'row',
-                          gap: space.sm,
-                          alignItems: 'flex-start',
+                          fontFamily: ed.typography.dataMd.fontFamily,
+                          fontSize: 13,
+                          color: ed.colors.ink3,
                         }}
                       >
-                        <View
-                          style={{
-                            width: 20,
-                            height: 20,
-                            borderRadius: 10,
-                            backgroundColor: p.color + '22',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginTop: 1,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              fontFamily: font.monoSemi,
-                              color: p.color,
-                            }}
-                          >
-                            {i + 1}
-                          </Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 12, color: t.ink, fontFamily: font.sansSemi }}>
-                            {ph.name} · {ph.weeks} {ph.weeks === 1 ? 'week' : 'weeks'}
-                          </Text>
-                          {ph.dose_modifier ? (
-                            <Text
-                              style={{
-                                fontSize: 11,
-                                color: t.ink3,
-                                fontFamily: font.mono,
-                                marginTop: 1,
-                                lineHeight: 15,
-                              }}
-                            >
-                              {ph.dose_modifier}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono, lineHeight: 17 }}>
-                    {extras.cycleTemplate.schedule}
-                  </Text>
-                )}
-              </View>
+                        <Text style={{ color: ed.colors.ink2 }}>{ph.name}.</Text>{' '}
+                        {ph.dose_modifier}
+                      </Text>
+                    ) : null
+                  )}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
           {extras?.timing ? (
             <View>
+              <EyebrowLabel withRule>Best timing</EyebrowLabel>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
+                  marginTop: 14,
+                  fontFamily: ed.typography.bodyMd.fontFamily,
+                  fontSize: 15,
+                  lineHeight: 23,
+                  color: ed.colors.ink2,
                 }}
               >
-                Best timing
-              </Text>
-              <Text style={{ fontSize: 14, color: t.ink2, lineHeight: 21 }}>
                 {extras.timing}
               </Text>
             </View>
@@ -622,26 +541,32 @@ export default function PeptideDetailScreen() {
 
           {extras?.proTips && extras.proTips.length > 0 ? (
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
-                }}
-              >
-                Pro tips
-              </Text>
-              <View style={{ gap: 4 }}>
+              <EyebrowLabel withRule>Pro tips</EyebrowLabel>
+              <View style={{ marginTop: 12, gap: 10 }}>
                 {extras.proTips.map((tip, i) => (
-                  <Text
-                    key={i}
-                    style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}
-                  >
-                    · {tip}
-                  </Text>
+                  <View key={i} style={{ flexDirection: 'row', gap: 12 }}>
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_300Light'),
+                        fontSize: 18,
+                        color: ed.colors.brand,
+                        lineHeight: 22,
+                      }}
+                    >
+                      {i + 1}
+                    </Text>
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontFamily: ed.typography.bodyMd.fontFamily,
+                        fontSize: 14,
+                        lineHeight: 21,
+                        color: ed.colors.ink2,
+                      }}
+                    >
+                      {tip}
+                    </Text>
+                  </View>
                 ))}
               </View>
             </View>
@@ -651,30 +576,34 @@ export default function PeptideDetailScreen() {
             <View>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.warn,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.stateWarn,
                   textTransform: 'uppercase',
-                  marginBottom: 6,
+                  marginBottom: 12,
                 }}
               >
                 Common mistakes
               </Text>
               <View
                 style={{
-                  padding: space.md,
-                  borderRadius: radius.md,
-                  backgroundColor: t.warnSoft,
-                  borderLeftWidth: 3,
-                  borderLeftColor: t.warn,
-                  gap: 6,
+                  borderTopWidth: 1,
+                  borderBottomWidth: 1,
+                  borderColor: ed.colors.stateWarn,
+                  paddingVertical: 14,
+                  gap: 8,
                 }}
               >
                 {extras.commonMistakes.map((m, i) => (
                   <Text
                     key={i}
-                    style={{ fontSize: 13, color: t.ink2, lineHeight: 19 }}
+                    style={{
+                      fontFamily: ed.typography.bodyMd.fontFamily,
+                      fontSize: 14,
+                      lineHeight: 21,
+                      color: ed.colors.ink2,
+                    }}
                   >
                     × {m}
                   </Text>
@@ -683,83 +612,52 @@ export default function PeptideDetailScreen() {
             </View>
           ) : null}
 
-          <Text style={{ fontSize: 12, color: t.ink3, lineHeight: 18 }}>
+          <Text
+            style={{
+              fontFamily: ed.typography.bodySm.fontFamily,
+              fontSize: ed.typography.bodySm.fontSize,
+              lineHeight: ed.typography.bodySm.lineHeight,
+              color: ed.colors.ink3,
+            }}
+          >
             {DISCLAIMER_CITATION_FOOTER}
           </Text>
         </View>
       ) : null}
 
-      {/* RESEARCH tab */}
+      {/* RESEARCH */}
       {tab === 'research' ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg, gap: space.lg }}>
+        <View style={{ paddingHorizontal: 24, marginTop: 24, gap: 28 }}>
           {mechParagraphs.length > 0 ? (
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                }}
-              >
-                Mechanism
-              </Text>
-              <View
-                style={{
-                  backgroundColor: t.surface,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: t.line,
-                  padding: space.md,
-                  gap: space.md,
-                }}
-              >
+              <EyebrowLabel withRule>Mechanism</EyebrowLabel>
+              <View style={{ marginTop: 14, gap: 18 }}>
                 {mechParagraphs.map((para, i) => {
                   const idx = para.indexOf('. ');
                   const title = idx > 0 && idx < 80 ? para.slice(0, idx) : '';
                   const body = title ? para.slice(idx + 2) : para;
                   return (
-                    <View
-                      key={i}
-                      style={{
-                        flexDirection: 'row',
-                        gap: space.md,
-                        borderTopWidth: i === 0 ? 0 : 1,
-                        borderTopColor: t.line,
-                        paddingTop: i === 0 ? 0 : space.md,
-                      }}
-                    >
-                      <View
+                    <View key={i} style={{ flexDirection: 'row', gap: 14 }}>
+                      <Text
                         style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: 11,
-                          backgroundColor: p.color + '22',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginTop: 2,
+                          width: 24,
+                          fontFamily: ed.fraunces('Fraunces_300Light'),
+                          fontSize: 28,
+                          lineHeight: 30,
+                          color: ed.colors.brand,
                         }}
                       >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontFamily: font.monoSemi,
-                            color: p.color,
-                          }}
-                        >
-                          {i + 1}
-                        </Text>
-                      </View>
+                        {i + 1}
+                      </Text>
                       <View style={{ flex: 1 }}>
                         {title ? (
                           <Text
                             style={{
-                              fontSize: 14,
-                              fontFamily: font.sansSemi,
-                              color: t.ink,
-                              marginBottom: 4,
+                              fontFamily: ed.fraunces('Fraunces_400Regular'),
+                              fontSize: 17,
+                              letterSpacing: -0.2,
+                              color: ed.colors.ink1,
+                              marginBottom: 6,
                             }}
                           >
                             {title}.
@@ -767,9 +665,10 @@ export default function PeptideDetailScreen() {
                         ) : null}
                         <Text
                           style={{
-                            fontSize: 13,
-                            color: t.ink2,
-                            lineHeight: 20,
+                            fontFamily: ed.typography.bodyMd.fontFamily,
+                            fontSize: 14,
+                            lineHeight: 22,
+                            color: ed.colors.ink2,
                           }}
                         >
                           {body}
@@ -784,58 +683,80 @@ export default function PeptideDetailScreen() {
 
           {extras && extras.coAdministration.length > 0 ? (
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                }}
-              >
-                Co-administration
-              </Text>
-              <View style={{ gap: 6 }}>
-                {extras.coAdministration.map((ca) => {
+              <EyebrowLabel withRule>Co-administration</EyebrowLabel>
+              <View style={{ marginTop: 4 }}>
+                {extras.coAdministration.map((ca, idx) => {
                   const partner = findPeptide(ca.peptide_id);
                   if (!partner) return null;
                   return (
-                    <Pressable
-                      key={ca.peptide_id}
-                      onPress={() => router.push(`/peptide/${partner.id}` as any)}
-                      style={{
-                        backgroundColor: t.surface,
-                        borderRadius: radius.md,
-                        borderWidth: 1,
-                        borderColor: t.line,
-                        padding: space.md,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 10,
-                      }}
-                    >
-                      <View
+                    <View key={ca.peptide_id}>
+                      <Pressable
+                        onPress={() => router.push(`/peptide/${partner.id}` as any)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${partner.name}`}
                         style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
-                          backgroundColor: partner.color,
+                          flexDirection: 'row',
+                          alignItems: 'flex-start',
+                          paddingVertical: 16,
+                          gap: 14,
                         }}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                          + {partner.name}
-                          {ca.co_reconstitute ? (
-                            <Text style={{ color: t.accent, fontSize: 11 }}> · co-reconstitute</Text>
-                          ) : null}
+                      >
+                        <View
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 3,
+                            marginTop: 8,
+                            backgroundColor: partner.color,
+                          }}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontFamily: ed.fraunces('Fraunces_400Regular'),
+                              fontSize: 17,
+                              letterSpacing: -0.2,
+                              color: ed.colors.ink1,
+                            }}
+                          >
+                            + {partner.name}
+                            {ca.co_reconstitute ? (
+                              <Text
+                                style={{
+                                  fontFamily: ed.typography.labelSm.fontFamily,
+                                  fontSize: ed.typography.labelSm.fontSize,
+                                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                                  color: ed.colors.brand,
+                                }}
+                              >
+                                {'  ·  CO-RECONSTITUTE'}
+                              </Text>
+                            ) : null}
+                          </Text>
+                          <Text
+                            style={{
+                              marginTop: 4,
+                              fontFamily: ed.typography.bodySm.fontFamily,
+                              fontSize: ed.typography.bodySm.fontSize,
+                              lineHeight: ed.typography.bodySm.lineHeight,
+                              color: ed.colors.ink3,
+                            }}
+                          >
+                            {ca.note}
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            fontFamily: ed.fraunces('Fraunces_300Light'),
+                            fontSize: 22,
+                            color: ed.colors.ink3,
+                          }}
+                        >
+                          →
                         </Text>
-                        <Text style={{ fontSize: 12, color: t.ink3, marginTop: 2, lineHeight: 17 }}>
-                          {ca.note}
-                        </Text>
-                      </View>
-                      <IconChevronRight size={14} color={t.ink4} />
-                    </Pressable>
+                      </Pressable>
+                      {idx < extras.coAdministration.length - 1 ? <HairlineRow /> : null}
+                    </View>
                   );
                 })}
               </View>
@@ -846,36 +767,53 @@ export default function PeptideDetailScreen() {
             <View>
               <Text
                 style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.danger,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.stateWarn,
                   textTransform: 'uppercase',
-                  marginBottom: 8,
+                  marginBottom: 12,
                 }}
               >
                 Stack conflicts
               </Text>
-              <View style={{ gap: 6 }}>
-                {extras.stackConflicts.map((sc) => {
+              <View
+                style={{
+                  borderTopWidth: 1,
+                  borderBottomWidth: 1,
+                  borderColor: ed.colors.stateWarn,
+                }}
+              >
+                {extras.stackConflicts.map((sc, idx) => {
                   const partner = findPeptide(sc.peptide_id);
                   if (!partner) return null;
                   return (
                     <View
                       key={sc.peptide_id}
                       style={{
-                        backgroundColor: t.dangerSoft,
-                        borderRadius: radius.md,
-                        borderLeftWidth: 3,
-                        borderLeftColor: t.danger,
-                        padding: space.md,
-                        gap: 4,
+                        paddingVertical: 14,
+                        borderTopWidth: idx === 0 ? 0 : 1,
+                        borderTopColor: ed.colors.line,
                       }}
                     >
-                      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
+                      <Text
+                        style={{
+                          fontFamily: ed.fraunces('Fraunces_400Regular'),
+                          fontSize: 17,
+                          color: ed.colors.ink1,
+                        }}
+                      >
                         ✕ {partner.name}
                       </Text>
-                      <Text style={{ fontSize: 12, color: t.ink2, lineHeight: 17 }}>
+                      <Text
+                        style={{
+                          marginTop: 4,
+                          fontFamily: ed.typography.bodySm.fontFamily,
+                          fontSize: ed.typography.bodySm.fontSize,
+                          lineHeight: ed.typography.bodySm.lineHeight,
+                          color: ed.colors.ink2,
+                        }}
+                      >
                         {sc.reason}
                       </Text>
                     </View>
@@ -887,60 +825,53 @@ export default function PeptideDetailScreen() {
 
           {p.citations.length > 0 ? (
             <View>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
-                }}
-              >
-                Citations
-              </Text>
-              <View style={{ gap: space.sm }}>
+              <EyebrowLabel withRule>Citations</EyebrowLabel>
+              <View style={{ marginTop: 4 }}>
                 {p.citations.map((c, i) => (
-                  <Pressable
-                    key={i}
-                    disabled={!c.url}
-                    onPress={() => c.url && Linking.openURL(c.url)}
-                    style={{
-                      backgroundColor: t.surface,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: t.line,
-                      padding: space.md,
-                      gap: 4,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        fontFamily: font.monoSemi,
-                        color: t.ink3,
-                        letterSpacing: 0.5,
-                      }}
+                  <View key={i}>
+                    <Pressable
+                      disabled={!c.url}
+                      onPress={() => c.url && Linking.openURL(c.url)}
+                      style={{ flexDirection: 'row', gap: 12, paddingVertical: 16 }}
                     >
-                      [{i + 1}]
-                    </Text>
-                    <Text style={{ fontSize: 13, color: t.ink, lineHeight: 19 }}>
-                      {c.title}
-                    </Text>
-                    {c.url ? (
                       <Text
                         style={{
-                          fontSize: 11,
-                          color: t.accent,
-                          fontFamily: font.mono,
-                          marginTop: 2,
+                          width: 28,
+                          fontFamily: ed.typography.dataMd.fontFamily,
+                          fontSize: 13,
+                          color: ed.colors.ink3,
                         }}
-                        numberOfLines={1}
                       >
-                        {c.url}
+                        [{i + 1}]
                       </Text>
-                    ) : null}
-                  </Pressable>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontFamily: ed.fraunces('Fraunces_400Regular'),
+                            fontSize: 15,
+                            lineHeight: 22,
+                            color: ed.colors.ink1,
+                          }}
+                        >
+                          {c.title}
+                        </Text>
+                        {c.url ? (
+                          <Text
+                            style={{
+                              marginTop: 4,
+                              fontFamily: ed.typography.dataMd.fontFamily,
+                              fontSize: 12,
+                              color: ed.colors.brand,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {c.url}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                    {i < p.citations.length - 1 ? <HairlineRow /> : null}
+                  </View>
                 ))}
               </View>
             </View>
@@ -948,56 +879,41 @@ export default function PeptideDetailScreen() {
         </View>
       ) : null}
 
-      {/* NOTES tab */}
+      {/* NOTES */}
       {tab === 'notes' ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
-          <Text style={{ fontSize: 15, color: t.ink2, lineHeight: 23 }}>
+        <View style={{ paddingHorizontal: 24, marginTop: 24 }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 17,
+              lineHeight: 26,
+              color: ed.colors.ink2,
+            }}
+          >
             {p.notes || 'No additional cautions recorded for this entry.'}
           </Text>
         </View>
       ) : null}
 
       {/* CTAs */}
-      <View
-        style={{
-          flexDirection: 'row',
-          paddingHorizontal: space.xl,
-          marginTop: space['2xl'],
-          gap: space.sm,
-        }}
-      >
-        <Pressable
+      <View style={{ marginTop: 40, paddingHorizontal: 24, gap: 12 }}>
+        <EditorialButton
+          fullWidth
           onPress={() =>
             router.push({ pathname: '/log-dose', params: { peptideId: p.id } } as any)
           }
-          style={{
-            flex: 1,
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.ink,
-            alignItems: 'center',
-          }}
         >
-          <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-            Log a dose
-          </Text>
-        </Pressable>
-        <Pressable
+          Log a dose
+        </EditorialButton>
+        <EditorialButton
+          variant="secondary"
+          fullWidth
           onPress={() =>
             router.push({ pathname: '/reconstitute', params: { peptideId: p.id } } as any)
           }
-          style={{
-            flex: 1,
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.accent,
-            alignItems: 'center',
-          }}
         >
-          <Text style={{ color: '#fff', fontSize: 14, fontFamily: font.sansSemi }}>
-            Reconstitute
-          </Text>
-        </Pressable>
+          Reconstitute
+        </EditorialButton>
       </View>
     </ScrollView>
   );
