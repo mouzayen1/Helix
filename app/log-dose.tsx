@@ -7,6 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DateTimeField } from '../components/DateTimeField';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
@@ -14,7 +15,9 @@ import { HairlineRow } from '../components/editorial/HairlineRow';
 import { DosingDisclaimer } from '../components/Primitives';
 import { useEditorialTheme } from '../lib/design/theme';
 import {
+  attachVialToCycle,
   getActiveCycle,
+  getActiveCycleForPeptide,
   getVialsForPeptide,
   INJECTION_SITES,
   listActiveVials,
@@ -68,7 +71,6 @@ export default function LogDoseModal() {
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [saving, setSaving] = useState(false);
   const [takenAtDate, setTakenAtDate] = useState<Date>(new Date());
-  const [editingTime, setEditingTime] = useState<boolean>(false);
 
   const peptide = peptideId ? findPeptide(peptideId) : null;
 
@@ -190,6 +192,33 @@ export default function LogDoseModal() {
         note: note.trim() || undefined,
       });
       haptic.success();
+      // v1.2: if the dose's vial isn't attached to any cycle but an
+      // active cycle covers this peptide, offer to attach. We never
+      // auto-attach silently.
+      if (vial && !vial.cycle_id) {
+        const cov = await getActiveCycleForPeptide(peptideId);
+        if (cov) {
+          Alert.alert(
+            'Attach this vial to your cycle?',
+            `This ${peptide?.name ?? 'vial'} isn't linked to a cycle yet. Attach it to "${cov.name}" so future doses associate automatically?`,
+            [
+              { text: 'Not now', style: 'cancel', onPress: () => router.back() },
+              {
+                text: 'Attach',
+                onPress: async () => {
+                  try {
+                    await attachVialToCycle(vial.id, cov.id);
+                  } catch {
+                    /* non-fatal */
+                  }
+                  router.back();
+                },
+              },
+            ]
+          );
+          return;
+        }
+      }
       router.back();
     } catch (err) {
       setSaving(false);
@@ -854,165 +883,9 @@ export default function LogDoseModal() {
           </View>
         </View>
 
-        {/* When */}
+        {/* When — DateTimeField owns the expand/collapse + steppers */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
-          <EyebrowLabel withRule>When</EyebrowLabel>
-          <Pressable
-            onPress={() => setEditingTime((v) => !v)}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingVertical: 14,
-              gap: 12,
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontFamily: ed.fraunces('Fraunces_400Regular'),
-                  fontSize: 22,
-                  letterSpacing: -0.4,
-                  color: ed.colors.ink1,
-                }}
-              >
-                {takenAtDate.toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
-              <Text
-                style={{
-                  marginTop: 2,
-                  fontFamily: ed.typography.dataMd.fontFamily,
-                  fontSize: ed.typography.dataMd.fontSize,
-                  color: ed.colors.ink3,
-                }}
-              >
-                {takenAtDate.toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                })}
-              </Text>
-            </View>
-            <Text
-              style={{
-                fontFamily: ed.typography.label.fontFamily,
-                fontSize: ed.typography.label.fontSize,
-                letterSpacing: ed.typography.label.letterSpacing,
-                color: ed.colors.brand,
-                textTransform: 'uppercase',
-              }}
-            >
-              {editingTime ? 'Done' : 'Edit'}
-            </Text>
-          </Pressable>
-          {editingTime ? (
-            <View
-              style={{
-                paddingVertical: 14,
-                borderTopWidth: 1,
-                borderColor: ed.colors.line,
-                gap: 18,
-              }}
-            >
-              <View style={{ gap: 8 }}>
-                <Text
-                  style={{
-                    fontFamily: ed.typography.labelSm.fontFamily,
-                    fontSize: ed.typography.labelSm.fontSize,
-                    letterSpacing: ed.typography.labelSm.letterSpacing,
-                    color: ed.colors.ink3,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Quick
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {[
-                    { label: 'Now', offset: () => new Date() },
-                    { label: '−1h', offset: () => new Date(Date.now() - 1 * 3600_000) },
-                    { label: '−3h', offset: () => new Date(Date.now() - 3 * 3600_000) },
-                    { label: '−6h', offset: () => new Date(Date.now() - 6 * 3600_000) },
-                    {
-                      label: 'Yesterday',
-                      offset: () => {
-                        const d = new Date();
-                        d.setDate(d.getDate() - 1);
-                        return d;
-                      },
-                    },
-                    {
-                      label: '2d ago',
-                      offset: () => {
-                        const d = new Date();
-                        d.setDate(d.getDate() - 2);
-                        return d;
-                      },
-                    },
-                  ].map((p) => (
-                    <Pressable
-                      key={p.label}
-                      onPress={() => setTakenAtDate(p.offset())}
-                      style={{
-                        paddingVertical: 6,
-                        paddingHorizontal: 12,
-                        borderWidth: 1,
-                        borderColor: ed.colors.lineStrong,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontFamily: ed.typography.labelSm.fontFamily,
-                          fontSize: ed.typography.labelSm.fontSize,
-                          letterSpacing: ed.typography.labelSm.letterSpacing,
-                          color: ed.colors.ink2,
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {p.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <DayStepper date={takenAtDate} setDate={setTakenAtDate} />
-
-              <View style={{ flexDirection: 'row', gap: 14 }}>
-                <UnitStepper
-                  label="Hour"
-                  value={takenAtDate.getHours().toString().padStart(2, '0')}
-                  onMinus={() => {
-                    const d = new Date(takenAtDate);
-                    d.setHours((d.getHours() + 23) % 24);
-                    setTakenAtDate(d);
-                  }}
-                  onPlus={() => {
-                    const d = new Date(takenAtDate);
-                    d.setHours((d.getHours() + 1) % 24);
-                    setTakenAtDate(d);
-                  }}
-                />
-                <UnitStepper
-                  label="Min"
-                  value={takenAtDate.getMinutes().toString().padStart(2, '0')}
-                  minusLabel="−5"
-                  plusLabel="+5"
-                  onMinus={() => {
-                    const d = new Date(takenAtDate);
-                    d.setMinutes((d.getMinutes() + 55) % 60);
-                    setTakenAtDate(d);
-                  }}
-                  onPlus={() => {
-                    const d = new Date(takenAtDate);
-                    d.setMinutes((d.getMinutes() + 5) % 60);
-                    setTakenAtDate(d);
-                  }}
-                />
-              </View>
-            </View>
-          ) : null}
+          <DateTimeField value={takenAtDate} onChange={setTakenAtDate} label="When" />
         </View>
 
         {/* Note */}
@@ -1061,152 +934,3 @@ export default function LogDoseModal() {
   );
 }
 
-function DayStepper({ date, setDate }: { date: Date; setDate: (d: Date) => void }) {
-  const ed = useEditorialTheme();
-  return (
-    <View style={{ gap: 8 }}>
-      <Text
-        style={{
-          fontFamily: ed.typography.labelSm.fontFamily,
-          fontSize: ed.typography.labelSm.fontSize,
-          letterSpacing: ed.typography.labelSm.letterSpacing,
-          color: ed.colors.ink3,
-          textTransform: 'uppercase',
-        }}
-      >
-        Day
-      </Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Pressable
-          onPress={() => {
-            const d = new Date(date);
-            d.setDate(d.getDate() - 1);
-            const earliest = new Date();
-            earliest.setDate(earliest.getDate() - 30);
-            earliest.setHours(0, 0, 0, 0);
-            if (d.getTime() < earliest.getTime()) return;
-            setDate(d);
-          }}
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 22,
-              color: ed.colors.ink3,
-              paddingHorizontal: 14,
-            }}
-          >
-            −
-          </Text>
-        </Pressable>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text
-            style={{
-              fontFamily: ed.fraunces('Fraunces_400Regular'),
-              fontSize: 18,
-              color: ed.colors.ink1,
-            }}
-          >
-            {date.toLocaleDateString('en-US', {
-              weekday: 'short',
-              month: 'short',
-              day: 'numeric',
-            })}
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => {
-            const d = new Date(date);
-            d.setDate(d.getDate() + 1);
-            const latest = new Date();
-            if (d.getTime() > latest.getTime()) return;
-            setDate(d);
-          }}
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 22,
-              color: ed.colors.ink3,
-              paddingHorizontal: 14,
-            }}
-          >
-            +
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function UnitStepper({
-  label,
-  value,
-  onMinus,
-  onPlus,
-  minusLabel = '−',
-  plusLabel = '+',
-}: {
-  label: string;
-  value: string;
-  onMinus: () => void;
-  onPlus: () => void;
-  minusLabel?: string;
-  plusLabel?: string;
-}) {
-  const ed = useEditorialTheme();
-  return (
-    <View style={{ flex: 1, gap: 8 }}>
-      <Text
-        style={{
-          fontFamily: ed.typography.labelSm.fontFamily,
-          fontSize: ed.typography.labelSm.fontSize,
-          letterSpacing: ed.typography.labelSm.letterSpacing,
-          color: ed.colors.ink3,
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
-      </Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Pressable onPress={onMinus} hitSlop={8}>
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 18,
-              color: ed.colors.ink3,
-              paddingHorizontal: 10,
-            }}
-          >
-            {minusLabel}
-          </Text>
-        </Pressable>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text
-            style={{
-              fontFamily: ed.fraunces('Fraunces_400Regular'),
-              fontSize: 22,
-              color: ed.colors.ink1,
-            }}
-          >
-            {value}
-          </Text>
-        </View>
-        <Pressable onPress={onPlus} hitSlop={8}>
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 18,
-              color: ed.colors.ink3,
-              paddingHorizontal: 10,
-            }}
-          >
-            {plusLabel}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}

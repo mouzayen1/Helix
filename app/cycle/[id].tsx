@@ -16,15 +16,27 @@ import { ScheduleItem } from '../../components/editorial/ScheduleItem';
 import { StatPair } from '../../components/editorial/StatPair';
 import { useEditorialTheme } from '../../lib/design/theme';
 import {
+  attachVialToCycle,
+  detachVial,
   endCycle,
+  getVialsForCycle,
   listCycles,
   listJournal,
+  matchingVialsForCycle,
   pauseCycle,
   resumeCycle,
   updateCycle,
   type Cycle,
   type JournalEntry,
+  type Vial,
 } from '../../lib/db';
+import {
+  formatRelativeDue,
+  getNextInjectionForCycle,
+  getVialsNeededForCycle,
+  type NextInjection,
+  type VialNeed,
+} from '../../lib/cycle-helpers';
 import { haptic } from '../../lib/haptics';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
@@ -95,6 +107,11 @@ export default function CycleDetail() {
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  // v1.2: vials currently attached to this cycle, plus the matching pool.
+  const [attachedVials, setAttachedVials] = useState<Vial[]>([]);
+  const [attachableVials, setAttachableVials] = useState<Vial[]>([]);
+  const [vialNeeds, setVialNeeds] = useState<VialNeed[]>([]);
+  const [nextInjections, setNextInjections] = useState<NextInjection[]>([]);
 
   const refresh = useCallback(async () => {
     const all = await listCycles();
@@ -110,8 +127,26 @@ export default function CycleDetail() {
             j.entry_date >= c.starts_on.slice(0, 10) && j.entry_date <= endBound.slice(0, 10)
         )
       );
+      // Vial attachment state + next-injection countdown + vial-needed list.
+      const [att, pool, needs, next] = await Promise.all([
+        getVialsForCycle(c.id),
+        matchingVialsForCycle(c),
+        getVialsNeededForCycle(c.id),
+        c.status === 'active'
+          ? getNextInjectionForCycle(c.id)
+          : Promise.resolve([] as NextInjection[]),
+      ]);
+      setAttachedVials(att);
+      const attachedIds = new Set(att.map((v) => v.id));
+      setAttachableVials(pool.filter((v) => !attachedIds.has(v.id)));
+      setVialNeeds(needs);
+      setNextInjections(next);
     } else {
       setJournalEntries([]);
+      setAttachedVials([]);
+      setAttachableVials([]);
+      setVialNeeds([]);
+      setNextInjections([]);
     }
     if (c) {
       setName(c.name);
@@ -259,6 +294,46 @@ export default function CycleDetail() {
     router.back();
   };
 
+  // v1.2: attach a vial to this cycle. Single-owner — if attached
+  // elsewhere, that link is overwritten after a confirmation alert.
+  const onAttachVial = async (v: Vial) => {
+    const stale = v.cycle_id && v.cycle_id !== cycle.id;
+    const proceed = async () => {
+      await attachVialToCycle(v.id, cycle.id);
+      await refresh();
+    };
+    if (stale) {
+      Alert.alert(
+        'Move vial to this cycle?',
+        'This vial is currently attached to another cycle. Moving it here will detach it from the other cycle. Doses already logged stay where they are.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Move', onPress: () => void proceed() },
+        ]
+      );
+      return;
+    }
+    await proceed();
+  };
+
+  const onDetachVial = (v: Vial) => {
+    Alert.alert(
+      'Detach vial?',
+      'The vial returns to free inventory. Doses logged from it keep their existing cycle linkage — detaching the vial does not rewrite history.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Detach',
+          style: 'destructive',
+          onPress: async () => {
+            await detachVial(v.id);
+            await refresh();
+          },
+        },
+      ]
+    );
+  };
+
   const handleBack = () => {
     if (editing && isDirty) {
       Alert.alert('Discard changes?', 'Your edits will be lost.', [
@@ -403,7 +478,132 @@ export default function CycleDetail() {
         >
           {formatDate(start)} → {formatDate(end)}
         </Text>
+
+        {/* Next-injection countdown — active cycles only, non-PRN peptides. */}
+        {!editing &&
+        cycle.status === 'active' &&
+        nextInjections.some((n) => n.state !== 'prn') ? (
+          <View style={{ marginTop: 18 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
+              Next injection
+            </Text>
+            {nextInjections
+              .filter((n) => n.state !== 'prn')
+              .map((n) => {
+                if (n.state === 'pending_first_dose') {
+                  return (
+                    <Text
+                      key={n.peptide_id}
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                        fontSize: 15,
+                        lineHeight: 22,
+                        color: ed.colors.ink2,
+                      }}
+                    >
+                      {n.peptide_name} — log first dose to start tracking
+                    </Text>
+                  );
+                }
+                const overdue = n.state === 'overdue';
+                return (
+                  <Text
+                    key={n.peptide_id}
+                    style={{
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 16,
+                      lineHeight: 24,
+                      letterSpacing: -0.2,
+                      color: overdue ? ed.colors.stateWarn : ed.colors.ink1,
+                    }}
+                  >
+                    {n.peptide_name} · {n.due_at ? formatRelativeDue(n.due_at) : ''}
+                    {overdue ? ' (overdue)' : ''}
+                  </Text>
+                );
+              })}
+          </View>
+        ) : null}
       </View>
+
+      {/* Vial-needed banner — active cycles where any peptide doesn't have
+          a reconstituted vial. Tap → opens reconstitute pre-pinned. */}
+      {!editing &&
+      cycle.status === 'active' &&
+      vialNeeds.some((v) => !v.has_active_vial) ? (
+        <Pressable
+          onPress={() => {
+            const first = vialNeeds.find((v) => !v.has_active_vial);
+            if (first) {
+              router.push({
+                pathname: '/reconstitute',
+                params: { peptideId: first.peptide_id, cycleId: cycle.id },
+              } as any);
+            }
+          }}
+          style={{
+            marginHorizontal: 24,
+            marginTop: 24,
+            paddingVertical: 16,
+            borderTopWidth: 1,
+            borderBottomWidth: 1,
+            borderColor: ed.colors.stateWarn,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.stateWarn,
+                textTransform: 'uppercase',
+              }}
+            >
+              {vialNeeds.filter((v) => !v.has_active_vial).length === 1
+                ? '1 peptide needs a vial'
+                : `${vialNeeds.filter((v) => !v.has_active_vial).length} peptides need a vial`}
+            </Text>
+            <Text
+              style={{
+                marginTop: 4,
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 16,
+                lineHeight: 22,
+                color: ed.colors.ink1,
+              }}
+            >
+              {vialNeeds
+                .filter((v) => !v.has_active_vial)
+                .map((v) => v.peptide_name)
+                .join(' · ')}
+            </Text>
+          </View>
+          <Text
+            style={{
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.stateWarn,
+              textTransform: 'uppercase',
+            }}
+          >
+            Reconstitute →
+          </Text>
+        </Pressable>
+      ) : null}
 
       {/* View-mode hero + stats */}
       {!editing ? (
@@ -758,6 +958,173 @@ export default function CycleDetail() {
               I understand these conflicts and accept the risk.
             </Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {/* Vials attached to this cycle (view mode). Each row tap-detaches
+          back to free inventory; matching but-not-attached vials below
+          have an "Attach" affordance. */}
+      {!editing && (attachedVials.length > 0 || attachableVials.length > 0) ? (
+        <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>{`Vials · ${attachedVials.length} attached`}</EyebrowLabel>
+          {attachedVials.length > 0 ? (
+            <View style={{ marginTop: 4 }}>
+              {attachedVials.map((v, idx) => {
+                const p = findPeptide(v.peptide_id);
+                const recon = new Date(v.reconstituted_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                });
+                return (
+                  <View key={v.id}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 16,
+                        gap: 12,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor: p?.color ?? ed.colors.ink3,
+                        }}
+                      />
+                      <Pressable
+                        onPress={() => router.push(`/vials/${v.id}` as any)}
+                        style={{ flex: 1 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${p?.name ?? v.peptide_id} vial`}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: ed.fraunces('Fraunces_400Regular'),
+                            fontSize: 17,
+                            letterSpacing: -0.2,
+                            color: ed.colors.ink1,
+                          }}
+                        >
+                          {p?.name ?? v.peptide_id}
+                        </Text>
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            fontFamily: ed.typography.dataMd.fontFamily,
+                            fontSize: ed.typography.dataMd.fontSize,
+                            color: ed.colors.ink3,
+                          }}
+                        >
+                          {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg · recon {recon}
+                          {v.is_active === 0 ? ' · depleted' : ''}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => onDetachVial(v)}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Detach ${p?.name ?? v.peptide_id} vial`}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: ed.typography.label.fontFamily,
+                            fontSize: ed.typography.label.fontSize,
+                            letterSpacing: ed.typography.label.letterSpacing,
+                            color: ed.colors.ink3,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Detach
+                        </Text>
+                      </Pressable>
+                    </View>
+                    {idx < attachedVials.length - 1 ? <HairlineRow /> : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          {attachableVials.length > 0 ? (
+            <View style={{ marginTop: 18 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                }}
+              >
+                Attach existing vial
+              </Text>
+              {attachableVials.map((v, idx) => {
+                const p = findPeptide(v.peptide_id);
+                const stale = v.cycle_id && v.cycle_id !== cycle.id;
+                return (
+                  <View key={v.id}>
+                    <Pressable
+                      onPress={() => onAttachVial(v)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 14,
+                        gap: 12,
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Attach ${p?.name ?? v.peptide_id} vial`}
+                    >
+                      <View
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor: p?.color ?? ed.colors.ink3,
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontFamily: ed.fraunces('Fraunces_400Regular'),
+                            fontSize: 17,
+                            letterSpacing: -0.2,
+                            color: ed.colors.ink2,
+                          }}
+                        >
+                          {p?.name ?? v.peptide_id}
+                        </Text>
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            fontFamily: ed.typography.dataMd.fontFamily,
+                            fontSize: ed.typography.dataMd.fontSize,
+                            color: ed.colors.ink3,
+                          }}
+                        >
+                          {v.remaining_mg.toFixed(2)} / {v.strength_mg} mg
+                          {stale ? ' · in another cycle' : ''}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.label.fontFamily,
+                          fontSize: ed.typography.label.fontSize,
+                          letterSpacing: ed.typography.label.letterSpacing,
+                          color: ed.colors.brand,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        + Attach
+                      </Text>
+                    </Pressable>
+                    {idx < attachableVials.length - 1 ? <HairlineRow /> : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
         </View>
       ) : null}
 

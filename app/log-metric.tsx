@@ -4,12 +4,14 @@
 // serif value entry, hairline-framed note.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DateTimeField, isSameLocalDay } from '../components/DateTimeField';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { useEditorialTheme } from '../lib/design/theme';
-import { METRIC_KINDS, insertMetric } from '../lib/db';
+import { insertMetric, listMetrics, METRIC_KINDS } from '../lib/db';
+import { haptic } from '../lib/haptics';
 
 export default function LogMetricModal() {
   const ed = useEditorialTheme();
@@ -18,26 +20,57 @@ export default function LogMetricModal() {
   const [kind, setKind] = useState<string>('weight');
   const [value, setValue] = useState('');
   const [note, setNote] = useState('');
+  const [takenAt, setTakenAt] = useState<Date>(new Date());
   const [saving, setSaving] = useState(false);
 
   const selected = METRIC_KINDS.find((k) => k.id === kind)!;
   const parsed = parseFloat(value);
   const valid = !isNaN(parsed) && parsed > 0;
 
-  const save = async () => {
-    if (!valid || saving) return;
+  // Wrapped in performSave so the duplicate-warning prompt can chain in.
+  const performSave = async () => {
     setSaving(true);
     try {
       await insertMetric({
         kind,
         value: parsed,
         unit: selected.unit,
+        taken_at: takenAt.toISOString(),
         note: note.trim() || undefined,
       });
+      haptic.success();
       router.back();
     } catch {
       setSaving(false);
+      haptic.error();
     }
+  };
+
+  const save = async () => {
+    if (!valid || saving) return;
+    // Same-day duplicate warning. First-of-day saves pass through silently.
+    try {
+      const recent = await listMetrics(kind, 10);
+      const sameDay = recent.find((r) => isSameLocalDay(new Date(r.taken_at), takenAt));
+      if (sameDay) {
+        const time = new Date(sameDay.taken_at).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+        });
+        Alert.alert(
+          'Already logged today?',
+          `You logged ${selected.label} earlier today (${time}, ${sameDay.value} ${selected.unit ?? ''}). Log again?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Log anyway', onPress: () => void performSave() },
+          ]
+        );
+        return;
+      }
+    } catch {
+      // Lookup failure shouldn't block the save — fall through.
+    }
+    void performSave();
   };
 
   return (
@@ -164,6 +197,10 @@ export default function LogMetricModal() {
               {selected.unit}
             </Text>
           </View>
+        </View>
+
+        <View style={{ marginTop: 24 }}>
+          <DateTimeField value={takenAt} onChange={setTakenAt} label="When" />
         </View>
 
         <View style={{ marginTop: 24 }}>

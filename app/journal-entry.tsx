@@ -2,14 +2,25 @@
 // editorial modal header, serif headline, mood as 5 sharp-corner tiles
 // with eyebrow labels, sliders rendered as 11 hairline ticks per row,
 // sleep-hours stepper, hairline-bordered tags, hairline-framed body.
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DateTimeField } from '../components/DateTimeField';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { useEditorialTheme } from '../lib/design/theme';
 import { getJournal, upsertJournal } from '../lib/db';
+import { haptic } from '../lib/haptics';
+
+// Local YYYY-MM-DD — entry_date is stored in the user's local calendar
+// day, not UTC, so a 10pm entry stays on the right day in any timezone.
+function localDateKey(d: Date): string {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dy = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${dy}`;
+}
 
 const MOODS = [
   { value: 1, label: 'Rough' },
@@ -29,7 +40,13 @@ export default function JournalEntryModal() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const today = new Date().toISOString().slice(0, 10);
+  // Optional `date` query param lets the cycle-detail "Journal during this
+  // cycle" list deep-link directly to a past day's entry.
+  const params = useLocalSearchParams<{ date?: string }>();
+  const initialDate = params.date ? new Date(`${params.date}T12:00:00`) : new Date();
+
+  const [entryAt, setEntryAt] = useState<Date>(initialDate);
+  const entryKey = localDateKey(entryAt);
 
   const [mood, setMood] = useState<number>(3);
   const [energy, setEnergy] = useState(5);
@@ -40,11 +57,18 @@ export default function JournalEntryModal() {
   const [tags, setTags] = useState<string[]>([]);
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
+  const [existedAtLoad, setExistedAtLoad] = useState(false);
+  const lastLoadedKey = useRef<string>('');
 
+  // Loads the entry whose entry_date matches entryKey. Re-runs when the
+  // user picks a new date in the DateTimeField. cancellation flag prevents
+  // late promises from clobbering newer ones.
   useFocusEffect(
     useCallback(() => {
+      let cancelled = false;
       (async () => {
-        const existing = await getJournal(today);
+        const existing = await getJournal(entryKey);
+        if (cancelled) return;
         if (existing) {
           setMood(existing.mood ?? 3);
           setEnergy(existing.energy ?? 5);
@@ -52,23 +76,45 @@ export default function JournalEntryModal() {
           setLibido(existing.libido ?? 5);
           setRecovery(existing.recovery ?? 5);
           setSleepHours(existing.sleep_hours ?? 7.5);
-          setTags(JSON.parse(existing.tags_json));
+          try {
+            setTags(JSON.parse(existing.tags_json));
+          } catch {
+            setTags([]);
+          }
           setBody(existing.body ?? '');
+          setExistedAtLoad(true);
+        } else {
+          // Reset to defaults when the user picks a new date and there's
+          // no entry yet. Skip on first load (already at defaults).
+          if (lastLoadedKey.current !== '') {
+            setMood(3);
+            setEnergy(5);
+            setSleepQuality(5);
+            setLibido(5);
+            setRecovery(5);
+            setSleepHours(7.5);
+            setTags([]);
+            setBody('');
+          }
+          setExistedAtLoad(false);
         }
+        lastLoadedKey.current = entryKey;
       })();
-    }, [today])
+      return () => {
+        cancelled = true;
+      };
+    }, [entryKey])
   );
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]));
   };
 
-  const save = async () => {
-    if (saving) return;
+  const performSave = async () => {
     setSaving(true);
     try {
       await upsertJournal({
-        entry_date: today,
+        entry_date: entryKey,
         mood,
         energy,
         sleep_hours: sleepHours,
@@ -78,10 +124,33 @@ export default function JournalEntryModal() {
         tags,
         body: body.trim() || undefined,
       });
+      haptic.success();
       router.back();
     } catch {
       setSaving(false);
+      haptic.error();
     }
+  };
+
+  const save = async () => {
+    if (saving) return;
+    // Replace prompt only when an entry already exists for this date.
+    if (existedAtLoad) {
+      Alert.alert(
+        'Replace existing entry?',
+        `An entry already exists for ${entryAt.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        })}. Saving will replace it with these values.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Replace', style: 'destructive', onPress: () => void performSave() },
+        ]
+      );
+      return;
+    }
+    void performSave();
   };
 
   return (
@@ -148,9 +217,30 @@ export default function JournalEntryModal() {
             marginBottom: 14,
           }}
         >
-          {today}
+          {entryKey}
         </Text>
-        <EditorialHeadline size="title1">{`How are *you* today?`}</EditorialHeadline>
+        <EditorialHeadline size="title1">
+          {`How are *you*${existedAtLoad ? '' : ' today'}?`}
+        </EditorialHeadline>
+        {existedAtLoad ? (
+          <Text
+            style={{
+              marginTop: 8,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.brand,
+              textTransform: 'uppercase',
+            }}
+          >
+            Editing existing entry
+          </Text>
+        ) : null}
+
+        {/* Date — back-date for journals you forgot to write yesterday */}
+        <View style={{ marginTop: 24 }}>
+          <DateTimeField value={entryAt} onChange={setEntryAt} label="Date" mode="date" />
+        </View>
 
         {/* Mood */}
         <View style={{ marginTop: 32 }}>

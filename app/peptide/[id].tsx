@@ -823,6 +823,90 @@ export default function PeptideDetailScreen() {
             </View>
           ) : null}
 
+          {extras && (extras.sideEffects?.length || extras.contraindications?.length) ? (
+            <View>
+              <EyebrowLabel withRule>Side effects & cautions</EyebrowLabel>
+              {extras.sideEffects?.length ? (
+                <View style={{ marginTop: 14 }}>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.stateModerate,
+                      textTransform: 'uppercase',
+                      marginBottom: 10,
+                    }}
+                  >
+                    Side effects
+                  </Text>
+                  <View
+                    style={{
+                      borderTopWidth: 1,
+                      borderBottomWidth: 1,
+                      borderColor: ed.colors.stateModerate,
+                      paddingVertical: 14,
+                      gap: 8,
+                    }}
+                  >
+                    {extras.sideEffects.map((s) => (
+                      <Text
+                        key={s}
+                        style={{
+                          fontFamily: ed.typography.bodyMd.fontFamily,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        · {s}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              {extras.contraindications?.length ? (
+                <View style={{ marginTop: 18 }}>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.stateWarn,
+                      textTransform: 'uppercase',
+                      marginBottom: 10,
+                    }}
+                  >
+                    Contraindications
+                  </Text>
+                  <View
+                    style={{
+                      borderTopWidth: 1,
+                      borderBottomWidth: 1,
+                      borderColor: ed.colors.stateWarn,
+                      paddingVertical: 14,
+                      gap: 8,
+                    }}
+                  >
+                    {extras.contraindications.map((c) => (
+                      <Text
+                        key={c}
+                        style={{
+                          fontFamily: ed.typography.bodyMd.fontFamily,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        ✕ {c}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
           {p.citations.length > 0 ? (
             <View>
               <EyebrowLabel withRule>Citations</EyebrowLabel>
