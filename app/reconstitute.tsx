@@ -17,7 +17,12 @@ import { SyringeDiagram } from '../components/SyringeDiagram';
 import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
 import { useEditorialTheme } from '../lib/design/theme';
 import { useDoseUnitPref } from '../lib/profile-context';
-import { formatDoseLabel } from '../lib/dose-format';
+import {
+  formatDose,
+  formatDoseLabel,
+  parseDoseInput,
+  resolveDoseUnit,
+} from '../lib/dose-format';
 import { createVial, getActiveVial, type Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
@@ -66,6 +71,12 @@ export default function ReconstituteModal() {
   const [bacText, setBacText] = useState('2');
   const [targetDoseMcg, setTargetDoseMcg] = useState(250);
   const [targetDoseText, setTargetDoseText] = useState('250');
+  // Reconstitute is a "passive" context — no chip, but the displayed
+  // unit follows the global pref. Recompute on every relevant change.
+  const targetDoseUnit = resolveDoseUnit(targetDoseMcg, doseUnitPref);
+  useEffect(() => {
+    setTargetDoseText(formatDose(targetDoseMcg, targetDoseUnit).value);
+  }, [targetDoseMcg, targetDoseUnit]);
   const [beginnerMode, setBeginnerMode] = useState(false);
   const [coReconstitutePartner, setCoReconstitutePartner] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -652,22 +663,22 @@ export default function ReconstituteModal() {
           <HairlineRow />
           <TypedField
             label="Target dose"
-            unit="mcg"
+            unit={targetDoseUnit}
             value={targetDoseText}
             onChangeText={setTargetDoseText}
-            onCommit={() =>
-              commitNum(targetDoseText, setTargetDoseMcg, setTargetDoseText, 1, 500000, targetDoseMcg)
-            }
-            onMinus={() => {
-              const v = Math.max(1, targetDoseMcg - 25);
-              setTargetDoseMcg(v);
-              setTargetDoseText(String(v));
+            onCommit={() => {
+              // Parse in the displayed unit so the user can type "1" in mg
+              // mode and get 1000 mcg back. Fall back to current value on
+              // out-of-range or bad input.
+              const parsed = parseDoseInput(targetDoseText, targetDoseUnit);
+              if (parsed === null || parsed < 1 || parsed > 500000) {
+                setTargetDoseText(formatDose(targetDoseMcg, targetDoseUnit).value);
+              } else {
+                setTargetDoseMcg(parsed);
+              }
             }}
-            onPlus={() => {
-              const v = Math.min(500000, targetDoseMcg + 25);
-              setTargetDoseMcg(v);
-              setTargetDoseText(String(v));
-            }}
+            onMinus={() => setTargetDoseMcg(Math.max(1, targetDoseMcg - 25))}
+            onPlus={() => setTargetDoseMcg(Math.min(500000, targetDoseMcg + 25))}
           />
           {calcMode === 'reverse' ? (
             <>
