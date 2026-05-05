@@ -18,6 +18,18 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     stackConflicts: [
       { peptide_id: 'mt2', reason: 'Both melanocortin agonists — compounding cardiovascular and nausea effects.' },
     ],
+    sideEffects: [
+      'Nausea (most common label finding; ~40% of trial users)',
+      'Flushing, headache, transient blood-pressure rise',
+      'Injection-site reactions',
+      'Focal hyperpigmentation, including darkening of moles or gums',
+      'Vomiting at higher doses',
+    ],
+    contraindications: [
+      'Uncontrolled hypertension or cardiovascular disease',
+      'Pregnancy and breastfeeding',
+      'Known hypersensitivity to bremelanotide',
+    ],
   },
 
   mt2: {
@@ -37,6 +49,20 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'sema', reason: 'Additive nausea risk.' },
       { peptide_id: 'tirz', reason: 'Additive nausea risk.' },
     ],
+    sideEffects: [
+      'Strong nausea (often dose-limiting)',
+      'Flushing, hypertension, increased heart rate',
+      'Darkening of existing moles and new nevus formation — dermatologic monitoring is research convention',
+      'Spontaneous erections in males; libido increase',
+      'Loss of appetite',
+      'Long-term carcinogenic risk of unregulated melanocortin stimulation is unknown',
+    ],
+    contraindications: [
+      'Personal or family history of melanoma',
+      'Many atypical or large nevi',
+      'Uncontrolled hypertension or cardiovascular disease',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   kiss10: {
@@ -52,6 +78,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     timing: 'Pulsatile dosing mimicking natural GnRH rhythm.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Headache, nausea reported in fertility trials',
+      'Injection-site reactions',
+      'Reproductive-axis stimulation can be undesirable in non-fertility contexts',
+    ],
+    contraindications: [
+      'Hormone-sensitive cancers',
+      'Pregnancy (unless under specific fertility protocol)',
+      'No standardized non-clinical protocol',
+    ],
   },
 
   oxy: {
@@ -67,6 +103,17 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     timing: '30–60 min before social/therapeutic context.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Nasal irritation or runny nose with intranasal use',
+      'Headache, nausea reported in trials',
+      'Paradoxical effects on social anxiety in some users (anxiety can increase rather than decrease)',
+      'Long-term safety with chronic use is not well characterized',
+    ],
+    contraindications: [
+      'Pregnancy (uterine-stimulating mechanism)',
+      'Breastfeeding (oxytocin readily transfers)',
+      'Active psychiatric crisis without clinical supervision',
+    ],
   },
 
   dsip: {
@@ -82,6 +129,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     timing: '30–60 min before intended sleep.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Mild morning grogginess',
+      'Vivid dreams',
+      'Injection-site reactions',
+      'Limited human safety data; effect sizes are inconsistent across studies',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+      'Severe untreated sleep-disordered breathing (any sedating peptide warrants caution)',
+    ],
   },
 
   igflr3: {
@@ -105,9 +162,22 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Using a previously-made vial from another peptide as a reference for diluent — IGF-1 LR3 is uniquely unstable.',
     ],
     proTips: [
-      'Buy 0.6% acetic acid specifically for IGF-1 reconstitution — do not substitute vinegar or any other diluent.',
-      'Plan the 4-week cycle in advance and only reconstitute what you will use within 24 h.',
+      '0.6% acetic acid specifically is the research diluent for IGF-1 — vinegar or other diluents will not stabilize it.',
+      'Plan the 4-week cycle in advance and only reconstitute what will be used within 24 h.',
       'Refrigerate between doses; do not freeze.',
+    ],
+    sideEffects: [
+      'Hypoglycemia, especially when taken pre-meal — can be severe',
+      'Injection-site swelling, redness, lipohypertrophy at chronic sites',
+      'Acromegalic-style soft-tissue changes with long-term high-dose use',
+      'Joint pain, headache, fatigue',
+      'Theoretical concern: IGF-1 elevation may promote pre-existing malignancy',
+    ],
+    contraindications: [
+      'Active malignancy or strong family history of hormone-sensitive cancers',
+      'Hypoglycemia-prone individuals',
+      'Pregnancy and breastfeeding',
+      'Diabetic retinopathy (IGF-1 can worsen proliferative retinopathy)',
     ],
   },
 
@@ -126,6 +196,17 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     stackConflicts: [
       { peptide_id: 'igflr3', reason: 'Both IGF-1 analogs — redundant.' },
     ],
+    sideEffects: [
+      'Hypoglycemia post-dose',
+      'Injection-site swelling and lipohypertrophy at repeated sites',
+      'Local soft-tissue overgrowth with chronic site-specific use',
+      'Joint pain at higher doses',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Hypoglycemia-prone individuals',
+      'Pregnancy and breastfeeding',
+    ],
   },
 
   pegmgf: {
@@ -141,5 +222,14 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
     timing: 'Post-workout (within 60 min) on training days.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Injection-site reactions',
+      'Mild fatigue or post-injection lethargy',
+      'Limited long-term human safety data',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
   },
 };

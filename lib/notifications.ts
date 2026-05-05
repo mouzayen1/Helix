@@ -9,8 +9,8 @@ import Constants from 'expo-constants';
 import type * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import {
-  getActiveCycle,
   getProfile,
+  listActiveCycles,
   listActiveVials,
   listDoses,
   updateProfile,
@@ -176,7 +176,8 @@ export async function scheduleAll() {
 
   // Start by wiping previously-scheduled Helix notifications so the schedule
   // stays in sync with current prefs / cycle edits without touching other
-  // local notifications that may be added later.
+  // local notifications another module may have added (scoped cleanup
+  // landed via origin/main).
   const scheduled = await notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     scheduled
@@ -189,46 +190,53 @@ export async function scheduleAll() {
   const ok = await ensurePermission();
   if (!ok) return;
 
-  const [cycle, vials] = await Promise.all([getActiveCycle(), listActiveVials()]);
+  const [cycles, vials] = await Promise.all([listActiveCycles(), listActiveVials()]);
+  const activeCycles = cycles.filter((c) => c.status === 'active');
 
-  // --- Dose reminders from active cycle (next 7 days) --------------------
+  // --- Dose reminders from EVERY active cycle (next 7 days) --------------
+  // Walks each concurrent cycle so a user running healing + fat-loss in
+  // parallel gets reminders for both protocols, not just the most-recent.
   if (
-    cycle &&
-    cycle.status === 'active' &&
+    activeCycles.length > 0 &&
     (prefs.mode === 'dose' || prefs.mode === 'all') &&
     prefs.sub.doseReminders
   ) {
-    let protocol: CycleProtocolItem[] = [];
-    try {
-      protocol = JSON.parse(cycle.protocol_json || '[]');
-    } catch {
-      protocol = [];
-    }
     const today = new Date();
-    for (let offset = 0; offset < 7; offset++) {
-      const day = new Date(today);
-      day.setDate(today.getDate() + offset);
-      const dayOfCycle = dayOfCycleOn(cycle, day);
-      for (const row of protocol) {
-        if (!isScheduledOn(row, dayOfCycle)) continue;
-        const tKey =
-          row.time_of_day in prefs.times ? (row.time_of_day as keyof NotifPrefs['times']) : 'morning';
-        const { hour, minute } = parseHM(prefs.times[tKey]);
-        const when = new Date(day);
-        when.setHours(hour, minute, 0, 0);
-        if (when.getTime() <= Date.now() + 60 * 1000) continue;
-        if (inQuietHours(when, prefs.quietHours)) continue;
-        await notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Dose reminder',
-            body: "Open Helix to see today's protocol.",
-            data: HELIX_NOTIFICATION_DATA,
-          },
-          trigger: {
-            type: notifications.SchedulableTriggerInputTypes.DATE,
-            date: when,
-          },
-        });
+    // Multi-cycle: loop over EVERY active cycle so concurrent protocols
+    // both get reminders. Each scheduled notification is tagged with
+    // HELIX_NOTIFICATION_DATA so the scoped cleanup above can find it.
+    for (const cycle of activeCycles) {
+      let protocol: CycleProtocolItem[] = [];
+      try {
+        protocol = JSON.parse(cycle.protocol_json || '[]');
+      } catch {
+        protocol = [];
+      }
+      for (let offset = 0; offset < 7; offset++) {
+        const day = new Date(today);
+        day.setDate(today.getDate() + offset);
+        const dayOfCycle = dayOfCycleOn(cycle, day);
+        for (const row of protocol) {
+          if (!isScheduledOn(row, dayOfCycle)) continue;
+          const tKey =
+            row.time_of_day in prefs.times ? (row.time_of_day as keyof NotifPrefs['times']) : 'morning';
+          const { hour, minute } = parseHM(prefs.times[tKey]);
+          const when = new Date(day);
+          when.setHours(hour, minute, 0, 0);
+          if (when.getTime() <= Date.now() + 60 * 1000) continue;
+          if (inQuietHours(when, prefs.quietHours)) continue;
+          await notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Dose reminder',
+              body: "Open Helix to see today's protocol.",
+              data: HELIX_NOTIFICATION_DATA,
+            },
+            trigger: {
+              type: notifications.SchedulableTriggerInputTypes.DATE,
+              date: when,
+            },
+          });
+        }
       }
     }
   }

@@ -16,7 +16,22 @@ import {
 } from '@expo-google-fonts/fraunces';
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import * as LocalAuthentication from 'expo-local-authentication';
+import type * as LocalAuthenticationType from 'expo-local-authentication';
+
+// Lazy + guarded require. The biometric-lock feature was added after the
+// earliest production APKs were built, so the expo-local-authentication
+// native module isn't bundled in older installs. A static import would
+// crash at module load time on those installs. require()-with-try lets
+// older APKs ship a no-op (lock silently disabled) while newer APKs get
+// the full feature. Same pattern lib/notifications.ts uses for
+// expo-notifications inside Expo Go.
+let LocalAuthentication: typeof LocalAuthenticationType | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  LocalAuthentication = require('expo-local-authentication');
+} catch {
+  LocalAuthentication = null;
+}
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
@@ -115,6 +130,12 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
 
   const authenticate = useCallback(async () => {
     if (!lockEnabled) return;
+    // No native module → APK predates biometric-lock; treat as
+    // unlocked so the user can still use the app.
+    if (!LocalAuthentication) {
+      setAuthenticated(true);
+      return;
+    }
     setChecking(true);
     try {
       const [hasHardware, enrolled] = await Promise.all([
