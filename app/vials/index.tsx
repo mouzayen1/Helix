@@ -1,19 +1,15 @@
-// Vial management — list of active + depleted vials. v1.1 Phase 3.
+// Vials index — editorial rebuild. Two-tab segmented (active / history),
+// hairline-divided list of vials grouped by peptide.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
-import {
-  getVialHistory,
-  listActiveVials,
-  listDoses,
-  type Dose,
-  type Vial,
-} from '../../lib/db';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../../lib/design/theme';
+import { getVialHistory, listActiveVials, listDoses, type Dose, type Vial } from '../../lib/db';
 import { findPeptide } from '../../lib/peptides';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 type Tab = 'active' | 'history';
 
@@ -31,7 +27,7 @@ function fmtDate(iso: string) {
 }
 
 export default function VialsScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -68,7 +64,6 @@ export default function VialsScreen() {
     }, [])
   );
 
-  // Group active vials by peptide for cleaner list rendering.
   const activeByPeptide = useMemo(() => {
     const groups: Record<string, Vial[]> = {};
     for (const v of active) (groups[v.peptide_id] ||= []).push(v);
@@ -76,38 +71,55 @@ export default function VialsScreen() {
   }, [active]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       <View
         style={{
-          paddingTop: insets.top + space.md,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          gap: 12,
         }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <IconChevronLeft size={18} color={t.ink} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Text style={{ fontSize: 20, fontFamily: font.sansBold, color: t.ink }}>My vials</Text>
+      </View>
+
+      <View style={{ paddingHorizontal: 24 }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
+          }}
+        >
+          Vials
+        </Text>
+        <EditorialHeadline size="title1">{`Your *inventory*.`}</EditorialHeadline>
       </View>
 
       {/* Segmented tabs */}
       <View
         style={{
           flexDirection: 'row',
-          marginHorizontal: space.xl,
-          padding: 3,
-          backgroundColor: t.surfaceAlt,
-          borderRadius: radius.md,
-          marginBottom: space.md,
+          marginHorizontal: 24,
+          marginTop: 24,
+          marginBottom: 16,
+          gap: 6,
         }}
       >
         {(['active', 'history'] as const).map((key) => {
@@ -121,17 +133,20 @@ export default function VialsScreen() {
               accessibilityState={{ selected: on }}
               style={{
                 flex: 1,
-                paddingVertical: 8,
-                borderRadius: radius.md - 3,
-                backgroundColor: on ? t.surface : 'transparent',
+                paddingVertical: 12,
                 alignItems: 'center',
+                backgroundColor: on ? ed.colors.ink1 : 'transparent',
+                borderWidth: 1,
+                borderColor: on ? ed.colors.ink1 : ed.colors.lineStrong,
               }}
             >
               <Text
                 style={{
-                  fontSize: 13,
-                  color: on ? t.ink : t.ink3,
-                  fontFamily: font.sansSemi,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: on ? ed.colors.bg : ed.colors.ink2,
+                  textTransform: 'uppercase',
                 }}
               >
                 {key === 'active' ? 'Active' : 'History'} · {count}
@@ -142,74 +157,78 @@ export default function VialsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
           <Text
             style={{
-              paddingHorizontal: space.xl,
-              color: t.ink3,
-              fontSize: 13,
+              paddingHorizontal: 24,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
             }}
           >
-            Loading vials…
+            Loading…
           </Text>
         ) : tab === 'active' ? (
           active.length === 0 ? (
             <EmptyState
-              title="No active vials"
+              title="No active vials."
               body="Reconstitute a vial to start tracking remaining volume and dose history."
               cta="Reconstitute"
               onPress={() => router.push('/reconstitute' as any)}
             />
           ) : (
-            <View style={{ paddingHorizontal: space.xl, gap: space.md }}>
+            <View style={{ paddingHorizontal: 24 }}>
               {activeByPeptide.map(([pid, vs]) => {
                 const p = findPeptide(pid);
                 return (
-                  <View key={pid} style={{ gap: 8 }}>
+                  <View key={pid} style={{ marginBottom: 24 }}>
                     <View
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        gap: 8,
-                        marginBottom: 4,
+                        gap: 10,
+                        paddingVertical: 10,
+                        borderBottomWidth: 1,
+                        borderBottomColor: ed.colors.line,
                       }}
                     >
                       <View
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 5,
-                          backgroundColor: p?.color ?? t.ink3,
-                        }}
+                        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p?.color ?? ed.colors.ink3 }}
                       />
                       <Text
                         style={{
-                          fontSize: 13,
-                          fontFamily: font.sansSemi,
-                          color: t.ink,
+                          flex: 1,
+                          fontFamily: ed.fraunces('Fraunces_400Regular'),
+                          fontSize: 19,
+                          letterSpacing: -0.3,
+                          color: ed.colors.ink1,
                         }}
                       >
                         {p?.name ?? pid}
                       </Text>
                       <Text
                         style={{
-                          fontSize: 11,
-                          color: t.ink3,
-                          fontFamily: font.mono,
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.ink3,
+                          textTransform: 'uppercase',
                         }}
                       >
                         {vs.length} vial{vs.length === 1 ? '' : 's'}
                       </Text>
                     </View>
-                    {vs.map((v) => (
-                      <ActiveVialCard
-                        key={v.id}
-                        vial={v}
-                        onPress={() => router.push(`/vials/${v.id}` as any)}
-                      />
+                    {vs.map((v, idx) => (
+                      <View key={v.id}>
+                        <ActiveVialRow
+                          vial={v}
+                          onPress={() => router.push(`/vials/${v.id}` as any)}
+                        />
+                        {idx < vs.length - 1 ? <HairlineRow /> : null}
+                      </View>
                     ))}
                   </View>
                 );
@@ -218,18 +237,20 @@ export default function VialsScreen() {
           )
         ) : history.length === 0 ? (
           <EmptyState
-            title="No past vials yet"
+            title="No past vials yet."
             body="Depleted or deleted vials will show up here with their full dose history."
           />
         ) : (
-          <View style={{ paddingHorizontal: space.xl, gap: 10 }}>
-            {history.map((v) => (
-              <HistoryVialCard
-                key={v.id}
-                vial={v}
-                doseCount={dosesByVial[v.id]?.length ?? 0}
-                onPress={() => router.push(`/vials/${v.id}` as any)}
-              />
+          <View style={{ paddingHorizontal: 24 }}>
+            {history.map((v, idx) => (
+              <View key={v.id}>
+                <HistoryVialRow
+                  vial={v}
+                  doseCount={dosesByVial[v.id]?.length ?? 0}
+                  onPress={() => router.push(`/vials/${v.id}` as any)}
+                />
+                {idx < history.length - 1 ? <HairlineRow /> : null}
+              </View>
             ))}
           </View>
         )}
@@ -238,8 +259,8 @@ export default function VialsScreen() {
   );
 }
 
-function ActiveVialCard({ vial, onPress }: { vial: Vial; onPress: () => void }) {
-  const { t } = useTheme();
+function ActiveVialRow({ vial, onPress }: { vial: Vial; onPress: () => void }) {
+  const ed = useEditorialTheme();
   const remainPct = Math.max(
     0,
     Math.min(1, vial.remaining_mg / Math.max(0.0001, vial.strength_mg))
@@ -251,69 +272,90 @@ function ActiveVialCard({ vial, onPress }: { vial: Vial; onPress: () => void }) 
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Open vial, ${vial.remaining_mg.toFixed(2)} of ${vial.strength_mg} mg remaining`}
-      style={{
-        backgroundColor: t.surface,
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: t.line,
-        padding: space.md,
-        gap: 8,
-      }}
+      style={{ paddingVertical: 16, gap: 8 }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12 }}>
         <Text
           style={{
             flex: 1,
-            fontSize: 13,
-            fontFamily: font.monoSemi,
-            color: t.ink,
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 22,
+            letterSpacing: -0.4,
+            color: ed.colors.ink1,
           }}
         >
-          {vial.remaining_mg.toFixed(2)} / {vial.strength_mg} mg
+          {vial.remaining_mg.toFixed(2)}
+          <Text
+            style={{
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
+            }}
+          >
+            {' / '}
+            {vial.strength_mg} mg
+          </Text>
         </Text>
-        <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
           {vial.concentration.toFixed(2)} mg/mL
         </Text>
-        <IconChevronRight size={12} color={t.ink4} />
       </View>
-      <View
-        style={{
-          height: 6,
-          backgroundColor: t.surfaceAlt,
-          borderRadius: 3,
-          overflow: 'hidden',
-        }}
-      >
+      <View style={{ height: 1, backgroundColor: ed.colors.line }}>
         <View
           style={{
             width: `${Math.round(remainPct * 100)}%`,
-            height: 6,
-            backgroundColor: remainPct < 0.15 ? t.warn : t.accent,
+            height: 1,
+            backgroundColor: remainPct < 0.15 ? ed.colors.stateWarn : ed.colors.brand,
           }}
         />
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
           Recon {fmtDate(vial.reconstituted_at)}
         </Text>
         {vial.expires_at ? (
           <Text
             style={{
-              fontSize: 11,
-              fontFamily: font.monoSemi,
-              color: expSoon ? t.danger : t.ink3,
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: expSoon ? ed.colors.stateWarn : ed.colors.ink3,
+              textTransform: 'uppercase',
             }}
           >
             {daysToExp !== null
               ? daysToExp < 0
-                ? 'EXPIRED'
-                : `exp in ${daysToExp}d`
-              : `exp ${fmtDate(vial.expires_at)}`}
+                ? 'Expired'
+                : `Exp in ${daysToExp}d`
+              : `Exp ${fmtDate(vial.expires_at)}`}
           </Text>
         ) : null}
       </View>
       {vial.notes ? (
-        <Text numberOfLines={1} style={{ fontSize: 12, color: t.ink3 }}>
+        <Text
+          numberOfLines={1}
+          style={{
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            color: ed.colors.ink3,
+          }}
+        >
           {vial.notes}
         </Text>
       ) : null}
@@ -321,7 +363,7 @@ function ActiveVialCard({ vial, onPress }: { vial: Vial; onPress: () => void }) 
   );
 }
 
-function HistoryVialCard({
+function HistoryVialRow({
   vial,
   doseCount,
   onPress,
@@ -330,7 +372,7 @@ function HistoryVialCard({
   doseCount: number;
   onPress: () => void;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const p = findPeptide(vial.peptide_id);
   const depletedAt = vial.depleted_at ? fmtDate(vial.depleted_at) : '—';
   const days = vial.depleted_at
@@ -348,44 +390,52 @@ function HistoryVialCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Open depleted vial, ${p?.name ?? vial.peptide_id}`}
-      style={{
-        backgroundColor: t.surface,
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: t.line,
-        padding: space.md,
-        gap: 6,
-      }}
+      style={{ paddingVertical: 16, gap: 6 }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12 }}>
         <View
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: p?.color ?? t.ink3,
-          }}
+          style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p?.color ?? ed.colors.ink3 }}
         />
-        <Text style={{ flex: 1, fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
+        <Text
+          style={{
+            flex: 1,
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 17,
+            letterSpacing: -0.2,
+            color: ed.colors.ink2,
+          }}
+        >
           {p?.name ?? vial.peptide_id}
         </Text>
         <Text
           style={{
-            fontSize: 10,
-            fontFamily: font.sansSemi,
-            color: t.ink3,
-            letterSpacing: 0.8,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
           }}
         >
-          DEPLETED
+          Depleted
         </Text>
-        <IconChevronRight size={12} color={t.ink4} />
       </View>
-      <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+      <Text
+        style={{
+          fontFamily: ed.typography.dataMd.fontFamily,
+          fontSize: ed.typography.dataMd.fontSize,
+          color: ed.colors.ink3,
+        }}
+      >
         {fmtDate(vial.reconstituted_at)} → {depletedAt}
         {days !== null ? ` · ${days}d` : ''}
       </Text>
-      <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+      <Text
+        style={{
+          fontFamily: ed.typography.dataMd.fontFamily,
+          fontSize: ed.typography.dataMd.fontSize,
+          color: ed.colors.ink3,
+        }}
+      >
         {vial.total_doses_drawn || doseCount} doses
         {dosesPerWeek !== null ? ` · ${dosesPerWeek.toFixed(1)}/wk` : ''}
         {vial.cost_usd ? ` · $${vial.cost_usd.toFixed(0)}` : ''}
@@ -405,25 +455,33 @@ function EmptyState({
   cta?: string;
   onPress?: () => void;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   return (
-    <View style={{ paddingHorizontal: space.xl, gap: 10, alignItems: 'flex-start' }}>
-      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>{title}</Text>
-      <Text style={{ fontSize: 13, color: t.ink3, lineHeight: 19 }}>{body}</Text>
-      {cta && onPress ? (
-        <Pressable
-          onPress={onPress}
-          style={{
-            marginTop: 4,
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderRadius: radius.pill,
-            backgroundColor: t.ink,
-          }}
-        >
-          <Text style={{ color: t.bg, fontSize: 13, fontFamily: font.sansSemi }}>{cta}</Text>
-        </Pressable>
-      ) : null}
+    <View style={{ paddingHorizontal: 24, alignItems: 'center', gap: 14, paddingVertical: 28 }}>
+      <Text
+        style={{
+          fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+          fontSize: 22,
+          letterSpacing: -0.4,
+          color: ed.colors.ink2,
+          textAlign: 'center',
+        }}
+      >
+        {title}
+      </Text>
+      <Text
+        style={{
+          fontFamily: ed.typography.bodySm.fontFamily,
+          fontSize: ed.typography.bodySm.fontSize,
+          lineHeight: ed.typography.bodySm.lineHeight,
+          color: ed.colors.ink3,
+          textAlign: 'center',
+          maxWidth: 320,
+        }}
+      >
+        {body}
+      </Text>
+      {cta && onPress ? <EditorialButton onPress={onPress}>{cta}</EditorialButton> : null}
     </View>
   );
 }

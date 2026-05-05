@@ -1,16 +1,20 @@
-// Metric time series — spec v2.0 §10.
+// Metric series — editorial rebuild. Hero serif numeral for latest
+// reading, retinted SVG chart, StatPair for min/avg/max/delta,
+// hairline-divided history.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
-import { IconChevronLeft, IconPlus } from '../../components/Icons';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { StatPair } from '../../components/editorial/StatPair';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { deleteMetric, listMetrics, METRIC_KINDS, type Metric } from '../../lib/db';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function MetricSeries() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { kind } = useLocalSearchParams<{ kind: string }>();
@@ -39,7 +43,6 @@ export default function MetricSeries() {
     return { min, max, mean, delta, latest: last };
   }, [rows]);
 
-  // Chart: oldest → newest left→right
   const chart = useMemo(() => {
     if (rows.length < 2) return null;
     const sorted = [...rows].sort(
@@ -71,181 +74,259 @@ export default function MetricSeries() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       <View
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <IconChevronLeft size={18} color={t.ink2} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Pressable
-          onPress={() => router.push('/log-metric' as any)}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: radius.pill,
-            borderWidth: 1,
-            borderColor: t.line,
-          }}
-          hitSlop={6}
-        >
-          <IconPlus size={12} color={t.ink2} />
-          <Text style={{ color: t.ink2, fontSize: 12, fontFamily: font.sansMed }}>
-            Log
+        <Pressable onPress={() => router.push('/log-metric' as any)} hitSlop={6}>
+          <Text
+            style={{
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.brand,
+              textTransform: 'uppercase',
+            }}
+          >
+            + Log
           </Text>
         </Pressable>
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: space.xl, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 64 }}
+        showsVerticalScrollIndicator={false}
       >
         <Text
           style={{
-            fontSize: 28,
-            fontFamily: font.sansBold,
-            color: t.ink,
-            letterSpacing: -0.6,
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
           }}
         >
           {info.label}
         </Text>
+        <EditorialHeadline size="title1">{`The *trend*.`}</EditorialHeadline>
         {stats ? (
-          <Text style={{ color: t.ink3, fontSize: 40, fontFamily: font.monoSemi, marginTop: 4 }}>
-            {stats.latest}
-            <Text style={{ fontSize: 16 }}> {info.unit}</Text>
-          </Text>
+          <View style={{ marginTop: 18, flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 88,
+                lineHeight: 88,
+                letterSpacing: -3,
+                color: ed.colors.ink1,
+              }}
+            >
+              {stats.latest}
+            </Text>
+            <Text
+              style={{
+                marginLeft: 10,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+              }}
+            >
+              {info.unit}
+            </Text>
+          </View>
         ) : null}
 
         {chart ? (
-          <View
-            style={{
-              marginTop: space.xl,
-              padding: space.md,
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            <Svg width="100%" height={160} viewBox={`0 0 ${chart.W} ${chart.H}`}>
-              {/* Grid */}
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Line
-                  key={i}
-                  x1={16}
-                  x2={chart.W - 16}
-                  y1={16 + (i * (chart.H - 32)) / 4}
-                  y2={16 + (i * (chart.H - 32)) / 4}
-                  stroke={t.line}
-                  strokeWidth={1}
+          <View style={{ marginTop: 32 }}>
+            <EyebrowLabel withRule>{`${rows.length} readings`}</EyebrowLabel>
+            <View style={{ marginTop: 14 }}>
+              <Svg width="100%" height={160} viewBox={`0 0 ${chart.W} ${chart.H}`}>
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Line
+                    key={i}
+                    x1={16}
+                    x2={chart.W - 16}
+                    y1={16 + (i * (chart.H - 32)) / 4}
+                    y2={16 + (i * (chart.H - 32)) / 4}
+                    stroke={ed.colors.line}
+                    strokeWidth={1}
+                  />
+                ))}
+                <Path
+                  d={chart.path}
+                  stroke={ed.colors.brand}
+                  strokeWidth={1.5}
+                  fill="none"
+                  strokeLinejoin="round"
                 />
-              ))}
-              <Path d={chart.path} stroke={t.accent} strokeWidth={2} fill="none" strokeLinejoin="round" />
-              {chart.points.map((p, i) => (
-                <Circle key={i} cx={p.x} cy={p.y} r={3} fill={t.accent} />
-              ))}
-            </Svg>
+                {chart.points.map((p, i) => (
+                  <Circle key={i} cx={p.x} cy={p.y} r={2.5} fill={ed.colors.brand} />
+                ))}
+              </Svg>
+            </View>
           </View>
         ) : (
           <View
             style={{
-              marginTop: space.xl,
-              padding: space.xl,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-              borderStyle: 'dashed',
+              marginTop: 32,
+              paddingVertical: 28,
               alignItems: 'center',
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.line,
             }}
           >
-            <Text style={{ color: t.ink3, fontSize: 13 }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 17,
+                color: ed.colors.ink3,
+                textAlign: 'center',
+              }}
+            >
               Log at least 2 readings to see a trend line.
             </Text>
           </View>
         )}
 
         {stats ? (
-          <View
-            style={{
-              marginTop: space.md,
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              padding: space.md,
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            {[
-              { label: 'Min', val: stats.min.toFixed(1) },
-              { label: 'Avg', val: stats.mean.toFixed(1) },
-              { label: 'Max', val: stats.max.toFixed(1) },
-              { label: 'Δ', val: (stats.delta >= 0 ? '+' : '') + stats.delta.toFixed(1) },
-            ].map((s) => (
-              <View key={s.label} style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 10, color: t.ink3, letterSpacing: 0.8, fontFamily: font.sansSemi, textTransform: 'uppercase' }}>
-                  {s.label}
-                </Text>
-                <Text style={{ fontSize: 16, fontFamily: font.monoSemi, color: t.ink, marginTop: 4 }}>
-                  {s.val}
-                </Text>
-              </View>
-            ))}
+          <View style={{ marginTop: 24 }}>
+            <HairlineRow strong />
+            <StatPair
+              cells={[
+                { value: stats.min.toFixed(1), label: 'Min' },
+                { value: stats.mean.toFixed(1), label: 'Avg' },
+                { value: stats.max.toFixed(1), label: 'Max' },
+              ]}
+            />
+            <HairlineRow strong />
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                paddingVertical: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Δ since first
+              </Text>
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 22,
+                  letterSpacing: -0.4,
+                  color:
+                    stats.delta > 0
+                      ? ed.colors.stateOptimal
+                      : stats.delta < 0
+                      ? ed.colors.stateLow
+                      : ed.colors.ink2,
+                }}
+              >
+                {(stats.delta >= 0 ? '+' : '') + stats.delta.toFixed(1)}
+              </Text>
+            </View>
+            <HairlineRow strong />
           </View>
         ) : null}
 
-        <Text
-          style={{
-            marginTop: space.xl,
-            fontSize: 11,
-            color: t.ink3,
-            letterSpacing: 1.2,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-          }}
-        >
-          History
-        </Text>
-        <View style={{ gap: 6, marginTop: space.sm }}>
-          {rows.map((r) => (
-            <View
-              key={r.id}
-              style={{
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.md,
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: t.ink, fontSize: 15, fontFamily: font.monoSemi }}>
-                  {r.value} {r.unit}
-                </Text>
-                <Text style={{ color: t.ink3, fontSize: 11, marginTop: 2 }}>
-                  {new Date(r.taken_at).toLocaleString()}
-                </Text>
+        <View style={{ marginTop: 32 }}>
+          <EyebrowLabel withRule>History</EyebrowLabel>
+          <View style={{ marginTop: 4 }}>
+            {rows.map((r, idx) => (
+              <View key={r.id}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 16,
+                    gap: 14,
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                      <Text
+                        style={{
+                          fontFamily: ed.fraunces('Fraunces_400Regular'),
+                          fontSize: 22,
+                          letterSpacing: -0.3,
+                          color: ed.colors.ink1,
+                        }}
+                      >
+                        {r.value}
+                      </Text>
+                      <Text
+                        style={{
+                          marginLeft: 6,
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.ink3,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {r.unit}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        marginTop: 4,
+                        fontFamily: ed.typography.dataMd.fontFamily,
+                        fontSize: ed.typography.dataMd.fontSize,
+                        color: ed.colors.ink3,
+                      }}
+                    >
+                      {new Date(r.taken_at).toLocaleString()}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => onDelete(r.id)} hitSlop={6}>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.label.fontFamily,
+                        fontSize: ed.typography.label.fontSize,
+                        letterSpacing: ed.typography.label.letterSpacing,
+                        color: ed.colors.stateWarn,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Delete
+                    </Text>
+                  </Pressable>
+                </View>
+                {idx < rows.length - 1 ? <HairlineRow /> : null}
               </View>
-              <Pressable onPress={() => onDelete(r.id)} hitSlop={6}>
-                <Text style={{ color: t.danger, fontSize: 12, fontFamily: font.sansSemi }}>
-                  Delete
-                </Text>
-              </Pressable>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
       </ScrollView>
     </View>

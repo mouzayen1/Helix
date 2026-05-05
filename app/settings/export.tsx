@@ -1,14 +1,14 @@
-// Export — write JSON + CSV to device docs and share. Spec v2.0 §15.
+// Export — editorial rebuild.
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft } from '../../components/Icons';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { exportAllData } from '../../lib/db';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return '';
@@ -33,7 +33,7 @@ function csvCell(v: unknown): string {
 }
 
 export default function ExportScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
@@ -64,9 +64,6 @@ export default function ExportScreen() {
             .pop()}`
         );
       } else {
-        // zip-style: concatenate per-table CSV sections with table headers.
-        // (No zip lib in Expo by default; a single concatenated file keeps
-        // the export path simple while still being parseable.)
         const sections: string[] = [];
         const tables: [string, unknown][] = [
           ['cycles', data.cycles],
@@ -112,69 +109,76 @@ export default function ExportScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
     >
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <IconChevronLeft size={18} color={t.ink2} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
       </View>
-      <View style={{ paddingHorizontal: space.xl }}>
-        <Text style={{ fontSize: 28, fontFamily: font.sansBold, color: t.ink, letterSpacing: -0.6 }}>
-          Export data
+
+      <View style={{ paddingHorizontal: 24 }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
+          }}
+        >
+          Export
         </Text>
-        <Text style={{ color: t.ink2, fontSize: 14, lineHeight: 21, marginTop: 6 }}>
+        <EditorialHeadline size="title1">{`Your data, *your* file.`}</EditorialHeadline>
+        <Text
+          style={{
+            marginTop: 14,
+            fontFamily: ed.typography.bodyMd.fontFamily,
+            fontSize: 15,
+            lineHeight: 23,
+            color: ed.colors.ink2,
+          }}
+        >
           Save all your doses, vials, cycles, stacks, journal entries, and metrics as a single
           file. Works offline — no account required.
         </Text>
 
-        <Pressable
-          disabled={busy}
-          onPress={() => run('json')}
-          accessibilityRole="button"
-          accessibilityLabel="Export as JSON"
-          style={{
-            marginTop: space.xl,
-            padding: space.lg,
-            backgroundColor: busy ? t.surfaceAlt : t.ink,
-            borderRadius: radius.md,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: busy ? t.ink3 : t.bg, fontSize: 15, fontFamily: font.sansSemi }}>
-            {busy ? 'Preparing export…' : 'Export as JSON'}
-          </Text>
-        </Pressable>
-        <Pressable
-          disabled={busy}
-          onPress={() => run('csv')}
-          accessibilityRole="button"
-          accessibilityLabel="Export as CSV"
-          style={{
-            marginTop: space.sm,
-            padding: space.lg,
-            borderWidth: 1,
-            borderColor: t.lineStrong,
-            borderRadius: radius.md,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: busy ? t.ink3 : t.ink, fontSize: 15, fontFamily: font.sansSemi }}>
-            {busy ? 'Preparing export…' : 'Export as CSV'}
-          </Text>
-        </Pressable>
+        <View style={{ marginTop: 32, gap: 12 }}>
+          <EditorialButton fullWidth disabled={busy} onPress={() => run('json')}>
+            {busy ? 'Preparing…' : 'Export as JSON'}
+          </EditorialButton>
+          <EditorialButton variant="secondary" fullWidth disabled={busy} onPress={() => run('csv')}>
+            {busy ? 'Preparing…' : 'Export as CSV'}
+          </EditorialButton>
+        </View>
 
         {status ? (
-          <Text style={{ marginTop: space.md, color: t.ink3, fontSize: 12, fontFamily: font.mono }}>
+          <Text
+            style={{
+              marginTop: 20,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
+              lineHeight: 18,
+            }}
+          >
             {status}
           </Text>
         ) : null}

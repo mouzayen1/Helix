@@ -1,30 +1,39 @@
-// About — full liability posture. Spec v2.0 §15 + liability option (b).
+// About — editorial rebuild.
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft } from '../../components/Icons';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { ResearchBanner } from '../../components/Primitives';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { DISCLAIMER_ONBOARDING, TERMS_FULL, TERMS_VERSION } from '../../lib/disclaimers';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function About() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       <View
         style={{
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <IconChevronLeft size={18} color={t.ink2} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
       </View>
 
@@ -32,130 +41,121 @@ export default function About() {
 
       <ScrollView
         contentContainerStyle={{
-          paddingHorizontal: space.xl,
-          paddingTop: space.md,
-          paddingBottom: insets.bottom + 40,
-          gap: space.md,
+          paddingHorizontal: 24,
+          paddingTop: 12,
+          paddingBottom: insets.bottom + 64,
         }}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={{ fontSize: 28, fontFamily: font.sansBold, color: t.ink, letterSpacing: -0.6 }}>
-          About Helix
-        </Text>
+        <EditorialHeadline size="title1">{`About *Helix*.`}</EditorialHeadline>
 
-        <View
-          style={{
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-          }}
-        >
+        <View style={{ marginTop: 32 }}>
+          <EyebrowLabel withRule>What Helix is</EyebrowLabel>
           <Text
             style={{
-              fontSize: 11,
-              letterSpacing: 0.9,
-              fontFamily: font.sansSemi,
-              color: t.ink3,
-              textTransform: 'uppercase',
+              marginTop: 14,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 16,
+              lineHeight: 24,
+              letterSpacing: -0.2,
+              color: ed.colors.ink1,
             }}
           >
-            What Helix is
-          </Text>
-          <Text style={{ color: t.ink2, fontSize: 14, lineHeight: 21, marginTop: 6 }}>
             {DISCLAIMER_ONBOARDING}
           </Text>
         </View>
 
-        <View
-          style={{
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.dangerSoft,
-            borderLeftWidth: 3,
-            borderLeftColor: t.danger,
-          }}
-        >
+        <View style={{ marginTop: 28 }}>
           <Text
             style={{
-              fontSize: 11,
-              letterSpacing: 0.9,
-              fontFamily: font.sansSemi,
-              color: t.danger,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.stateWarn,
               textTransform: 'uppercase',
+              marginBottom: 12,
             }}
           >
             Not for human use
           </Text>
-          <Text style={{ color: t.ink, fontSize: 14, lineHeight: 21, marginTop: 6 }}>
-            Peptides described in this app are research chemicals. In most
-            jurisdictions they are not approved by the FDA, EMA, or equivalent
-            regulator for human use. Helix and its creators are not liable for
-            any administration, adverse reaction, illness, or outcome arising
-            from your use. You are solely responsible for your decisions.
-          </Text>
-        </View>
-
-        <View
-          style={{
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            gap: 4,
-          }}
-        >
-          <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
-            App version
-          </Text>
-          <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
-            {Constants.expoConfig?.version ?? '0.0.0'} · terms v{TERMS_VERSION}
-          </Text>
-        </View>
-
-        <View
-          style={{
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-            gap: 4,
-          }}
-        >
-          <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
-            Data stays local
-          </Text>
-          <Text style={{ color: t.ink2, fontSize: 13, lineHeight: 19 }}>
-            This build runs entirely on your device. Nothing is transmitted.
-            Your data is yours: export from Settings → Export, or delete
-            everything from Settings → Delete all data.
-          </Text>
-        </View>
-
-        <View
-          style={{
-            padding: space.md,
-            borderRadius: radius.md,
-            backgroundColor: t.surface,
-            borderWidth: 1,
-            borderColor: t.line,
-          }}
-        >
-          <Text
+          <View
             style={{
-              fontSize: 11,
-              letterSpacing: 0.9,
-              fontFamily: font.sansSemi,
-              color: t.ink3,
-              textTransform: 'uppercase',
-              marginBottom: 8,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.stateWarn,
+              paddingVertical: 16,
             }}
           >
-            Full terms of use
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 15,
+                lineHeight: 23,
+                color: ed.colors.ink1,
+              }}
+            >
+              Peptides described in this app are research chemicals. In most jurisdictions they
+              are not approved by the FDA, EMA, or equivalent regulator for human use. Helix and
+              its creators are not liable for any administration, adverse reaction, illness, or
+              outcome arising from your use. You are solely responsible for your decisions.
+            </Text>
+          </View>
+        </View>
+
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>App version</EyebrowLabel>
+          <Text
+            style={{
+              marginTop: 14,
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 36,
+              letterSpacing: -1,
+              color: ed.colors.ink1,
+            }}
+          >
+            {Constants.expoConfig?.version ?? '0.0.0'}
           </Text>
-          <Text style={{ color: t.ink2, fontSize: 12, lineHeight: 18 }}>
+          <Text
+            style={{
+              marginTop: 4,
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
+            }}
+          >
+            Terms v{TERMS_VERSION}
+          </Text>
+        </View>
+
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>Data stays local</EyebrowLabel>
+          <Text
+            style={{
+              marginTop: 14,
+              fontFamily: ed.typography.bodyMd.fontFamily,
+              fontSize: 15,
+              lineHeight: 23,
+              color: ed.colors.ink2,
+            }}
+          >
+            This build runs entirely on your device. Nothing is transmitted. Your data is yours:
+            export from Settings → Export, or delete everything from Settings → Delete all data.
+          </Text>
+        </View>
+
+        <View style={{ marginTop: 28 }}>
+          <EyebrowLabel withRule>Full terms of use</EyebrowLabel>
+          <Text
+            style={{
+              marginTop: 14,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 13,
+              lineHeight: 20,
+              color: ed.colors.ink2,
+            }}
+          >
             {TERMS_FULL}
           </Text>
         </View>

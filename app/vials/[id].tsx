@@ -1,5 +1,7 @@
-// Vial detail — view/edit a single vial, dose timeline, lifecycle actions.
-// v1.1 Phase 3.
+// Vial detail — editorial rebuild. Hairline-divided sections in place
+// of card fills; recon details as DataRow-style pairs; remaining %
+// shown as serif numeral + thin progress hairline; dose timeline reads
+// as ScheduleItem-like rows.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -13,7 +15,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft } from '../../components/Icons';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../../lib/design/theme';
 import {
   deactivateVial,
   deleteVial,
@@ -26,8 +31,6 @@ import {
 } from '../../lib/db';
 import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-US', {
@@ -38,7 +41,6 @@ function fmtDateTime(iso: string) {
     minute: '2-digit',
   });
 }
-
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
@@ -48,7 +50,7 @@ function fmtDate(iso: string) {
 }
 
 export default function VialDetailScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,7 +59,6 @@ export default function VialDetailScreen() {
   const [doses, setDoses] = useState<Dose[]>([]);
   const [editing, setEditing] = useState(false);
 
-  // Editable draft state
   const [strengthText, setStrengthText] = useState('');
   const [bacText, setBacText] = useState('');
   const [costText, setCostText] = useState('');
@@ -89,15 +90,30 @@ export default function VialDetailScreen() {
       <View
         style={{
           flex: 1,
-          backgroundColor: t.bg,
-          paddingTop: insets.top + space.md,
-          paddingHorizontal: space.xl,
+          backgroundColor: ed.colors.bg,
+          paddingTop: insets.top + 24,
+          paddingHorizontal: 24,
         }}
       >
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <IconChevronLeft size={18} color={t.ink} />
+          <Text
+            style={{ fontFamily: ed.fraunces('Fraunces_300Light'), fontSize: 26, color: ed.colors.ink2 }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Text style={{ marginTop: space.md, color: t.ink3 }}>Loading vial…</Text>
+        <Text
+          style={{
+            marginTop: 32,
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          Loading
+        </Text>
       </View>
     );
   }
@@ -114,7 +130,7 @@ export default function VialDetailScreen() {
     ? 'EXPIRED'
     : 'ACTIVE';
   const statusColor =
-    status === 'ACTIVE' ? t.accent : status === 'EXPIRED' ? t.danger : t.ink3;
+    status === 'ACTIVE' ? ed.colors.brand : status === 'EXPIRED' ? ed.colors.stateWarn : ed.colors.ink3;
   const remainPct = Math.max(
     0,
     Math.min(1, vial.remaining_mg / Math.max(0.0001, vial.strength_mg))
@@ -131,11 +147,7 @@ export default function VialDetailScreen() {
     if (editing && isDirty) {
       Alert.alert('Discard changes?', 'Your edits will not be saved.', [
         { text: 'Keep editing', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => router.back(),
-        },
+        { text: 'Discard', style: 'destructive', onPress: () => router.back() },
       ]);
       return;
     }
@@ -220,137 +232,275 @@ export default function VialDetailScreen() {
   };
 
   const onDelete = () => {
-    Alert.alert(
-      'Delete vial?',
-      'The vial is removed but its dose history is preserved.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteVial(vial.id);
-            router.back();
-          },
+    Alert.alert('Delete vial?', 'The vial is removed but its dose history is preserved.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteVial(vial.id);
+          router.back();
         },
-      ]
-    );
+      },
+    ]);
   };
+
+  const Pair = ({ k, v }: { k: string; v: string }) => (
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        paddingVertical: 10,
+        gap: 12,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+        }}
+      >
+        {k}
+      </Text>
+      <Text
+        style={{
+          fontFamily: ed.typography.dataMd.fontFamily,
+          fontSize: ed.typography.dataMd.fontSize,
+          color: ed.colors.ink1,
+        }}
+      >
+        {v}
+      </Text>
+    </View>
+  );
+
+  const Field = ({
+    label,
+    value,
+    onChangeText,
+    keyboardType,
+    placeholder,
+  }: {
+    label: string;
+    value: string;
+    onChangeText: (v: string) => void;
+    keyboardType?: 'decimal-pad' | 'default';
+    placeholder?: string;
+  }) => (
+    <View
+      style={{
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: ed.colors.line,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType ?? 'default'}
+        placeholder={placeholder}
+        placeholderTextColor={ed.colors.ink4}
+        selectionColor={ed.colors.brand}
+        style={{
+          fontFamily: ed.typography.dataMd.fontFamily,
+          fontSize: 15,
+          color: ed.colors.ink1,
+          padding: 0,
+        }}
+      />
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: t.bg }}
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View
         style={{
-          paddingTop: insets.top + space.md,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
+          justifyContent: 'space-between',
         }}
       >
-        <Pressable onPress={handleBack} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-          <IconChevronLeft size={18} color={t.ink} />
+        <Pressable onPress={handleBack} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Text style={{ flex: 1, fontSize: 18, fontFamily: font.sansBold, color: t.ink }}>
-          Vial
-        </Text>
         {editing ? (
           <Pressable onPress={onSaveEdits} hitSlop={6}>
-            <Text style={{ color: t.accent, fontSize: 14, fontFamily: font.sansSemi }}>Save</Text>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.brand,
+                textTransform: 'uppercase',
+              }}
+            >
+              Save
+            </Text>
           </Pressable>
         ) : null}
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Peptide header */}
+        {/* Peptide title block */}
         <View
           style={{
-            paddingHorizontal: space.xl,
+            paddingHorizontal: 24,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 10,
+            gap: 12,
           }}
         >
           <View
             style={{
-              width: 14,
-              height: 14,
-              borderRadius: 7,
-              backgroundColor: peptide?.color ?? t.ink3,
+              width: 6,
+              height: 32,
+              backgroundColor: peptide?.color ?? ed.colors.ink3,
             }}
           />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 20, fontFamily: font.sansBold, color: t.ink }}>
-              {peptide?.name ?? vial.peptide_id}
-            </Text>
-            <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono, marginTop: 2 }}>
-              {peptide?.class ?? '—'}
-            </Text>
-          </View>
-          <View
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-              borderRadius: 8,
-              backgroundColor: status === 'ACTIVE' ? t.accentSoft : t.surfaceAlt,
-            }}
-          >
             <Text
               style={{
-                fontSize: 10,
-                fontFamily: font.sansSemi,
-                color: statusColor,
-                letterSpacing: 0.8,
+                fontFamily: ed.typography.eyebrow.fontFamily,
+                fontSize: ed.typography.eyebrow.fontSize,
+                letterSpacing: ed.typography.eyebrow.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
               }}
             >
-              {status}
+              Vial
+            </Text>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 28,
+                letterSpacing: -0.6,
+                color: ed.colors.ink1,
+              }}
+            >
+              {peptide?.name ?? vial.peptide_id}
             </Text>
           </View>
+          <Text
+            style={{
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: statusColor,
+              textTransform: 'uppercase',
+            }}
+          >
+            {status}
+          </Text>
         </View>
 
-        {/* Reconstitution card */}
-        <View
-          style={{
-            marginHorizontal: space.xl,
-            marginTop: space.lg,
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            gap: 10,
-          }}
-        >
-          <SectionLabel label="Reconstitution" />
+        {/* Remaining */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Remaining</EyebrowLabel>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 14 }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 64,
+                lineHeight: 64,
+                letterSpacing: -2,
+                color: ed.colors.ink1,
+              }}
+            >
+              {vial.remaining_mg.toFixed(2)}
+            </Text>
+            <Text
+              style={{
+                marginLeft: 8,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              / {vial.strength_mg} mg
+            </Text>
+          </View>
+          <View style={{ height: 1, backgroundColor: ed.colors.line, marginTop: 12 }}>
+            <View
+              style={{
+                width: `${Math.round(remainPct * 100)}%`,
+                height: 1,
+                backgroundColor: remainPct < 0.15 ? ed.colors.stateWarn : ed.colors.brand,
+              }}
+            />
+          </View>
+          <Text
+            style={{
+              marginTop: 8,
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
+            }}
+          >
+            {vial.total_doses_drawn} doses drawn
+          </Text>
+        </View>
+
+        {/* Reconstitution */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Reconstitution</EyebrowLabel>
           {editing ? (
-            <View style={{ gap: 10 }}>
-              <FieldRow
-                label="Strength (mg)"
+            <View style={{ marginTop: 4 }}>
+              <Field
+                label="Strength · mg"
                 value={strengthText}
                 onChangeText={setStrengthText}
                 keyboardType="decimal-pad"
               />
-              <FieldRow
-                label="BAC water (mL)"
+              <Field
+                label="BAC water · mL"
                 value={bacText}
                 onChangeText={setBacText}
                 keyboardType="decimal-pad"
               />
-              <FieldRow
-                label="Expires (YYYY-MM-DD)"
+              <Field
+                label="Expires · YYYY-MM-DD"
                 value={expiresText}
                 onChangeText={setExpiresText}
                 placeholder="optional"
               />
-              <FieldRow
-                label="Cost (USD)"
+              <Field
+                label="Cost · USD"
                 value={costText}
                 onChangeText={setCostText}
                 keyboardType="decimal-pad"
@@ -358,156 +508,180 @@ export default function VialDetailScreen() {
               />
             </View>
           ) : (
-            <View style={{ gap: 6 }}>
+            <View style={{ marginTop: 4 }}>
               <Pair k="Strength" v={`${vial.strength_mg} mg`} />
+              <HairlineRow />
               <Pair k="BAC water" v={`${vial.bac_water_ml} mL`} />
+              <HairlineRow />
               <Pair k="Concentration" v={`${vial.concentration.toFixed(3)} mg/mL`} />
+              <HairlineRow />
               <Pair k="Reconstituted" v={fmtDate(vial.reconstituted_at)} />
-              <Pair k="First used" v={vial.first_used_at ? fmtDate(vial.first_used_at) : '—'} />
+              <HairlineRow />
+              <Pair
+                k="First used"
+                v={vial.first_used_at ? fmtDate(vial.first_used_at) : '—'}
+              />
+              <HairlineRow />
               <Pair
                 k="Expires"
                 v={
                   vial.expires_at
                     ? `${fmtDate(vial.expires_at)}${
-                        daysToExp !== null ? ` · ${daysToExp < 0 ? 'expired' : `${daysToExp}d`}` : ''
+                        daysToExp !== null
+                          ? ` · ${daysToExp < 0 ? 'expired' : `${daysToExp}d`}`
+                          : ''
                       }`
                     : '—'
                 }
               />
+              <HairlineRow />
               <Pair k="Cost" v={vial.cost_usd != null ? `$${vial.cost_usd.toFixed(2)}` : '—'} />
               {vial.depleted_at ? (
-                <Pair k="Depleted" v={fmtDate(vial.depleted_at)} />
+                <>
+                  <HairlineRow />
+                  <Pair k="Depleted" v={fmtDate(vial.depleted_at)} />
+                </>
               ) : null}
             </View>
           )}
         </View>
 
-        {/* Remaining card */}
-        <View
-          style={{
-            marginHorizontal: space.xl,
-            marginTop: space.md,
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            gap: 10,
-          }}
-        >
-          <SectionLabel label="Remaining" />
-          <Text style={{ fontSize: 22, fontFamily: font.monoSemi, color: t.ink }}>
-            {vial.remaining_mg.toFixed(2)} / {vial.strength_mg} mg
-          </Text>
-          <View
-            style={{
-              height: 8,
-              backgroundColor: t.surfaceAlt,
-              borderRadius: 4,
-              overflow: 'hidden',
-            }}
-          >
-            <View
-              style={{
-                width: `${Math.round(remainPct * 100)}%`,
-                height: 8,
-                backgroundColor: remainPct < 0.15 ? t.warn : t.accent,
-              }}
-            />
-          </View>
-          <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
-            {vial.total_doses_drawn} doses drawn
-          </Text>
-        </View>
-
         {/* Notes */}
-        <View
-          style={{
-            marginHorizontal: space.xl,
-            marginTop: space.md,
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            gap: 8,
-          }}
-        >
-          <SectionLabel label="Notes" />
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Notes</EyebrowLabel>
           {editing ? (
             <TextInput
               value={notesText}
               onChangeText={setNotesText}
               multiline
               placeholder="Batch, supplier, observations…"
-              placeholderTextColor={t.ink4}
+              placeholderTextColor={ed.colors.ink4}
+              selectionColor={ed.colors.brand}
               style={{
-                color: t.ink,
-                fontSize: 14,
-                minHeight: 60,
-                padding: 0,
+                marginTop: 14,
+                paddingVertical: 14,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: ed.colors.line,
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 15,
+                lineHeight: 22,
+                color: ed.colors.ink1,
+                minHeight: 80,
                 textAlignVertical: 'top',
               }}
             />
           ) : (
-            <Text style={{ color: vial.notes ? t.ink2 : t.ink4, fontSize: 13, lineHeight: 19 }}>
-              {vial.notes ?? 'No notes'}
+            <Text
+              style={{
+                marginTop: 14,
+                fontFamily: vial.notes
+                  ? ed.fraunces('Fraunces_400Regular')
+                  : ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 16,
+                lineHeight: 24,
+                color: vial.notes ? ed.colors.ink2 : ed.colors.ink3,
+              }}
+            >
+              {vial.notes ?? 'No notes.'}
             </Text>
           )}
         </View>
 
         {/* Dose timeline */}
-        <View
-          style={{
-            marginHorizontal: space.xl,
-            marginTop: space.md,
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            padding: space.md,
-            gap: 10,
-          }}
-        >
-          <SectionLabel label={`Dose timeline · ${doses.length}`} />
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>{`Dose timeline · ${doses.length}`}</EyebrowLabel>
           {doses.length === 0 ? (
-            <Text style={{ color: t.ink3, fontSize: 13 }}>No doses drawn from this vial yet.</Text>
+            <Text
+              style={{
+                marginTop: 14,
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 16,
+                color: ed.colors.ink3,
+              }}
+            >
+              No doses drawn from this vial yet.
+            </Text>
           ) : (
-            doses.map((d) => (
-              <View key={d.id} style={{ gap: 2, paddingVertical: 4 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontFamily: font.monoSemi,
-                      color: t.ink,
-                    }}
-                  >
-                    {d.amount_mcg} mcg
-                  </Text>
-                  <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
-                    {d.route}
-                    {d.site ? ` · ${d.site}` : ''}
-                  </Text>
+            <View style={{ marginTop: 4 }}>
+              {doses.map((d, idx) => (
+                <View key={d.id}>
+                  <View style={{ paddingVertical: 14, gap: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12 }}>
+                      <Text
+                        style={{
+                          fontFamily: ed.fraunces('Fraunces_400Regular'),
+                          fontSize: 22,
+                          letterSpacing: -0.4,
+                          color: ed.colors.ink1,
+                        }}
+                      >
+                        {d.amount_mcg}
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.ink3,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        mcg
+                      </Text>
+                      <Text
+                        style={{
+                          flex: 1,
+                          textAlign: 'right',
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.ink3,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {d.route}
+                        {d.site ? ` · ${d.site}` : ''}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.dataMd.fontFamily,
+                        fontSize: ed.typography.dataMd.fontSize,
+                        color: ed.colors.ink3,
+                      }}
+                    >
+                      {fmtDateTime(d.taken_at)}
+                    </Text>
+                    {d.note ? (
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.bodySm.fontFamily,
+                          fontSize: ed.typography.bodySm.fontSize,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        {d.note}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {idx < doses.length - 1 ? <HairlineRow /> : null}
                 </View>
-                <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
-                  {fmtDateTime(d.taken_at)}
-                </Text>
-                {d.note ? (
-                  <Text style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{d.note}</Text>
-                ) : null}
-              </View>
-            ))
+              ))}
+            </View>
           )}
         </View>
 
-        {/* Bottom actions */}
-        <View style={{ marginHorizontal: space.xl, marginTop: space.lg, gap: 8 }}>
+        {/* Actions */}
+        <View style={{ marginTop: 36, paddingHorizontal: 24, gap: 12 }}>
           {editing ? (
             <>
-              <PrimaryButton label="Save changes" onPress={onSaveEdits} />
-              <SecondaryButton
-                label="Cancel"
+              <EditorialButton fullWidth onPress={onSaveEdits}>
+                Save changes
+              </EditorialButton>
+              <EditorialButton
+                variant="secondary"
+                fullWidth
                 onPress={() => {
                   if (isDirty) {
                     Alert.alert('Discard changes?', 'Your edits will not be saved.', [
@@ -525,158 +699,48 @@ export default function VialDetailScreen() {
                     setEditing(false);
                   }
                 }}
-              />
+              >
+                Cancel
+              </EditorialButton>
             </>
           ) : isActive ? (
             <>
-              <PrimaryButton
-                label="Log a dose"
+              <EditorialButton
+                fullWidth
                 onPress={() =>
                   router.push({
                     pathname: '/log-dose',
                     params: { peptideId: vial.peptide_id },
                   } as any)
                 }
-              />
-              <SecondaryButton label="Edit" onPress={() => setEditing(true)} />
-              <SecondaryButton label="Mark depleted" onPress={onMarkDepleted} tone="warn" />
-              <SecondaryButton label="Delete" onPress={onDelete} tone="danger" />
+              >
+                Log a dose
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={() => setEditing(true)}>
+                Edit
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={onMarkDepleted}>
+                Mark depleted
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={onDelete}>
+                Delete
+              </EditorialButton>
             </>
           ) : (
             <>
-              <PrimaryButton label="Restore to active" onPress={onRestore} />
-              <SecondaryButton label="Edit" onPress={() => setEditing(true)} />
-              <SecondaryButton label="Delete" onPress={onDelete} tone="danger" />
+              <EditorialButton fullWidth onPress={onRestore}>
+                Restore to active
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={() => setEditing(true)}>
+                Edit
+              </EditorialButton>
+              <EditorialButton variant="secondary" fullWidth onPress={onDelete}>
+                Delete
+              </EditorialButton>
             </>
           )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-function SectionLabel({ label }: { label: string }) {
-  const { t } = useTheme();
-  return (
-    <Text
-      style={{
-        fontSize: 10,
-        letterSpacing: 0.8,
-        color: t.ink3,
-        fontFamily: font.sansSemi,
-        textTransform: 'uppercase',
-      }}
-    >
-      {label}
-    </Text>
-  );
-}
-
-function Pair({ k, v }: { k: string; v: string }) {
-  const { t } = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-      <Text style={{ fontSize: 13, color: t.ink3 }}>{k}</Text>
-      <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.mono }}>{v}</Text>
-    </View>
-  );
-}
-
-function FieldRow({
-  label,
-  value,
-  onChangeText,
-  keyboardType,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  keyboardType?: 'decimal-pad' | 'default';
-  placeholder?: string;
-}) {
-  const { t } = useTheme();
-  return (
-    <View>
-      <Text
-        style={{
-          fontSize: 10,
-          letterSpacing: 0.5,
-          color: t.ink3,
-          fontFamily: font.sansSemi,
-          textTransform: 'uppercase',
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType ?? 'default'}
-        placeholder={placeholder}
-        placeholderTextColor={t.ink4}
-        style={{
-          borderWidth: 1,
-          borderColor: t.line,
-          borderRadius: radius.sm,
-          paddingHorizontal: 10,
-          paddingVertical: 8,
-          fontSize: 14,
-          color: t.ink,
-          fontFamily: font.mono,
-          backgroundColor: t.bg,
-        }}
-      />
-    </View>
-  );
-}
-
-function PrimaryButton({ label, onPress }: { label: string; onPress: () => void }) {
-  const { t } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{
-        padding: space.md,
-        borderRadius: radius.md,
-        backgroundColor: t.ink,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function SecondaryButton({
-  label,
-  onPress,
-  tone,
-}: {
-  label: string;
-  onPress: () => void;
-  tone?: 'warn' | 'danger';
-}) {
-  const { t } = useTheme();
-  const color = tone === 'danger' ? t.danger : tone === 'warn' ? t.warn : t.ink2;
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{
-        padding: space.md,
-        borderRadius: radius.md,
-        backgroundColor: t.surface,
-        borderWidth: 1,
-        borderColor: t.line,
-        alignItems: 'center',
-      }}
-    >
-      <Text style={{ color, fontSize: 14, fontFamily: font.sansSemi }}>{label}</Text>
-    </Pressable>
   );
 }

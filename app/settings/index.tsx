@@ -1,16 +1,18 @@
-// Settings — spec v2.0 §10 "Settings home".
+// Settings — editorial rebuild. Hairline-divided rows in place of card
+// fills; inline segmented controls for theme/units; switches retinted.
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft, IconChevronRight } from '../../components/Icons';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { useProfile } from '../../lib/profile-context';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function Settings() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, update } = useProfile();
@@ -41,192 +43,132 @@ export default function Settings() {
     }
   };
 
-  const groups: {
-    label: string;
-    rows: {
-      key: string;
-      title: string;
-      value?: React.ReactNode;
-      onPress?: () => void;
-      right?: React.ReactNode;
-      danger?: boolean;
-    }[];
-  }[] = [
-    {
-      label: 'Appearance',
-      rows: [
-        {
-          key: 'theme',
-          title: 'Theme',
-          value: <ThemeToggle />,
-        },
-      ],
-    },
-    {
-      label: 'Units',
-      rows: [
-        {
-          key: 'weight',
-          title: 'Weight',
-          value: (
-            <UnitToggle
-              value={profile?.unit_weight ?? 'lb'}
-              options={['lb', 'kg']}
-              onChange={(v) => update({ unit_weight: v })}
-            />
-          ),
-        },
-        {
-          key: 'volume',
-          title: 'Syringe',
-          value: (
-            <UnitToggle
-              value={profile?.unit_volume ?? 'units'}
-              options={['units', 'mL']}
-              onChange={(v) => update({ unit_volume: v })}
-            />
-          ),
-        },
-      ],
-    },
-    {
-      label: 'Privacy',
-      rows: [
-        {
-          key: 'notif',
-          title: 'Notifications',
-          onPress: () => router.push('/settings/notifications' as any),
-          right: (
-            <Switch
-              value={profile?.notifications_enabled === 1}
-              onValueChange={(v) => update({ notifications_enabled: v ? 1 : 0 })}
-              trackColor={{ false: t.surfaceAlt, true: t.accent }}
-            />
-          ),
-        },
-        {
-          key: 'bio',
-          title: 'Biometric lock',
-          right: (
-            <Switch
-              value={profile?.biometric_lock === 1}
-              onValueChange={(v) => void setBiometricLock(v)}
-              trackColor={{ false: t.surfaceAlt, true: t.accent }}
-            />
-          ),
-        },
-      ],
-    },
-    {
-      label: 'Data',
-      rows: [
-        { key: 'export', title: 'Export data', onPress: () => router.push('/settings/export') },
-        { key: 'about', title: 'About Helix', onPress: () => router.push('/settings/about') },
-        {
-          key: 'delete',
-          title: 'Delete all data',
-          onPress: () => router.push('/settings/delete-account'),
-          danger: true,
-        },
-      ],
-    },
-  ];
-
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
+      showsVerticalScrollIndicator={false}
     >
       <View
         style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <IconChevronLeft size={18} color={t.ink2} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
       </View>
 
-      <View style={{ paddingHorizontal: space.xl }}>
+      <View style={{ paddingHorizontal: 24 }}>
         <Text
           style={{
-            fontSize: 28,
-            fontFamily: font.sansBold,
-            color: t.ink,
-            letterSpacing: -0.6,
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
           }}
         >
           Settings
         </Text>
+        <EditorialHeadline size="title1">{`Your *preferences*.`}</EditorialHeadline>
       </View>
 
-      {groups.map((g) => (
-        <View key={g.label} style={{ marginTop: space.xl }}>
-          <Text
-            style={{
-              paddingHorizontal: space.xl,
-              fontSize: 11,
-              letterSpacing: 1.2,
-              fontFamily: font.sansSemi,
-              textTransform: 'uppercase',
-              color: t.ink3,
-              marginBottom: space.sm,
-            }}
-          >
-            {g.label}
-          </Text>
-          <View
-            style={{
-              marginHorizontal: space.xl,
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-              overflow: 'hidden',
-            }}
-          >
-            {g.rows.map((r, i) => (
-              <Pressable
-                key={r.key}
-                onPress={r.onPress}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  padding: space.md,
-                  borderTopWidth: i === 0 ? 0 : 1,
-                  borderTopColor: t.line,
-                  minHeight: 52,
-                }}
-              >
-                <Text
-                  style={{
-                    flex: 1,
-                    color: r.danger ? t.danger : t.ink,
-                    fontSize: 15,
-                    fontFamily: font.sansMed,
-                  }}
-                >
-                  {r.title}
-                </Text>
-                {r.right ?? r.value ?? (r.onPress ? <IconChevronRight size={14} color={t.ink4} /> : null)}
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ))}
+      {/* Appearance */}
+      <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+        <EyebrowLabel withRule>Appearance</EyebrowLabel>
+        <SettingRow label="Theme">
+          <Segmented
+            value={profile?.theme ?? 'system'}
+            options={['system', 'light', 'dark']}
+            onChange={(v) => update({ theme: v as any })}
+          />
+        </SettingRow>
+        <HairlineRow strong />
+      </View>
+
+      {/* Units */}
+      <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+        <EyebrowLabel withRule>Units</EyebrowLabel>
+        <SettingRow label="Weight">
+          <Segmented
+            value={profile?.unit_weight ?? 'lb'}
+            options={['lb', 'kg']}
+            onChange={(v) => update({ unit_weight: v })}
+          />
+        </SettingRow>
+        <HairlineRow />
+        <SettingRow label="Syringe">
+          <Segmented
+            value={profile?.unit_volume ?? 'units'}
+            options={['units', 'mL']}
+            onChange={(v) => update({ unit_volume: v })}
+          />
+        </SettingRow>
+        <HairlineRow strong />
+      </View>
+
+      {/* Privacy */}
+      <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+        <EyebrowLabel withRule>Privacy</EyebrowLabel>
+        <Pressable onPress={() => router.push('/settings/notifications' as any)}>
+          <SettingRow label="Notifications">
+            <Switch
+              value={profile?.notifications_enabled === 1}
+              onValueChange={(v) => update({ notifications_enabled: v ? 1 : 0 })}
+              trackColor={{ false: ed.colors.lineStrong, true: ed.colors.brand }}
+              thumbColor={ed.colors.bg}
+            />
+          </SettingRow>
+        </Pressable>
+        <HairlineRow />
+        <SettingRow label="Biometric lock">
+          <Switch
+            value={profile?.biometric_lock === 1}
+            onValueChange={(v) => void setBiometricLock(v)}
+            trackColor={{ false: ed.colors.lineStrong, true: ed.colors.brand }}
+            thumbColor={ed.colors.bg}
+          />
+        </SettingRow>
+        <HairlineRow strong />
+      </View>
+
+      {/* Data */}
+      <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+        <EyebrowLabel withRule>Data</EyebrowLabel>
+        <NavRow label="Export data" onPress={() => router.push('/settings/export')} />
+        <HairlineRow />
+        <NavRow label="About Helix" onPress={() => router.push('/settings/about')} />
+        <HairlineRow />
+        <NavRow
+          label="Delete all data"
+          tone="warn"
+          onPress={() => router.push('/settings/delete-account')}
+        />
+        <HairlineRow strong />
+      </View>
 
       <Text
         style={{
-          marginTop: space.xl,
+          marginTop: 36,
           textAlign: 'center',
-          color: t.ink4,
-          fontSize: 12,
-          fontFamily: font.mono,
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
         }}
       >
         Helix v{Constants.expoConfig?.version ?? '0.0.0'}
@@ -235,39 +177,91 @@ export default function Settings() {
   );
 }
 
-function ThemeToggle() {
-  const { t } = useTheme();
-  const { profile, update } = useProfile();
-  const value = profile?.theme ?? 'system';
+function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  const ed = useEditorialTheme();
   return (
-    <View style={{ flexDirection: 'row', gap: 2, padding: 2, borderRadius: radius.sm, backgroundColor: t.surfaceAlt }}>
-      {(['system', 'light', 'dark'] as const).map((v) => {
-        const active = v === value;
-        return (
-          <Pressable
-            key={v}
-            onPress={() => update({ theme: v })}
-            style={{
-              paddingVertical: 4,
-              paddingHorizontal: 10,
-              borderRadius: radius.sm,
-              backgroundColor: active ? t.surface : 'transparent',
-            }}
-          >
-            <Text style={{ color: active ? t.ink : t.ink3, fontSize: 11, fontFamily: font.sansMed, textTransform: 'capitalize' }}>
-              {v}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        gap: 12,
+      }}
+    >
+      <Text
+        style={{
+          flex: 1,
+          fontFamily: ed.fraunces('Fraunces_400Regular'),
+          fontSize: 17,
+          letterSpacing: -0.2,
+          color: ed.colors.ink1,
+        }}
+      >
+        {label}
+      </Text>
+      {children}
     </View>
   );
 }
 
-function UnitToggle({ value, options, onChange }: { value: string; options: string[]; onChange: (v: any) => void }) {
-  const { t } = useTheme();
+function NavRow({
+  label,
+  onPress,
+  tone,
+}: {
+  label: string;
+  onPress: () => void;
+  tone?: 'warn';
+}) {
+  const ed = useEditorialTheme();
   return (
-    <View style={{ flexDirection: 'row', gap: 2, padding: 2, borderRadius: radius.sm, backgroundColor: t.surfaceAlt }}>
+    <Pressable
+      onPress={onPress}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 16,
+        gap: 12,
+      }}
+    >
+      <Text
+        style={{
+          flex: 1,
+          fontFamily: ed.fraunces('Fraunces_400Regular'),
+          fontSize: 17,
+          letterSpacing: -0.2,
+          color: tone === 'warn' ? ed.colors.stateWarn : ed.colors.ink1,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          fontFamily: ed.fraunces('Fraunces_300Light'),
+          fontSize: 22,
+          color: tone === 'warn' ? ed.colors.stateWarn : ed.colors.ink3,
+        }}
+      >
+        →
+      </Text>
+    </Pressable>
+  );
+}
+
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: T[];
+  onChange: (v: T) => void;
+}) {
+  const ed = useEditorialTheme();
+  return (
+    <View style={{ flexDirection: 'row', gap: 4 }}>
       {options.map((opt) => {
         const active = opt === value;
         return (
@@ -275,13 +269,22 @@ function UnitToggle({ value, options, onChange }: { value: string; options: stri
             key={opt}
             onPress={() => onChange(opt)}
             style={{
-              paddingVertical: 4,
+              paddingVertical: 6,
               paddingHorizontal: 10,
-              borderRadius: radius.sm,
-              backgroundColor: active ? t.surface : 'transparent',
+              backgroundColor: active ? ed.colors.ink1 : 'transparent',
+              borderWidth: 1,
+              borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
             }}
           >
-            <Text style={{ color: active ? t.ink : t.ink3, fontSize: 12, fontFamily: font.sansMed }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: active ? ed.colors.bg : ed.colors.ink2,
+                textTransform: 'uppercase',
+              }}
+            >
               {opt}
             </Text>
           </Pressable>

@@ -1,16 +1,17 @@
-// Stack detail — spec v2.0 §10.
+// Stack detail — editorial rebuild.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft } from '../../components/Icons';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { deleteStack, getStack, type Stack, type StackItem } from '../../lib/db';
 import { findPeptide } from '../../lib/peptides';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function StackDetail() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,13 +28,17 @@ export default function StackDetail() {
       <View
         style={{
           flex: 1,
-          backgroundColor: t.bg,
-          paddingTop: insets.top + space.lg,
-          paddingHorizontal: space.xl,
+          backgroundColor: ed.colors.bg,
+          paddingTop: insets.top + 24,
+          paddingHorizontal: 24,
         }}
       >
         <Pressable onPress={() => router.back()} hitSlop={8}>
-          <IconChevronLeft size={18} color={t.ink2} />
+          <Text
+            style={{ fontFamily: ed.fraunces('Fraunces_300Light'), fontSize: 26, color: ed.colors.ink2 }}
+          >
+            ←
+          </Text>
         </Pressable>
       </View>
     );
@@ -48,106 +53,116 @@ export default function StackDetail() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
     >
       <View
-        style={{
-          paddingTop: insets.top + space.sm,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
-        }}
+        style={{ paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 24 }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <IconChevronLeft size={18} color={t.ink2} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
       </View>
 
-      <View style={{ paddingHorizontal: space.xl }}>
+      <View style={{ paddingHorizontal: 24 }}>
         <Text
           style={{
-            fontSize: 11,
-            color: t.accent,
-            letterSpacing: 1.2,
-            fontFamily: font.sansSemi,
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.brand,
             textTransform: 'uppercase',
+            marginBottom: 14,
           }}
         >
           Stack · {stack.goal ?? 'General'}
         </Text>
-        <Text
-          style={{
-            fontSize: 28,
-            fontFamily: font.sansBold,
-            color: t.ink,
-            letterSpacing: -0.6,
-            marginTop: 4,
-          }}
-        >
-          {stack.name}
-        </Text>
+        <EditorialHeadline size="title1">{stack.name}</EditorialHeadline>
         {stack.synergy_score !== null ? (
-          <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono, marginTop: 2 }}>
+          <Text
+            style={{
+              marginTop: 8,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
+            }}
+          >
             Synergy {stack.synergy_score} / 100
           </Text>
         ) : null}
       </View>
 
-      <View style={{ paddingHorizontal: space.xl, marginTop: space.xl, gap: 8 }}>
+      <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
         {items.map((it, i) => {
           const p = findPeptide(it.peptide_id);
           return (
-            <Pressable
-              key={i}
-              onPress={() => p && router.push(`/peptide/${p.id}` as any)}
-              style={{
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.md,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-              }}
-            >
-              <View
+            <View key={i}>
+              <Pressable
+                onPress={() => p && router.push(`/peptide/${p.id}` as any)}
                 style={{
-                  width: 4,
-                  alignSelf: 'stretch',
-                  borderRadius: 2,
-                  backgroundColor: p?.color ?? t.ink3,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 18,
+                  gap: 14,
                 }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: t.ink, fontSize: 15, fontFamily: font.sansSemi }}>
-                  {p?.name ?? it.peptide_id}
+              >
+                <View
+                  style={{ width: 2, alignSelf: 'stretch', backgroundColor: p?.color ?? ed.colors.ink3 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 19,
+                      letterSpacing: -0.3,
+                      color: ed.colors.ink1,
+                    }}
+                  >
+                    {p?.name ?? it.peptide_id}
+                  </Text>
+                  <Text
+                    style={{
+                      marginTop: 4,
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink3,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {it.dose_mcg} {it.unit} · {it.freq} · {it.time}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontFamily: ed.fraunces('Fraunces_300Light'),
+                    fontSize: 22,
+                    color: ed.colors.ink3,
+                  }}
+                >
+                  →
                 </Text>
-                <Text style={{ color: t.ink3, fontSize: 12, fontFamily: font.mono, marginTop: 2 }}>
-                  {it.dose_mcg} {it.unit} · {it.freq} · {it.time}
-                </Text>
-              </View>
-            </Pressable>
+              </Pressable>
+              {i < items.length - 1 ? <HairlineRow /> : null}
+            </View>
           );
         })}
       </View>
 
-      <Pressable
-        onPress={onDelete}
-        style={{
-          marginHorizontal: space.xl,
-          marginTop: space.xl,
-          padding: space.md,
-          borderRadius: radius.md,
-          borderWidth: 1,
-          borderColor: t.danger,
-          alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: t.danger, fontSize: 14, fontFamily: font.sansSemi }}>
+      <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
+        <EditorialButton variant="secondary" fullWidth onPress={onDelete}>
           Delete stack
-        </Text>
-      </Pressable>
+        </EditorialButton>
+      </View>
     </ScrollView>
   );
 }
