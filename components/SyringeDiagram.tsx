@@ -1,15 +1,11 @@
-// True-to-scale insulin syringe with U-100 unit markings.
-// Auto-picks the smallest size that fits the dose (0.3 mL = 30u,
-// 0.5 mL = 50u, 1.0 mL = 100u). Manual override via size chips.
-//
-// Replaces the original 11-tick bar in app/reconstitute.tsx, which carried
-// no unit numbers, no labeled syringe size, and no calibrated tick density.
-
+// True-to-scale insulin syringe with U-100 unit markings — editorial
+// retint. Auto-picks the smallest size that fits the dose
+// (0.3 mL = 30u, 0.5 mL = 50u, 1.0 mL = 100u). Manual override via
+// sharp-corner size chips.
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
+import { useEditorialTheme } from '../lib/design/theme';
 
 export type SyringeSize = 0.3 | 0.5 | 1.0;
 
@@ -23,7 +19,7 @@ function autoPickSize(units: number): SyringeSize {
 }
 
 export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const safeUnits = isFinite(unitsToDraw) && unitsToDraw > 0 ? unitsToDraw : 0;
   const [override, setOverride] = useState<SyringeSize | null>(null);
   const auto = autoPickSize(safeUnits);
@@ -33,16 +29,10 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
   const overflows = safeUnits > maxUnits;
   const fillUnits = Math.min(safeUnits, maxUnits);
 
-  // Tick spacing per size — every 1u short, every 5u medium-with-label,
-  // every 10u long-with-bigger-label. 100u syringe gets a slightly sparser
-  // 1u tick density (only every 2u) to avoid visual mush.
   const minorEvery = size === 1.0 ? 2 : 1;
   const labelEvery = size === 1.0 ? 10 : 5;
   const boldEvery = size === 1.0 ? 20 : 10;
 
-  // Geometry: total SVG width 320px. Reserve 8px left needle, 248px barrel,
-  // 64px right (plunger collar + thumb-rest). Numbers are mapped along the
-  // 248-px barrel.
   const W = 320;
   const H = 96;
   const barrelX = 24;
@@ -73,21 +63,21 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 8,
+          marginBottom: 12,
         }}
       >
         <Text
           style={{
-            fontSize: 11,
-            color: t.ink3,
-            fontFamily: font.sansSemi,
-            letterSpacing: 1.1,
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
             textTransform: 'uppercase',
           }}
         >
-          Syringe · {SIZE_LABEL[String(size)]} · U-100
+          {SIZE_LABEL[String(size)]} · U-100
         </Text>
-        <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
           {([0.3, 0.5, 1.0] as SyringeSize[]).map((s) => {
             const active = s === size;
             const isAuto = override === null && s === auto;
@@ -96,22 +86,24 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
                 key={s}
                 onPress={() => setOverride(active ? null : s)}
                 style={{
-                  paddingHorizontal: 10,
                   paddingVertical: 4,
-                  borderRadius: radius.pill,
-                  backgroundColor: active ? t.ink : t.surface,
+                  paddingHorizontal: 8,
+                  backgroundColor: active ? ed.colors.ink1 : 'transparent',
                   borderWidth: 1,
-                  borderColor: active ? t.ink : t.line,
+                  borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
                 }}
               >
                 <Text
                   style={{
-                    fontSize: 11,
-                    fontFamily: font.monoSemi,
-                    color: active ? t.bg : t.ink2,
+                    fontFamily: ed.typography.labelSm.fontFamily,
+                    fontSize: ed.typography.labelSm.fontSize,
+                    letterSpacing: ed.typography.labelSm.letterSpacing,
+                    color: active ? ed.colors.bg : ed.colors.ink2,
+                    textTransform: 'uppercase',
                   }}
                 >
-                  {s.toFixed(1)}{isAuto ? '★' : ''}
+                  {s.toFixed(1)}
+                  {isAuto ? '★' : ''}
                 </Text>
               </Pressable>
             );
@@ -122,21 +114,26 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
       {/* The barrel */}
       <View
         style={{
-          backgroundColor: t.surface,
-          borderRadius: radius.md,
-          paddingVertical: space.md,
-          paddingHorizontal: space.sm,
-          borderWidth: 1,
-          borderColor: t.line,
+          paddingVertical: 16,
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: ed.colors.line,
         }}
       >
         <Svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}>
           {/* Needle */}
-          <Line x1={0} y1={barrelY + barrelH / 2} x2={barrelX} y2={barrelY + barrelH / 2} stroke={t.ink3} strokeWidth={1.5} />
+          <Line
+            x1={0}
+            y1={barrelY + barrelH / 2}
+            x2={barrelX}
+            y2={barrelY + barrelH / 2}
+            stroke={ed.colors.ink4}
+            strokeWidth={1}
+          />
           {/* Hub */}
           <Path
             d={`M ${barrelX - 6} ${barrelY + 6} L ${barrelX} ${barrelY} L ${barrelX} ${barrelY + barrelH} L ${barrelX - 6} ${barrelY + barrelH - 6} Z`}
-            fill={t.ink3}
+            fill={ed.colors.ink4}
           />
           {/* Barrel outline */}
           <Rect
@@ -144,10 +141,9 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
             y={barrelY}
             width={barrelW}
             height={barrelH}
-            rx={2}
             fill="none"
-            stroke={t.ink2}
-            strokeWidth={1.5}
+            stroke={ed.colors.lineStrong}
+            strokeWidth={1}
           />
           {/* Liquid fill */}
           {fillUnits > 0 ? (
@@ -156,16 +152,30 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
               y={barrelY + 1.5}
               width={Math.max(0, drawX - barrelX - 1)}
               height={barrelH - 3}
-              fill={t.accent}
+              fill={ed.colors.brand}
               opacity={0.85}
             />
           ) : null}
           {/* Plunger collar */}
-          <Rect x={drawX} y={barrelY - 2} width={4} height={barrelH + 4} fill={t.ink} />
+          <Rect x={drawX} y={barrelY - 2} width={3} height={barrelH + 4} fill={ed.colors.ink1} />
           {/* Plunger shaft */}
-          <Rect x={barrelX + barrelW} y={barrelY + 4} width={48} height={barrelH - 8} fill={t.surfaceAlt} stroke={t.ink3} strokeWidth={1} />
+          <Rect
+            x={barrelX + barrelW}
+            y={barrelY + 6}
+            width={48}
+            height={barrelH - 12}
+            fill="none"
+            stroke={ed.colors.ink4}
+            strokeWidth={1}
+          />
           {/* Thumb rest */}
-          <Rect x={barrelX + barrelW + 48} y={barrelY - 4} width={8} height={barrelH + 8} rx={1.5} fill={t.ink3} />
+          <Rect
+            x={barrelX + barrelW + 48}
+            y={barrelY - 4}
+            width={6}
+            height={barrelH + 8}
+            fill={ed.colors.ink4}
+          />
 
           {/* Tick marks */}
           <G>
@@ -178,8 +188,8 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
                   y1={barrelY - len}
                   x2={tick.x}
                   y2={barrelY}
-                  stroke={tick.bold ? t.ink : t.ink3}
-                  strokeWidth={tick.bold ? 1.4 : 1}
+                  stroke={tick.bold ? ed.colors.ink2 : ed.colors.ink4}
+                  strokeWidth={1}
                 />
               );
             })}
@@ -195,8 +205,8 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
                   x={tick.x}
                   y={barrelY - 16}
                   fontSize={9}
-                  fontFamily={font.monoSemi}
-                  fill={t.ink2}
+                  fontFamily={ed.typography.dataMd.fontFamily}
+                  fill={ed.colors.ink3}
                   textAnchor="middle"
                 >
                   {tick.label}
@@ -212,15 +222,15 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
                 y1={barrelY + barrelH}
                 x2={drawX}
                 y2={barrelY + barrelH + 10}
-                stroke={t.accent}
-                strokeWidth={1.5}
+                stroke={ed.colors.brand}
+                strokeWidth={1}
               />
               <SvgText
                 x={drawX}
                 y={barrelY + barrelH + 22}
-                fontSize={11}
-                fontFamily={font.monoSemi}
-                fill={t.accent}
+                fontSize={10}
+                fontFamily={ed.typography.dataMd.fontFamily}
+                fill={ed.colors.brand}
                 textAnchor="middle"
               >
                 {`Draw to ${safeUnits.toFixed(1)} u`}
@@ -231,13 +241,36 @@ export function SyringeDiagram({ unitsToDraw }: { unitsToDraw: number }) {
       </View>
 
       {/* Helper line + overflow warning */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-        <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: 8,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
           1 u = 0.01 mL
         </Text>
         {overflows ? (
-          <Text style={{ fontSize: 11, color: t.danger, fontFamily: font.sansSemi }}>
-            Won&apos;t fit — switch to {safeUnits > 50 ? '1.0' : '0.5'} mL
+          <Text
+            style={{
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: ed.colors.stateWarn,
+              textTransform: 'uppercase',
+            }}
+          >
+            Won't fit — switch to {safeUnits > 50 ? '1.0' : '0.5'} mL
           </Text>
         ) : null}
       </View>

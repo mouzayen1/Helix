@@ -1,26 +1,16 @@
-// Reusable date/time picker — extracted from log-dose so Log Metric and
-// Journal Entry can share the same backdating UX. Three quick chips
-// (Now · Yesterday · 2 days ago) cover the 95% case; day + time steppers
-// underneath let users dial to any timestamp inside [minDaysBack ago, now].
+// Reusable date/time picker — editorial restyle. Same API as the
+// pre-overhaul version: collapsed pill expands to quick chips + day
+// stepper + (optional) hour/minute steppers.
 //
-// Props:
-//   value          — the current Date.
-//   onChange       — called with a new Date whenever the user edits.
-//   label          — section label shown in the collapsed pill.
-//   mode           — 'datetime' (default) shows hour/min steppers.
-//                    'date' hides them so journal entries pick a calendar
-//                    day without needing to commit to a time.
-//   minDaysBack    — how far back the user can go. Default 30.
-//   allowFuture    — when false (default) the day stepper caps at today.
+// Three quick chips (Now · Yesterday · 2 days ago) cover the 95% case.
+// Day + time steppers underneath let users dial to any timestamp inside
+// [minDaysBack ago, now].
 //
-// Caveat: this component owns NO state of its own. Parents track `value`
-// in their own setState and re-render. Keeps the call sites trivially
-// testable and avoids the "two-way binding lost in stale closure" trap.
+// Caveat: this component owns NO state of its own. Parents track
+// `value` and re-render. Keeps the call sites trivially testable.
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { IconClock } from './Icons';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
+import { useEditorialTheme } from '../lib/design/theme';
 
 type Props = {
   value: Date;
@@ -39,13 +29,10 @@ export function DateTimeField({
   minDaysBack = 30,
   allowFuture = false,
 }: Props) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const [editing, setEditing] = useState(false);
   const showTime = mode === 'datetime';
 
-  // Quick chips: the only three users actually reach for. Hour-offset
-  // chips (-1h / -3h / -6h) lived here previously and were removed —
-  // anyone who needs precise hour control uses the steppers below.
   const QUICK_CHIPS: { label: string; build: () => Date }[] = [
     { label: 'Now', build: () => new Date() },
     {
@@ -91,40 +78,51 @@ export function DateTimeField({
 
   return (
     <View>
-      {/* Collapsed summary row — taps to expand the editor */}
+      {/* Collapsed summary row */}
       <Pressable
         onPress={() => setEditing((v) => !v)}
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${formatPretty(value, showTime)}. Tap to edit.`}
         style={{
-          backgroundColor: t.surface,
-          borderRadius: radius.md,
-          padding: space.md,
-          borderWidth: 1,
-          borderColor: editing ? t.accent : t.line,
           flexDirection: 'row',
           alignItems: 'center',
+          paddingVertical: 14,
           gap: 12,
         }}
       >
-        <IconClock size={16} color={t.ink3} />
         <View style={{ flex: 1 }}>
           <Text
             style={{
-              fontSize: 10,
-              color: t.ink3,
-              fontFamily: font.sansSemi,
-              letterSpacing: 0.8,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.ink3,
               textTransform: 'uppercase',
+              marginBottom: 4,
             }}
           >
             {label}
           </Text>
-          <Text style={{ fontSize: 14, color: t.ink, fontFamily: font.sansSemi, marginTop: 2 }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 22,
+              letterSpacing: -0.4,
+              color: ed.colors.ink1,
+            }}
+          >
             {formatPretty(value, showTime)}
           </Text>
         </View>
-        <Text style={{ fontSize: 12, color: t.accent, fontFamily: font.sansSemi }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.brand,
+            textTransform: 'uppercase',
+          }}
+        >
           {editing ? 'Done' : 'Edit'}
         </Text>
       </Pressable>
@@ -132,18 +130,25 @@ export function DateTimeField({
       {editing ? (
         <View
           style={{
-            marginTop: 6,
-            padding: space.md,
-            backgroundColor: t.surface,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: t.line,
-            gap: space.md,
+            paddingVertical: 14,
+            borderTopWidth: 1,
+            borderColor: ed.colors.line,
+            gap: 18,
           }}
         >
-          <View style={{ gap: 6 }}>
-            <Text style={labelStyle(t)}>Quick</Text>
-            <View style={{ flexDirection: 'row', gap: 6 }}>
+          <View style={{ gap: 8 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+              }}
+            >
+              Quick
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {QUICK_CHIPS.map((chip) => (
                 <Pressable
                   key={chip.label}
@@ -151,15 +156,21 @@ export function DateTimeField({
                   accessibilityRole="button"
                   accessibilityLabel={`Set to ${chip.label}`}
                   style={{
+                    paddingVertical: 6,
                     paddingHorizontal: 12,
-                    paddingVertical: 7,
-                    borderRadius: radius.pill,
                     borderWidth: 1,
-                    borderColor: t.line,
-                    backgroundColor: t.surfaceAlt,
+                    borderColor: ed.colors.lineStrong,
                   }}
                 >
-                  <Text style={{ fontSize: 12, color: t.ink, fontFamily: font.sansMed }}>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink2,
+                      textTransform: 'uppercase',
+                    }}
+                  >
                     {chip.label}
                   </Text>
                 </Pressable>
@@ -167,12 +178,39 @@ export function DateTimeField({
             </View>
           </View>
 
-          <View style={{ gap: 6 }}>
-            <Text style={labelStyle(t)}>Day</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Stepper onPress={() => stepDay(-1)} a11y="Previous day">−</Stepper>
-              <View style={pillReadout(t)}>
-                <Text style={{ fontSize: 13, color: t.ink, fontFamily: font.sansSemi }}>
+          <View style={{ gap: 8 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+              }}
+            >
+              Day
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable onPress={() => stepDay(-1)} hitSlop={8} accessibilityLabel="Previous day">
+                <Text
+                  style={{
+                    fontFamily: ed.typography.dataLg.fontFamily,
+                    fontSize: 22,
+                    color: ed.colors.ink3,
+                    paddingHorizontal: 14,
+                  }}
+                >
+                  −
+                </Text>
+              </Pressable>
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                <Text
+                  style={{
+                    fontFamily: ed.fraunces('Fraunces_400Regular'),
+                    fontSize: 19,
+                    color: ed.colors.ink1,
+                  }}
+                >
                   {value.toLocaleDateString('en-US', {
                     weekday: 'short',
                     month: 'short',
@@ -180,40 +218,37 @@ export function DateTimeField({
                   })}
                 </Text>
               </View>
-              <Stepper onPress={() => stepDay(1)} a11y="Next day">+</Stepper>
+              <Pressable onPress={() => stepDay(1)} hitSlop={8} accessibilityLabel="Next day">
+                <Text
+                  style={{
+                    fontFamily: ed.typography.dataLg.fontFamily,
+                    fontSize: 22,
+                    color: ed.colors.ink3,
+                    paddingHorizontal: 14,
+                  }}
+                >
+                  +
+                </Text>
+              </Pressable>
             </View>
           </View>
 
           {showTime ? (
-            <View style={{ flexDirection: 'row', gap: space.md }}>
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={labelStyle(t)}>Hour</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <SmallStepper onPress={() => stepHour(-1)} a11y="Previous hour">
-                    −
-                  </SmallStepper>
-                  <Text style={readoutStyle(t)}>
-                    {value.getHours().toString().padStart(2, '0')}
-                  </Text>
-                  <SmallStepper onPress={() => stepHour(1)} a11y="Next hour">
-                    +
-                  </SmallStepper>
-                </View>
-              </View>
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={labelStyle(t)}>Min</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <SmallStepper onPress={() => stepMinute(-5)} a11y="Subtract five minutes">
-                    −5
-                  </SmallStepper>
-                  <Text style={readoutStyle(t)}>
-                    {value.getMinutes().toString().padStart(2, '0')}
-                  </Text>
-                  <SmallStepper onPress={() => stepMinute(5)} a11y="Add five minutes">
-                    +5
-                  </SmallStepper>
-                </View>
-              </View>
+            <View style={{ flexDirection: 'row', gap: 18 }}>
+              <UnitStepper
+                label="Hour"
+                value={value.getHours().toString().padStart(2, '0')}
+                onMinus={() => stepHour(-1)}
+                onPlus={() => stepHour(1)}
+              />
+              <UnitStepper
+                label="Min"
+                value={value.getMinutes().toString().padStart(2, '0')}
+                minusLabel="−5"
+                plusLabel="+5"
+                onMinus={() => stepMinute(-5)}
+                onPlus={() => stepMinute(5)}
+              />
             </View>
           ) : null}
         </View>
@@ -222,10 +257,78 @@ export function DateTimeField({
   );
 }
 
-// Returns "Today, 3:42 PM" / "Yesterday, 8:00 AM" / "Sat, Apr 19" depending
-// on the offset and whether time is being shown. Used inside the field's
-// collapsed pill and re-exported for callers who want to render the same
-// "logged X ago" feedback elsewhere.
+function UnitStepper({
+  label,
+  value,
+  onMinus,
+  onPlus,
+  minusLabel = '−',
+  plusLabel = '+',
+}: {
+  label: string;
+  value: string;
+  onMinus: () => void;
+  onPlus: () => void;
+  minusLabel?: string;
+  plusLabel?: string;
+}) {
+  const ed = useEditorialTheme();
+  return (
+    <View style={{ flex: 1, gap: 8 }}>
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Pressable onPress={onMinus} hitSlop={8}>
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 18,
+              color: ed.colors.ink3,
+              paddingHorizontal: 10,
+            }}
+          >
+            {minusLabel}
+          </Text>
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 22,
+              color: ed.colors.ink1,
+            }}
+          >
+            {value}
+          </Text>
+        </View>
+        <Pressable onPress={onPlus} hitSlop={8}>
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 18,
+              color: ed.colors.ink3,
+              paddingHorizontal: 10,
+            }}
+          >
+            {plusLabel}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// "Today, 3:42 PM" / "Yesterday, 8:00 AM" / "Sat, Apr 19" depending on
+// the offset and whether time is being shown.
 export function formatPretty(d: Date, showTime: boolean): string {
   const now = new Date();
   const sameDay = isSameLocalDay(d, now);
@@ -242,11 +345,7 @@ export function formatPretty(d: Date, showTime: boolean): string {
   return `${dayPart} · ${timePart}`;
 }
 
-// "Logged just now" / "Logged 2 days ago for Mon, Apr 21" — past-tense
-// subtitle for confirming what was already saved (success toasts, list
-// rows). For pre-save confirmation prompts, use describeTargetDate
-// instead, since "Logged 12 days ago for X" reads as a duplicate
-// warning when shown before the write.
+// Past-tense subtitle for confirming what was already saved.
 export function describeBackdate(d: Date): string {
   const now = Date.now();
   const diffMin = Math.round((now - d.getTime()) / 60000);
@@ -255,19 +354,13 @@ export function describeBackdate(d: Date): string {
   const diffHr = Math.round(diffMin / 60);
   if (diffHr < 24) return `Logged ${diffHr}h ago`;
   const diffDays = Math.round(diffHr / 24);
-  // Include the weekday so users can spot a wrong-date save at a glance —
-  // "Mon, Apr 21" reads cleanly; "2026-04-21" forces them to think.
   return `Logged ${diffDays} day${diffDays === 1 ? '' : 's'} ago for ${d.toLocaleDateString(
     'en-US',
     { weekday: 'short', month: 'short', day: 'numeric' }
   )}`;
 }
 
-// Neutral, present-tense form for pre-save confirmation prompts. Reads as
-// a forward-looking statement of intent, not a past-tense claim that
-// something has already been logged. Example outputs:
-//   "Sat, Apr 24 at 8:15 AM (2 days ago)"
-//   "Tue, Apr 14 (12 days ago)"
+// Neutral, present-tense form for pre-save confirmation prompts.
 export function describeTargetDate(d: Date, includeTime = true): string {
   const datePart = d.toLocaleDateString('en-US', {
     weekday: 'short',
@@ -289,102 +382,10 @@ export function describeTargetDate(d: Date, includeTime = true): string {
   return `${datePart}${timePart}${ago}`;
 }
 
-// Two Dates fall on the same local-time calendar day. Exported so callers
-// (Log Metric, etc.) can run "already logged today?" duplicate checks
-// against a chosen taken_at without re-implementing the comparison.
 export function isSameLocalDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
-  );
-}
-
-function labelStyle(t: ReturnType<typeof useTheme>['t']) {
-  return {
-    fontSize: 10,
-    color: t.ink3,
-    fontFamily: font.sansSemi,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase' as const,
-  };
-}
-
-function pillReadout(t: ReturnType<typeof useTheme>['t']) {
-  return {
-    flex: 1,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: t.surfaceAlt,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  };
-}
-
-function readoutStyle(t: ReturnType<typeof useTheme>['t']) {
-  return {
-    flex: 1,
-    textAlign: 'center' as const,
-    fontSize: 16,
-    fontFamily: font.monoSemi,
-    color: t.ink,
-  };
-}
-
-function Stepper({
-  onPress,
-  a11y,
-  children,
-}: {
-  onPress: () => void;
-  a11y: string;
-  children: string;
-}) {
-  const { t } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: radius.md,
-        backgroundColor: t.surfaceAlt,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>{children}</Text>
-    </Pressable>
-  );
-}
-
-function SmallStepper({
-  onPress,
-  a11y,
-  children,
-}: {
-  onPress: () => void;
-  a11y: string;
-  children: string;
-}) {
-  const { t } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      style={{
-        width: 32,
-        height: 32,
-        borderRadius: radius.sm,
-        backgroundColor: t.surfaceAlt,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text style={{ fontSize: 16, color: t.ink }}>{children}</Text>
-    </Pressable>
   );
 }

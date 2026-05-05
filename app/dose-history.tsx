@@ -1,23 +1,7 @@
 // Dose history — reverse-chronological list of every logged dose with
-// adaptive peptide / date-range filters and a smart stats header.
-//
-// Two entry points: a card on Progress, a chip in the Stacks tab header.
-// Same screen, two discovery surfaces — keeps "what did I take over time"
-// (Progress framing) and "what's running through this protocol" (Stacks
-// framing) on one canonical view instead of forking.
-//
-// Filter design choices:
-//   - Peptide chips are ADAPTIVE: only peptides the user has actually
-//     dosed appear. A user who has never taken Sema doesn't need a Sema
-//     chip cluttering the row.
-//   - Date range chips: 7d / 30d / 90d / This cycle / All. "This cycle"
-//     is only enabled when there's an active cycle.
-//   - Stats header rewrites itself based on the current filter so it
-//     reads naturally — "47 doses · 11.75 mg of BPC-157 · across 3
-//     cycles" rather than a static count line.
-//
-// v2 follow-ups (deferred): site / route / cycle-id filters, free-text
-// note search, group-by-week toggle, export filtered CSV.
+// adaptive peptide / site / route / cycle filters, smart stats header,
+// and CSV export. Editorial restyle of the v1.2 screen — same data
+// flow, sharp-corner chips, hairline-divided list, serif numerals.
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -25,7 +9,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DoseDetailSheet } from '../components/DoseDetailSheet';
-import { IconChevronLeft } from '../components/Icons';
+import { EditorialButton } from '../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../lib/design/theme';
 import {
   listActiveCycles,
   listCycles,
@@ -34,8 +22,6 @@ import {
   type Dose,
 } from '../lib/db';
 import { findPeptide } from '../lib/peptides';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
 
 type DateRangeKey = '7d' | '30d' | '90d' | 'cycle' | 'all';
 
@@ -51,8 +37,6 @@ function startOfRange(range: DateRangeKey, activeCycles: Cycle[]): Date | null {
   const now = new Date();
   if (range === 'all') return null;
   if (range === 'cycle') {
-    // Earliest start_on across all active cycles — covers concurrent
-    // protocols that started on different days.
     const starts = activeCycles
       .filter((c) => c.status === 'active')
       .map((c) => new Date(c.starts_on).getTime());
@@ -66,28 +50,21 @@ function startOfRange(range: DateRangeKey, activeCycles: Cycle[]): Date | null {
 }
 
 export default function DoseHistoryScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [doses, setDoses] = useState<Dose[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
-  // Multi-cycle: 'This cycle' filter covers ANY currently-active cycle.
   const [activeCycles, setActiveCycles] = useState<Cycle[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters — peptide / site / route / cycle are multi-select; range is
-  // single-select. The cycle filter accepts a sentinel '__none__' string
-  // for "doses without a cycle" so orphans don't silently disappear when
-  // any other cycle is selected. Sites and routes are adaptive: chips
-  // only render for values the user has actually logged.
   const [selectedPeptides, setSelectedPeptides] = useState<Set<string>>(new Set());
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
   const [selectedRoutes, setSelectedRoutes] = useState<Set<string>>(new Set());
   const [selectedCycles, setSelectedCycles] = useState<Set<string>>(new Set());
   const [range, setRange] = useState<DateRangeKey>('30d');
   const [exporting, setExporting] = useState(false);
-  // Sheet for the dose tapped in the list.
   const [openDose, setOpenDose] = useState<Dose | null>(null);
 
   const refresh = useCallback(async () => {
@@ -109,9 +86,6 @@ export default function DoseHistoryScreen() {
     }, [refresh])
   );
 
-  // Adaptive chips — peptides / sites / routes only render when the user
-  // has actually logged data with those values. A SubQ-only user doesn't
-  // need an "Oral" filter chip cluttering the row.
   const usedPeptideIds = useMemo(() => {
     const set = new Set<string>();
     for (const d of doses) set.add(d.peptide_id);
@@ -127,9 +101,6 @@ export default function DoseHistoryScreen() {
     for (const d of doses) set.add(d.route);
     return Array.from(set).sort();
   }, [doses]);
-  // Cycles the user could plausibly want to filter by — anything that has
-  // at least one dose attached. Sorted with active cycles on top so they
-  // bubble in the chip row.
   const usedCycles = useMemo(() => {
     const seen = new Set<string>();
     for (const d of doses) if (d.cycle_id) seen.add(d.cycle_id);
@@ -141,8 +112,6 @@ export default function DoseHistoryScreen() {
       return b.starts_on.localeCompare(a.starts_on);
     });
   }, [doses, cycles]);
-  // True when at least one orphan dose exists — controls whether the "No
-  // cycle" chip appears at all. Don't show a filter for an empty bucket.
   const hasOrphans = useMemo(() => doses.some((d) => !d.cycle_id), [doses]);
 
   const filtered = useMemo(() => {
@@ -160,15 +129,19 @@ export default function DoseHistoryScreen() {
     });
   }, [doses, selectedPeptides, selectedSites, selectedRoutes, selectedCycles, range, activeCycles]);
 
-  // Stats header — adapts to the active filter so it always reads
-  // naturally. Half the perceived intelligence of this screen lives here.
   const stats = useMemo(() => {
     const count = filtered.length;
     const totalMg = filtered.reduce((s, d) => s + d.amount_mcg / 1000, 0);
     const cycleIds = new Set(filtered.map((d) => d.cycle_id).filter(Boolean));
     const peptideIds = new Set(filtered.map((d) => d.peptide_id));
     const orphanCount = filtered.filter((d) => !d.cycle_id).length;
-    return { count, totalMg, cycleCount: cycleIds.size, peptideCount: peptideIds.size, orphanCount };
+    return {
+      count,
+      totalMg,
+      cycleCount: cycleIds.size,
+      peptideCount: peptideIds.size,
+      orphanCount,
+    };
   }, [filtered]);
 
   const statsLine = useMemo(() => {
@@ -176,12 +149,11 @@ export default function DoseHistoryScreen() {
     const parts: string[] = [];
     parts.push(`${stats.count} dose${stats.count === 1 ? '' : 's'}`);
     parts.push(`${stats.totalMg.toFixed(stats.totalMg < 1 ? 3 : 2)} mg`);
-    // When a single peptide is selected, name it explicitly — "11.75 mg
-    // of BPC-157" reads better than "11.75 mg · 1 peptide".
     if (selectedPeptides.size === 1) {
       const id = Array.from(selectedPeptides)[0];
       const p = findPeptide(id);
-      if (p) parts[parts.length - 1] = `${stats.totalMg.toFixed(stats.totalMg < 1 ? 3 : 2)} mg of ${p.name}`;
+      if (p)
+        parts[parts.length - 1] = `${stats.totalMg.toFixed(stats.totalMg < 1 ? 3 : 2)} mg of ${p.name}`;
     } else if (stats.peptideCount > 1) {
       parts.push(`${stats.peptideCount} peptides`);
     }
@@ -191,9 +163,8 @@ export default function DoseHistoryScreen() {
     return parts.join(' · ');
   }, [stats, selectedPeptides]);
 
-  const togglePeptide = (id: string) => {
+  const togglePeptide = (id: string) =>
     setSelectedPeptides((prev) => toggleInSet(prev, id));
-  };
   const toggleSite = (s: string) => setSelectedSites((prev) => toggleInSet(prev, s));
   const toggleRoute = (r: string) => setSelectedRoutes((prev) => toggleInSet(prev, r));
   const toggleCycle = (id: string) => setSelectedCycles((prev) => toggleInSet(prev, id));
@@ -212,11 +183,12 @@ export default function DoseHistoryScreen() {
     selectedCycles.size > 0 ||
     range !== '30d';
 
-  // Export the currently-filtered list as a CSV the user can hand off to
-  // a clinician. Reuses the same csvCell escape logic that ships in the
-  // global Settings → Export flow (leading =/+/-/@ get a leading apostrophe
-  // so spreadsheets don't treat exported notes as formulas). The file
-  // name encodes the active filters so multiple exports don't collide.
+  const cycleLookup = useMemo(() => {
+    const map: Record<string, Cycle> = {};
+    for (const c of cycles) map[c.id] = c;
+    return map;
+  }, [cycles]);
+
   const exportFilteredCsv = async () => {
     if (filtered.length === 0 || exporting) return;
     setExporting(true);
@@ -269,50 +241,136 @@ export default function DoseHistoryScreen() {
     }
   };
 
-  const cycleLookup = useMemo(() => {
-    const map: Record<string, Cycle> = {};
-    for (const c of cycles) map[c.id] = c;
-    return map;
-  }, [cycles]);
+  const Chip = ({
+    active,
+    label,
+    onPress,
+    tone = 'ink',
+    disabled,
+  }: {
+    active: boolean;
+    label: string;
+    onPress: () => void;
+    tone?: 'ink' | 'brand' | 'warn';
+    disabled?: boolean;
+  }) => {
+    const fill =
+      tone === 'brand' ? ed.colors.brand : tone === 'warn' ? ed.colors.stateWarn : ed.colors.ink1;
+    return (
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        style={{
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+          backgroundColor: active ? fill : 'transparent',
+          borderWidth: 1,
+          borderColor: active ? fill : ed.colors.lineStrong,
+          opacity: disabled ? 0.4 : 1,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: active ? ed.colors.bg : ed.colors.ink2,
+            textTransform: 'uppercase',
+          }}
+        >
+          {label}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  const FilterRow = ({
+    label,
+    children,
+  }: {
+    label: string;
+    children: React.ReactNode;
+  }) => (
+    <View style={{ marginBottom: 12 }}>
+      <Text
+        style={{
+          fontFamily: ed.typography.labelSm.fontFamily,
+          fontSize: ed.typography.labelSm.fontSize,
+          letterSpacing: ed.typography.labelSm.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
+          marginBottom: 8,
+          paddingHorizontal: 24,
+        }}
+      >
+        {label}
+      </Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 24, gap: 6 }}
+        style={{ flexGrow: 0 }}
+      >
+        {children}
+      </ScrollView>
+    </View>
+  );
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       {/* Header */}
       <View
         style={{
-          paddingTop: insets.top + space.md,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
         }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <IconChevronLeft size={18} color={t.ink} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Text style={{ fontSize: 20, fontFamily: font.sansBold, color: t.ink }}>
+      </View>
+
+      <View style={{ paddingHorizontal: 24 }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
+          }}
+        >
           Dose history
         </Text>
+        <EditorialHeadline size="title1">{`Every *dose*, on the record.`}</EditorialHeadline>
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
+        contentContainerStyle={{ paddingTop: 24, paddingBottom: insets.bottom + 64 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Stats header */}
-        <View style={{ paddingHorizontal: space.xl, marginBottom: space.md }}>
+        {/* Stats line */}
+        <View style={{ paddingHorizontal: 24, marginBottom: 18 }}>
           <Text
             style={{
-              fontSize: 14,
-              color: t.ink,
-              fontFamily: font.sansSemi,
-              lineHeight: 20,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 19,
+              lineHeight: 26,
+              letterSpacing: -0.3,
+              color: ed.colors.ink1,
             }}
           >
             {statsLine}
@@ -320,11 +378,12 @@ export default function DoseHistoryScreen() {
           {stats.orphanCount > 0 ? (
             <Text
               style={{
-                fontSize: 11,
-                color: t.warn,
-                fontFamily: font.sansMed,
-                marginTop: 4,
-                letterSpacing: 0.4,
+                marginTop: 6,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.stateWarn,
+                textTransform: 'uppercase',
               }}
             >
               {stats.orphanCount} dose{stats.orphanCount === 1 ? '' : 's'} not tied to a cycle
@@ -332,59 +391,27 @@ export default function DoseHistoryScreen() {
           ) : null}
         </View>
 
-        {/* Date-range chips */}
-        <View
-          style={{
-            paddingHorizontal: space.xl,
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 6,
-            marginBottom: space.sm,
-          }}
-        >
+        {/* Date range */}
+        <FilterRow label="Range">
           {RANGES.map((r) => {
             const active = range === r.key;
             const disabled =
               r.key === 'cycle' && !activeCycles.some((c) => c.status === 'active');
             return (
-              <Pressable
+              <Chip
                 key={r.key}
-                onPress={() => !disabled && setRange(r.key)}
+                active={active}
+                label={r.label}
                 disabled={disabled}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active, disabled }}
-                style={{
-                  paddingVertical: 6,
-                  paddingHorizontal: 12,
-                  borderRadius: radius.pill,
-                  backgroundColor: active ? t.ink : 'transparent',
-                  borderWidth: 1,
-                  borderColor: active ? t.ink : t.line,
-                  opacity: disabled ? 0.4 : 1,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: active ? t.bg : t.ink2,
-                    fontFamily: font.sansMed,
-                  }}
-                >
-                  {r.label}
-                </Text>
-              </Pressable>
+                onPress={() => !disabled && setRange(r.key)}
+              />
             );
           })}
-        </View>
+        </FilterRow>
 
-        {/* Adaptive peptide chips — only peptides the user has actually dosed */}
+        {/* Adaptive peptide filter */}
         {usedPeptideIds.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: space.xl, gap: 6 }}
-            style={{ flexGrow: 0, marginBottom: space.md }}
-          >
+          <FilterRow label="Peptide">
             {usedPeptideIds.map((id) => {
               const p = findPeptide(id);
               const active = selectedPeptides.has(id);
@@ -394,32 +421,32 @@ export default function DoseHistoryScreen() {
                   onPress={() => togglePeptide(id)}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: active }}
-                  accessibilityLabel={`Filter by ${p?.name ?? id}`}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 6,
                     paddingVertical: 6,
                     paddingHorizontal: 10,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.accentSoft : 'transparent',
+                    backgroundColor: active ? ed.colors.brand : 'transparent',
                     borderWidth: 1,
-                    borderColor: active ? t.accent : t.line,
+                    borderColor: active ? ed.colors.brand : ed.colors.lineStrong,
                   }}
                 >
                   <View
                     style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: p?.color ?? t.ink3,
+                      width: 5,
+                      height: 5,
+                      borderRadius: 3,
+                      backgroundColor: p?.color ?? ed.colors.ink3,
                     }}
                   />
                   <Text
                     style={{
-                      fontSize: 12,
-                      color: active ? t.accentInk : t.ink2,
-                      fontFamily: font.sansMed,
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: active ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
                     }}
                   >
                     {p?.name ?? id}
@@ -427,321 +454,223 @@ export default function DoseHistoryScreen() {
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </FilterRow>
         ) : null}
 
-        {/* Adaptive site filter — only the sites the user has actually
-            injected. Collapses to nothing for users who only ever pick
-            the default site. */}
         {usedSites.length > 1 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: space.xl, gap: 6 }}
-            style={{ flexGrow: 0, marginBottom: space.sm }}
-          >
-            <FilterLabel>Site</FilterLabel>
-            {usedSites.map((s) => {
-              const active = selectedSites.has(s);
-              return (
-                <Pressable
-                  key={s}
-                  onPress={() => toggleSite(s)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: active }}
-                  accessibilityLabel={`Filter by site ${s}`}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.accentSoft : 'transparent',
-                    borderWidth: 1,
-                    borderColor: active ? t.accent : t.line,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: active ? t.accentInk : t.ink2,
-                      fontFamily: font.sansMed,
-                    }}
-                  >
-                    {s}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <FilterRow label="Site">
+            {usedSites.map((s) => (
+              <Chip
+                key={s}
+                active={selectedSites.has(s)}
+                label={s}
+                tone="brand"
+                onPress={() => toggleSite(s)}
+              />
+            ))}
+          </FilterRow>
         ) : null}
 
-        {/* Adaptive route filter — only renders for users with mixed
-            routes. SubQ-only users never see it. */}
         {usedRoutes.length > 1 ? (
-          <View
-            style={{
-              paddingHorizontal: space.xl,
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              gap: 6,
-              alignItems: 'center',
-              marginBottom: space.sm,
-            }}
-          >
-            <FilterLabel>Route</FilterLabel>
-            {usedRoutes.map((r) => {
-              const active = selectedRoutes.has(r);
-              return (
-                <Pressable
-                  key={r}
-                  onPress={() => toggleRoute(r)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: active }}
-                  accessibilityLabel={`Filter by route ${r}`}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.accentSoft : 'transparent',
-                    borderWidth: 1,
-                    borderColor: active ? t.accent : t.line,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: active ? t.accentInk : t.ink2,
-                      fontFamily: font.sansMed,
-                    }}
-                  >
-                    {r}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <FilterRow label="Route">
+            {usedRoutes.map((r) => (
+              <Chip
+                key={r}
+                active={selectedRoutes.has(r)}
+                label={r}
+                onPress={() => toggleRoute(r)}
+              />
+            ))}
+          </FilterRow>
         ) : null}
 
-        {/* Cycle filter with explicit 'No cycle' option for orphan doses.
-            Without this chip a user filtering by any cycle would silently
-            hide their pre-cycle / ad-hoc logs. */}
         {usedCycles.length > 0 || hasOrphans ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: space.xl, gap: 6 }}
-            style={{ flexGrow: 0, marginBottom: space.md }}
-          >
-            <FilterLabel>Cycle</FilterLabel>
-            {usedCycles.map((c) => {
-              const active = selectedCycles.has(c.id);
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => toggleCycle(c.id)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: active }}
-                  accessibilityLabel={`Filter by cycle ${c.name}`}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: radius.pill,
-                    backgroundColor: active ? t.accentSoft : 'transparent',
-                    borderWidth: 1,
-                    borderColor: active ? t.accent : t.line,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: active ? t.accentInk : t.ink2,
-                      fontFamily: font.sansMed,
-                    }}
-                  >
-                    {c.name}
-                    {c.status !== 'active' ? ` · ${c.status}` : ''}
-                  </Text>
-                </Pressable>
-              );
-            })}
+          <FilterRow label="Cycle">
+            {usedCycles.map((c) => (
+              <Chip
+                key={c.id}
+                active={selectedCycles.has(c.id)}
+                label={`${c.name}${c.status !== 'active' ? ` · ${c.status}` : ''}`}
+                tone="brand"
+                onPress={() => toggleCycle(c.id)}
+              />
+            ))}
             {hasOrphans ? (
-              <Pressable
+              <Chip
+                active={selectedCycles.has('__none__')}
+                label="No cycle"
+                tone="warn"
                 onPress={() => toggleCycle('__none__')}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: selectedCycles.has('__none__') }}
-                accessibilityLabel="Filter by doses with no cycle"
-                style={{
-                  paddingVertical: 6,
-                  paddingHorizontal: 10,
-                  borderRadius: radius.pill,
-                  backgroundColor: selectedCycles.has('__none__') ? t.warnSoft : 'transparent',
-                  borderWidth: 1,
-                  borderColor: selectedCycles.has('__none__') ? t.warn : t.line,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: selectedCycles.has('__none__') ? t.warn : t.ink2,
-                    fontFamily: font.sansMed,
-                  }}
-                >
-                  No cycle
-                </Text>
-              </Pressable>
+              />
             ) : null}
-          </ScrollView>
+          </FilterRow>
         ) : null}
 
-        {/* Export filtered view → CSV. Hidden until there's something to
-            export. Filename encodes the active filter so multiple exports
-            don't collide. */}
+        {/* Export + clear */}
         {filtered.length > 0 ? (
           <View
             style={{
-              paddingHorizontal: space.xl,
               flexDirection: 'row',
-              gap: 8,
-              marginBottom: space.md,
+              gap: 10,
+              paddingHorizontal: 24,
+              marginBottom: 18,
             }}
           >
-            <Pressable
-              onPress={exportFilteredCsv}
-              disabled={exporting}
-              accessibilityRole="button"
-              accessibilityLabel="Export filtered list as CSV"
-              style={{
-                flex: 1,
-                paddingVertical: 9,
-                paddingHorizontal: 12,
-                borderRadius: radius.md,
-                backgroundColor: exporting ? t.surfaceAlt : t.surface,
-                borderWidth: 1,
-                borderColor: t.line,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 12, fontFamily: font.sansSemi, color: t.ink }}>
-                {exporting ? 'Preparing CSV…' : `Export ${filtered.length} doses → CSV`}
-              </Text>
-            </Pressable>
-            {hasAnyFilter ? (
-              <Pressable
-                onPress={clearAllFilters}
-                accessibilityRole="button"
-                accessibilityLabel="Clear all filters"
-                style={{
-                  paddingVertical: 9,
-                  paddingHorizontal: 12,
-                  borderRadius: radius.md,
-                  backgroundColor: t.surface,
-                  borderWidth: 1,
-                  borderColor: t.line,
-                  alignItems: 'center',
-                }}
+            <View style={{ flex: 1 }}>
+              <EditorialButton
+                variant="secondary"
+                fullWidth
+                disabled={exporting}
+                onPress={exportFilteredCsv}
               >
-                <Text style={{ fontSize: 12, fontFamily: font.sansMed, color: t.ink3 }}>
-                  Clear filters
-                </Text>
-              </Pressable>
+                {exporting ? 'Preparing CSV…' : `Export ${filtered.length} → CSV`}
+              </EditorialButton>
+            </View>
+            {hasAnyFilter ? (
+              <EditorialButton variant="secondary" onPress={clearAllFilters}>
+                Clear
+              </EditorialButton>
             ) : null}
           </View>
         ) : null}
 
         {/* List */}
         {loading ? (
-          <Text style={{ paddingHorizontal: space.xl, color: t.ink3, fontSize: 13 }}>
+          <Text
+            style={{
+              paddingHorizontal: 24,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
+            }}
+          >
             Loading…
           </Text>
         ) : filtered.length === 0 ? (
-          <View style={{ paddingHorizontal: space.xl, paddingVertical: space.xl }}>
-            <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
-              No doses in this view
+          <View style={{ paddingHorizontal: 24, paddingVertical: 28, alignItems: 'center' }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 19,
+                color: ed.colors.ink2,
+                textAlign: 'center',
+              }}
+            >
+              No doses in this view.
             </Text>
-            <Text style={{ color: t.ink3, fontSize: 13, marginTop: 4, lineHeight: 19 }}>
+            <Text
+              style={{
+                marginTop: 6,
+                fontFamily: ed.typography.bodySm.fontFamily,
+                fontSize: ed.typography.bodySm.fontSize,
+                lineHeight: ed.typography.bodySm.lineHeight,
+                color: ed.colors.ink3,
+                textAlign: 'center',
+                maxWidth: 320,
+              }}
+            >
               {doses.length === 0
                 ? "You haven't logged a dose yet. Start from Today or a peptide page."
                 : 'Try widening the date range or clearing the peptide filter.'}
             </Text>
           </View>
         ) : (
-          <View style={{ paddingHorizontal: space.xl, gap: 6 }}>
-            {filtered.map((d) => {
-              const p = findPeptide(d.peptide_id);
-              const cycle = d.cycle_id ? cycleLookup[d.cycle_id] : null;
-              const when = new Date(d.taken_at);
-              return (
-                <Pressable
-                  key={d.id}
-                  onPress={() => setOpenDose(d)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open dose: ${p?.name ?? d.peptide_id}, ${d.amount_mcg} mcg, ${when.toLocaleString()}`}
-                  style={{
-                    backgroundColor: t.surface,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.line,
-                    padding: space.md,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: p?.color ?? t.ink3,
-                    }}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                      <Text
-                        style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}
-                      >
-                        {p?.name ?? d.peptide_id}
-                      </Text>
-                      <Text
-                        style={{ fontSize: 12, color: t.ink, fontFamily: font.monoSemi }}
-                      >
-                        {d.amount_mcg} mcg
-                      </Text>
-                    </View>
-                    <Text
+          <View style={{ paddingHorizontal: 24 }}>
+            <EyebrowLabel withRule>{`${filtered.length} doses`}</EyebrowLabel>
+            <View style={{ marginTop: 4 }}>
+              {filtered.map((d, idx) => {
+                const p = findPeptide(d.peptide_id);
+                const cycle = d.cycle_id ? cycleLookup[d.cycle_id] : null;
+                const when = new Date(d.taken_at);
+                const timePart = when.toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                });
+                const datePart = when.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year:
+                    when.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+                });
+                return (
+                  <View key={d.id}>
+                    <Pressable
+                      onPress={() => setOpenDose(d)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open dose: ${p?.name ?? d.peptide_id}, ${d.amount_mcg} mcg, ${when.toLocaleString()}`}
                       style={{
-                        fontSize: 11,
-                        color: t.ink3,
-                        fontFamily: font.mono,
-                        marginTop: 2,
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        paddingVertical: 16,
+                        gap: 12,
                       }}
                     >
-                      {when.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year:
-                          when.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
-                      })}
-                      {' · '}
-                      {when.toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                      {d.site ? ` · ${d.site}` : ''}
-                      {d.route && d.route !== 'SubQ' ? ` · ${d.route}` : ''}
-                      {cycle ? ` · ${cycle.name}` : ''}
-                    </Text>
-                    {d.note ? (
-                      <Text
-                        numberOfLines={1}
-                        style={{ fontSize: 11, color: t.ink3, marginTop: 3, fontStyle: 'italic' }}
-                      >
-                        {d.note}
-                      </Text>
-                    ) : null}
+                      <View
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 3,
+                          marginTop: 8,
+                          backgroundColor: p?.color ?? ed.colors.ink3,
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                          <Text
+                            style={{
+                              fontFamily: ed.fraunces('Fraunces_400Regular'),
+                              fontSize: 17,
+                              letterSpacing: -0.2,
+                              color: ed.colors.ink1,
+                            }}
+                          >
+                            {p?.name ?? d.peptide_id}
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: ed.typography.dataMd.fontFamily,
+                              fontSize: ed.typography.dataMd.fontSize,
+                              color: ed.colors.ink2,
+                            }}
+                          >
+                            {d.amount_mcg} mcg
+                          </Text>
+                        </View>
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            fontFamily: ed.typography.labelSm.fontFamily,
+                            fontSize: ed.typography.labelSm.fontSize,
+                            letterSpacing: ed.typography.labelSm.letterSpacing,
+                            color: ed.colors.ink3,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {datePart} · {timePart}
+                          {d.site ? ` · ${d.site}` : ''}
+                          {d.route && d.route !== 'SubQ' ? ` · ${d.route}` : ''}
+                          {cycle ? ` · ${cycle.name}` : ''}
+                        </Text>
+                        {d.note ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{
+                              marginTop: 4,
+                              fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                              fontSize: 13,
+                              color: ed.colors.ink3,
+                            }}
+                          >
+                            {d.note}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                    {idx < filtered.length - 1 ? <HairlineRow /> : null}
                   </View>
-                </Pressable>
-              );
-            })}
+                );
+              })}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -755,47 +684,11 @@ export default function DoseHistoryScreen() {
   );
 }
 
-// Set toggle helper extracted because all four multi-select filters need
-// the same flip-on/flip-off behavior. Returns a NEW Set so React picks
-// up the change.
 function toggleInSet<T>(prev: Set<T>, value: T): Set<T> {
   const next = new Set(prev);
   if (next.has(value)) next.delete(value);
   else next.add(value);
   return next;
-}
-
-// Mirror of the csvCell helper in app/settings/export.tsx — neutralizes
-// formula injection by prefixing any cell starting with =/+/-/@ with a
-// single quote, then double-quoting and escaping internal quotes. Kept
-// inline rather than re-exported to avoid a cross-route module import.
-// Tiny inline label for each filter row's leading chip — keeps the
-// horizontal scrollers self-explanatory at a glance ("Site · …" etc.)
-// without taking up a separate row.
-function FilterLabel({ children }: { children: string }) {
-  // Local theme hook avoids drilling tokens through props.
-  const { t } = useTheme();
-  return (
-    <View
-      style={{
-        paddingVertical: 6,
-        paddingRight: 4,
-        justifyContent: 'center',
-      }}
-    >
-      <Text
-        style={{
-          fontSize: 10,
-          letterSpacing: 0.8,
-          color: t.ink3,
-          fontFamily: font.sansSemi,
-          textTransform: 'uppercase',
-        }}
-      >
-        {children}
-      </Text>
-    </View>
-  );
 }
 
 function csvCell(v: unknown): string {
