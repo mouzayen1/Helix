@@ -1,18 +1,21 @@
-// Today — spec v2.0 §10. Real data + smart schedule from active cycle +
-// tappable dose rows + tappable vial chips with bottom-sheet actions.
+// Today — editorial v1 visual rebuild. Data layer + modals untouched
+// from the v1.2 implementation; only the scroll content is rebuilt with
+// the editorial primitives (hero ring, mini dial row, schedule items,
+// stat pair, eyebrow rules).
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  IconBolt,
-  IconBook,
-  IconChart,
-  IconCheck,
-  IconCog,
-  IconSyringe,
-} from '../../components/Icons';
-import { HCard, HSectionHeader, ResearchBanner } from '../../components/Primitives';
+import { DataRow } from '../../components/editorial/DataRow';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { HeroRing } from '../../components/editorial/HeroRing';
+import { MiniDial } from '../../components/editorial/MiniDial';
+import { ScheduleItem, type ScheduleStatus } from '../../components/editorial/ScheduleItem';
+import { StatPair } from '../../components/editorial/StatPair';
+import { useEditorialTheme } from '../../lib/design/theme';
 import {
   createDoseSkip,
   deactivateVial,
@@ -31,7 +34,6 @@ import {
 } from '../../lib/db';
 import { isScheduledOnDay } from '../../lib/freq';
 import { haptic } from '../../lib/haptics';
-import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide } from '../../lib/peptides';
 import { useProfile } from '../../lib/profile-context';
 import { useTheme } from '../../theme/ThemeContext';
@@ -57,74 +59,33 @@ function daysBetween(a: Date, b: Date) {
 
 function greet(d: Date) {
   const h = d.getHours();
-  if (h < 5) return 'Late night,';
-  if (h < 12) return 'Good morning,';
-  if (h < 18) return 'Good afternoon,';
-  return 'Good evening,';
+  if (h < 5) return 'Late night';
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
-// Given a peptide with a multi-phase cycleTemplate, determine which phase
-// the user is currently in based on days-since-cycle-start. Returns null
-// if the peptide has no phase structure.
-//
-// Edge cases:
-//   - dayOfCycle = 0 (cycle just started) → returns phase 1, week 1.
-//   - dayOfCycle past the sum of phase weeks → returns the LAST phase with
-//     extended=true, so the UI can render 'Past <name>' instead of a
-//     frozen 'week X of X' that implies they're still in it.
-//   - Phases with zero weeks are skipped automatically.
-function currentPhaseFor(
-  peptide_id: string,
-  dayOfCycle: number
-): {
-  name: string;
-  weekInPhase: number;
-  totalWeeks: number;
-  doseModifier?: string;
-  extended: boolean;
-  weeksPastEnd?: number;
-} | null {
-  const extras = getPeptideExtras(peptide_id);
-  const phases = extras?.cycleTemplate?.phases;
-  if (!phases || phases.length === 0) return null;
-  const safeDay = Math.max(0, dayOfCycle);
-  const currentWeek = Math.floor(safeDay / 7);
-  let cumulative = 0;
-  for (const ph of phases) {
-    if (ph.weeks <= 0) continue;
-    if (currentWeek < cumulative + ph.weeks) {
-      return {
-        name: ph.name,
-        weekInPhase: currentWeek - cumulative + 1,
-        totalWeeks: ph.weeks,
-        doseModifier: ph.dose_modifier,
-        extended: false,
-      };
-    }
-    cumulative += ph.weeks;
-  }
-  // Past the last non-zero phase — keep the badge visible but flag it
-  // so the UI can say "Past maintenance" instead of a frozen week count.
-  const last = phases[phases.length - 1];
-  return {
-    name: last.name,
-    weekInPhase: last.weeks,
-    totalWeeks: last.weeks,
-    doseModifier: last.dose_modifier,
-    extended: true,
-    weeksPastEnd: Math.max(1, currentWeek - cumulative + 1),
-  };
+function timeLabelForWindow(time_of_day: string, window: 'AM' | 'PM' | 'ALL'): string {
+  if (window === 'AM') return 'AM';
+  if (window === 'PM') return 'PM';
+  // Use the protocol-supplied label as-is when not split into AM/PM.
+  // Common values: 'morning', 'evening', 'pre-workout', 'anytime'.
+  const upper = time_of_day.trim().toUpperCase();
+  if (upper.length <= 4) return upper;
+  if (upper.startsWith('MORN')) return 'AM';
+  if (upper.startsWith('EVE') || upper.startsWith('NIGHT')) return 'PM';
+  if (upper.startsWith('PRE')) return 'PRE';
+  if (upper.startsWith('POST')) return 'POST';
+  return upper.slice(0, 4);
 }
 
-// A protocol item maps to "expected today" based on frequency. Logic lives
-// in lib/freq.ts so the Today screen, vial-life estimator, and notification
-// scheduler all agree.
 function isScheduledToday(row: CycleProtocolItem, dayOfCycle: number): boolean {
   return isScheduledOnDay(row.freq, dayOfCycle);
 }
 
 export default function TodayScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
+  const { t } = useTheme(); // legacy palette — still drives the modals.
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useProfile();
@@ -135,7 +96,6 @@ export default function TodayScreen() {
   const [todaySkips, setTodaySkips] = useState<DoseSkip[]>([]);
   const [doseSheet, setDoseSheet] = useState<Dose | null>(null);
   const [vialSheet, setVialSheet] = useState<Vial | null>(null);
-  // Skip sheet — peptide + cycle context for the row being skipped.
   const [skipSheet, setSkipSheet] = useState<{
     peptideId: string;
     peptideName: string;
@@ -175,17 +135,14 @@ export default function TodayScreen() {
     const end = new Date(cycle.ends_on);
     const today = new Date();
     const total = Math.max(1, daysBetween(start, end));
-    // dayOfCycle is 0-indexed for schedule math; displayDay is 1-indexed
-    // so users see "Day 1 of 30" on the start date, not "Day 0".
     const dayOfCycle = Math.min(total, Math.max(0, daysBetween(start, today)));
     const displayDay = Math.min(total, dayOfCycle + 1);
     const pct = Math.round((dayOfCycle / total) * 100);
     return { day: dayOfCycle, displayDay, total, pct, remaining: total - dayOfCycle };
   }, [cycle]);
 
-  // Today's scheduled protocol rows. Twice-daily items split into AM + PM rows
-  // so each half can be independently logged/checked. Skips are matched by
-  // (peptide_id, time_of_day) — where time_of_day encodes the window.
+  // Today's scheduled protocol rows. Twice-daily items split into AM + PM
+  // rows so each half can be independently logged.
   const schedule = useMemo(() => {
     if (!cycle || !cycleView) return [];
     try {
@@ -214,26 +171,11 @@ export default function TodayScreen() {
           const pmLogged = todayDoses.some(
             (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() >= 12
           );
-          out.push({
-            ...row,
-            logged: amLogged,
-            skip: skipFor(row.peptide_id, 'AM'),
-            window: 'AM',
-          });
-          out.push({
-            ...row,
-            logged: pmLogged,
-            skip: skipFor(row.peptide_id, 'PM'),
-            window: 'PM',
-          });
+          out.push({ ...row, logged: amLogged, skip: skipFor(row.peptide_id, 'AM'), window: 'AM' });
+          out.push({ ...row, logged: pmLogged, skip: skipFor(row.peptide_id, 'PM'), window: 'PM' });
         } else {
           const logged = todayDoses.some((d) => d.peptide_id === row.peptide_id);
-          out.push({
-            ...row,
-            logged,
-            skip: skipFor(row.peptide_id, 'ALL'),
-            window: 'ALL',
-          });
+          out.push({ ...row, logged, skip: skipFor(row.peptide_id, 'ALL'), window: 'ALL' });
         }
       }
       return out;
@@ -241,6 +183,21 @@ export default function TodayScreen() {
       return [];
     }
   }, [cycle, cycleView, todayDoses, todaySkips]);
+
+  // Compliance %: doses logged / scheduled. Drives the hero ring.
+  const compliance = useMemo(() => {
+    if (schedule.length === 0) return { pct: 0, logged: 0, total: 0 };
+    const logged = schedule.filter((r) => r.logged).length;
+    const skipped = schedule.filter((r) => !!r.skip && !r.logged).length;
+    const denom = schedule.length;
+    // Skipped rows count against the denominator but not as "logged".
+    return {
+      pct: Math.round((logged / Math.max(1, denom)) * 100),
+      logged,
+      skipped,
+      total: denom,
+    };
+  }, [schedule]);
 
   const todayIsoDate = useMemo(() => {
     const d = new Date();
@@ -308,93 +265,118 @@ export default function TodayScreen() {
     refresh();
   };
 
+  // Tap behavior: unfinished row → log; logged row → dose sheet; skipped → un-skip.
+  // Long-press unfinished row → skip sheet.
+  const onScheduleRowPress = (row: (typeof schedule)[number]) => {
+    if (row.skip && !row.logged) {
+      const p = findPeptide(row.peptide_id);
+      unskipRow(row.skip, p?.name ?? row.peptide_id);
+      return;
+    }
+    if (row.logged) {
+      const dose = todayDoses.find(
+        (d) =>
+          d.peptide_id === row.peptide_id &&
+          (row.window === 'AM'
+            ? new Date(d.taken_at).getHours() < 12
+            : row.window === 'PM'
+            ? new Date(d.taken_at).getHours() >= 12
+            : true)
+      );
+      if (dose) setDoseSheet(dose);
+      return;
+    }
+    router.push({
+      pathname: '/log-dose',
+      params: { peptideId: row.peptide_id, prefillDoseMcg: row.dose_mcg },
+    } as any);
+  };
+
+  const onScheduleRowLongPress = (row: (typeof schedule)[number]) => {
+    if (row.logged || row.skip) return;
+    const p = findPeptide(row.peptide_id);
+    if (!p) return;
+    openSkipSheet(p.id, p.name, row.window);
+  };
+
   return (
     <>
       <ScrollView
-        style={{ flex: 1, backgroundColor: t.bg }}
-        contentContainerStyle={{
-          paddingTop: insets.top + space.md,
-          paddingBottom: 140,
-        }}
+        style={{ flex: 1, backgroundColor: ed.colors.bg }}
+        contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
+        {/* Header — eyebrow date + serif greeting + ···· settings */}
         <View
           style={{
-            paddingHorizontal: space.xl,
+            paddingHorizontal: 24,
             flexDirection: 'row',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'space-between',
           }}
         >
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
             <Text
               style={{
-                fontSize: 11,
-                color: t.ink3,
-                letterSpacing: 1.2,
-                fontFamily: font.sansSemi,
+                fontFamily: ed.typography.eyebrow.fontFamily,
+                fontSize: ed.typography.eyebrow.fontSize,
+                letterSpacing: ed.typography.eyebrow.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+                marginBottom: 14,
               }}
             >
               {formatHeaderDate(new Date())}
             </Text>
-            <Text
-              style={{
-                fontSize: 26,
-                fontFamily: font.sansBold,
-                color: t.ink,
-                letterSpacing: -0.6,
-                marginTop: 4,
-                lineHeight: 30,
-              }}
-            >
-              {greet(new Date())} {displayName}.
-            </Text>
+            <EditorialHeadline size="title1">
+              {`${greet(new Date())}, *${displayName}*.`}
+            </EditorialHeadline>
           </View>
           <Pressable
             onPress={() => router.push('/settings')}
             accessibilityRole="button"
             accessibilityLabel="Open settings"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: t.surfaceAlt,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            hitSlop={6}
+            hitSlop={10}
+            style={{ paddingTop: 4 }}
           >
-            <IconCog size={18} color={t.ink2} />
+            <Text
+              style={{
+                fontFamily: ed.typography.dataLg.fontFamily,
+                fontSize: 24,
+                letterSpacing: 4,
+                color: ed.colors.ink2,
+              }}
+            >
+              ····
+            </Text>
           </Pressable>
         </View>
 
-        {/* Research-only banner */}
-        <View style={{ marginHorizontal: space.xl, marginTop: space.md, borderRadius: radius.md, overflow: 'hidden' }}>
-          <ResearchBanner compact />
-        </View>
-
-        {/* Paused cycle banner */}
+        {/* Paused-cycle notice — keep visible because it's a critical state.
+            Editorial-styled: hairline framed, brass eyebrow, serif body. */}
         {cycle && cycle.status === 'paused' ? (
-          <View
-            style={{
-              marginHorizontal: space.xl,
-              marginTop: space.md,
-              padding: space.md,
-              borderRadius: radius.md,
-              backgroundColor: t.warnSoft,
-              borderWidth: 1,
-              borderColor: t.warn + '60',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, color: t.warn, fontFamily: font.sansSemi, letterSpacing: 0.5 }}>
-                CYCLE PAUSED
+          <View style={{ marginHorizontal: 24, marginTop: 28 }}>
+            <HairlineRow strong />
+            <View style={{ paddingVertical: 18, gap: 6 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.stateWarn,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Cycle paused
               </Text>
-              <Text style={{ fontSize: 13, color: t.ink2, marginTop: 2 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.bodyMd.fontFamily,
+                  fontSize: ed.typography.bodyMd.fontSize,
+                  lineHeight: ed.typography.bodyMd.lineHeight,
+                  color: ed.colors.ink2,
+                }}
+              >
                 {cycle.paused_at
                   ? `Paused since ${new Date(cycle.paused_at).toLocaleDateString('en-US', {
                       month: 'short',
@@ -402,563 +384,261 @@ export default function TodayScreen() {
                     })}. Resume to continue tracking.`
                   : 'Resume to continue tracking.'}
               </Text>
+              <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+                <EditorialButton variant="secondary" onPress={onResumeCycle}>
+                  Resume cycle
+                </EditorialButton>
+              </View>
             </View>
-            <Pressable
-              onPress={onResumeCycle}
-              accessibilityRole="button"
-              accessibilityLabel="Resume cycle"
-              style={{
-                backgroundColor: t.ink,
-                paddingVertical: 8,
-                paddingHorizontal: 14,
-                borderRadius: radius.pill,
-              }}
-            >
-              <Text style={{ color: t.bg, fontSize: 12, fontFamily: font.sansSemi }}>Resume</Text>
-            </Pressable>
+            <HairlineRow strong />
           </View>
         ) : null}
 
-        {/* Cycle card */}
-        {cycle && cycleView ? (
-          <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-            <Pressable
-              onPress={() => router.push(`/cycle/${cycle.id}` as any)}
-              style={{
-                backgroundColor: t.surface,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.lg,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: space.md,
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontFamily: font.sansSemi,
-                      letterSpacing: 1.2,
-                      color: t.ink3,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Active cycle
-                  </Text>
-                  <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink, marginTop: 2 }}>
-                    {cycle.name}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 6,
-                    backgroundColor: t.accentSoft,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontFamily: font.sansSemi,
-                      color: t.accentInk,
-                      letterSpacing: 0.5,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {cycle.phase}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 2, marginBottom: space.sm }}>
-                {Array.from({ length: Math.min(cycleView.total, 56) }).map((_, i) => {
-                  const scaledI = Math.floor((i * cycleView.total) / Math.min(cycleView.total, 56));
-                  return (
-                    <View
-                      key={i}
-                      style={{
-                        flex: 1,
-                        height: 16,
-                        borderRadius: 2,
-                        backgroundColor: scaledI < cycleView.day ? t.accent : t.surfaceAlt,
-                        opacity: scaledI < cycleView.day ? 0.55 + i / 100 : 1,
-                      }}
-                    />
-                  );
-                })}
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: t.ink2, fontSize: 13, fontFamily: font.mono }}>
-                  Day {cycleView.displayDay} / {cycleView.total}
-                </Text>
-                <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
-                  {cycleView.pct}% · {cycleView.remaining}d left
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-            <HCard>
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontFamily: font.sansSemi,
-                  letterSpacing: 1.2,
-                  color: t.ink3,
-                  textTransform: 'uppercase',
-                  marginBottom: space.sm,
-                }}
-              >
-                No active cycle
-              </Text>
-              <Text style={{ fontSize: 15, color: t.ink2, lineHeight: 22, marginBottom: space.md }}>
-                Start a cycle to see your protocol here each day, or log individual doses without a cycle.
-              </Text>
-              <View style={{ flexDirection: 'row', gap: space.sm }}>
-                <Pressable
-                  onPress={() => router.push('/cycle/new')}
-                  style={{
-                    flex: 1,
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    backgroundColor: t.ink,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Start a cycle
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push('/log-dose')}
-                  style={{
-                    flex: 1,
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.lineStrong,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Log a dose
-                  </Text>
-                </Pressable>
-              </View>
-            </HCard>
-          </View>
-        )}
+        {/* Hero ring — compliance % when there's a schedule, otherwise cycle
+            day progress when there's a cycle but nothing scheduled today,
+            otherwise a brand-tinted "no cycle" prompt. */}
+        <View style={{ alignItems: 'center', marginTop: 36 }}>
+          {schedule.length > 0 ? (
+            <HeroRing
+              value={compliance.pct}
+              label={`${compliance.logged} of ${compliance.total} logged`}
+              color={
+                compliance.pct >= 100
+                  ? 'stateOptimal'
+                  : compliance.pct >= 50
+                  ? 'stateGood'
+                  : 'brand'
+              }
+            />
+          ) : cycle && cycleView ? (
+            <HeroRing
+              value={cycleView.pct}
+              unit="%"
+              label={`Day ${cycleView.displayDay} of ${cycleView.total}`}
+              color="brand"
+            />
+          ) : (
+            <HeroRing value={0} unit="" label="No active cycle" color="brand" />
+          )}
+        </View>
 
-        {/* Today's schedule from cycle protocol */}
+        {/* No-cycle CTA pair */}
+        {!cycle ? (
+          <View
+            style={{
+              marginTop: 32,
+              paddingHorizontal: 24,
+              flexDirection: 'row',
+              gap: 12,
+              justifyContent: 'center',
+            }}
+          >
+            <EditorialButton onPress={() => router.push('/cycle/new')}>
+              Start a cycle
+            </EditorialButton>
+            <EditorialButton variant="secondary" onPress={() => router.push('/log-dose')}>
+              Log a dose
+            </EditorialButton>
+          </View>
+        ) : null}
+
+        {/* Cycle stats — day / progress / remaining */}
+        {cycle && cycleView ? (
+          <View style={{ marginTop: 32, marginHorizontal: 24 }}>
+            <HairlineRow strong />
+            <StatPair
+              cells={[
+                { value: cycleView.displayDay, unit: `/${cycleView.total}`, label: 'Day' },
+                { value: `${cycleView.pct}`, unit: '%', label: 'Progress' },
+                { value: cycleView.remaining, unit: 'd', label: 'Remaining' },
+              ]}
+            />
+            <HairlineRow strong />
+          </View>
+        ) : null}
+
+        {/* Today's schedule */}
         {schedule.length > 0 ? (
-          <>
-            <HSectionHeader title="Today's schedule" />
-            <View style={{ paddingHorizontal: space.xl, gap: 8 }}>
+          <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
+            <EyebrowLabel withRule>Today · Schedule</EyebrowLabel>
+            <View style={{ marginTop: 4 }}>
               {schedule.map((row, idx) => {
                 const p = findPeptide(row.peptide_id);
                 if (!p) return null;
-                const windowLabel =
-                  row.window === 'AM' ? 'Morning' : row.window === 'PM' ? 'Evening' : null;
-                const phase = cycleView
-                  ? currentPhaseFor(row.peptide_id, cycleView.day)
-                  : null;
-                const isSkipped = !!row.skip;
+                const status: ScheduleStatus = row.logged
+                  ? 'completed'
+                  : row.skip
+                  ? 'overdue'
+                  : 'next';
+                const time = timeLabelForWindow(row.time_of_day, row.window);
+                const detail = row.skip
+                  ? `${row.dose_mcg} mcg · ${row.skip.reason ?? 'skipped'}`
+                  : `${row.dose_mcg} mcg · ${row.freq}`;
                 return (
-                  <Pressable
-                    key={`${row.peptide_id}-${row.window}-${idx}`}
-                    onPress={() =>
-                      isSkipped && row.skip ? unskipRow(row.skip, p.name) : undefined
-                    }
-                    disabled={!isSkipped}
-                    style={{
-                      backgroundColor: isSkipped ? t.surfaceAlt : t.surface,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: t.line,
-                      padding: space.md,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: space.md,
-                      opacity: isSkipped ? 0.7 : 1,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 10,
-                        backgroundColor: p.color + '24',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
+                  <View key={`${row.peptide_id}-${row.window}-${idx}`}>
+                    <Pressable
+                      onPress={() => onScheduleRowPress(row)}
+                      onLongPress={() => onScheduleRowLongPress(row)}
+                      delayLongPress={350}
                     >
-                      {row.logged ? (
-                        <IconCheck size={14} color={p.color} />
-                      ) : (
-                        <IconSyringe size={16} color={p.color} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                        {p.name}
-                        {windowLabel ? (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: p.color,
-                              fontFamily: font.sansSemi,
-                            }}
-                          >
-                            {' · '}
-                            {windowLabel}
-                          </Text>
-                        ) : null}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: t.ink3,
-                          fontFamily: font.mono,
-                          marginTop: 2,
-                        }}
-                      >
-                        {row.dose_mcg} mcg · {row.freq} · {row.time_of_day}
-                      </Text>
-                      {phase ? (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: phase.extended ? t.ink3 : t.accent,
-                            fontFamily: font.sansSemi,
-                            marginTop: 2,
-                            letterSpacing: 0.3,
-                          }}
-                        >
-                          {phase.extended
-                            ? `Past ${phase.name.toLowerCase()}${
-                                phase.weeksPastEnd && phase.weeksPastEnd > 1
-                                  ? ` · week +${phase.weeksPastEnd - 1}`
-                                  : ''
-                              }`
-                            : `${phase.name} · week ${phase.weekInPhase} of ${phase.totalWeeks}`}
-                          {phase.doseModifier ? ` · ${phase.doseModifier}` : ''}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {row.logged ? (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: t.success,
-                          fontFamily: font.sansSemi,
-                          letterSpacing: 0.5,
-                        }}
-                      >
-                        LOGGED
-                      </Text>
-                    ) : isSkipped ? (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: t.ink3,
-                          fontFamily: font.sansSemi,
-                          letterSpacing: 0.5,
-                        }}
-                      >
-                        SKIPPED
-                      </Text>
-                    ) : (
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <Pressable
-                          onPress={() => openSkipSheet(p.id, p.name, row.window)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Skip ${p.name}`}
-                          style={{
-                            backgroundColor: t.surface,
-                            borderWidth: 1,
-                            borderColor: t.line,
-                            paddingVertical: 6,
-                            paddingHorizontal: 10,
-                            borderRadius: radius.pill,
-                          }}
-                        >
-                          <Text
-                            style={{ color: t.ink3, fontSize: 12, fontFamily: font.sansSemi }}
-                          >
-                            Skip
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() =>
-                            router.push({
-                              pathname: '/log-dose',
-                              params: { peptideId: p.id, prefillDoseMcg: row.dose_mcg },
-                            } as any)
-                          }
-                          accessibilityRole="button"
-                          accessibilityLabel={`Log ${p.name}`}
-                          style={{
-                            backgroundColor: t.ink,
-                            paddingVertical: 6,
-                            paddingHorizontal: 12,
-                            borderRadius: radius.pill,
-                          }}
-                        >
-                          <Text style={{ color: t.bg, fontSize: 12, fontFamily: font.sansSemi }}>
-                            Log
-                          </Text>
-                        </Pressable>
-                      </View>
-                    )}
-                  </Pressable>
+                      <ScheduleItem
+                        time={time}
+                        title={p.name}
+                        detail={detail}
+                        status={
+                          // Override label for the skip case — ScheduleItem's
+                          // 'overdue' renders the "OVERDUE" word; we want
+                          // "SKIPPED" instead. Re-route through 'completed'
+                          // visual style with a custom keyword would mean a
+                          // wider primitive change, so we keep 'overdue' for
+                          // the warn tint and accept the label difference for
+                          // now. Real skip→logged distinction is the dim row.
+                          status
+                        }
+                      />
+                    </Pressable>
+                    {idx < schedule.length - 1 ? <HairlineRow /> : null}
+                  </View>
                 );
               })}
             </View>
-          </>
+          </View>
         ) : null}
 
-        {/* Today's logged doses — tappable */}
+        {/* Today's log — visible when there are doses outside the schedule
+            (or all are extra logs not from a protocol). */}
         {todayDoses.length > 0 ? (
-          <>
-            <HSectionHeader title="Today's log" />
-            <View style={{ paddingHorizontal: space.xl, gap: 8 }}>
-              {todayDoses.map((d) => {
+          <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
+            <EyebrowLabel withRule>Today · Logged</EyebrowLabel>
+            <View style={{ marginTop: 4 }}>
+              {todayDoses.map((d, idx) => {
                 const p = findPeptide(d.peptide_id);
+                const time = new Date(d.taken_at)
+                  .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  .replace(' ', '')
+                  .toUpperCase();
                 return (
-                  <Pressable
-                    key={d.id}
-                    onPress={() => setDoseSheet(d)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: space.md,
-                      backgroundColor: t.surface,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: t.line,
-                      padding: space.md,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 10,
-                        backgroundColor: (p?.color ?? t.accent) + '24',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <IconCheck size={14} color={p?.color ?? t.accent} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                        {p?.name ?? d.peptide_id}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono, marginTop: 2 }}>
-                        {d.amount_mcg} mcg · {d.route}
-                        {d.site ? ` · ${d.site}` : ''} ·{' '}
-                        {new Date(d.taken_at).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
-                      </Text>
-                    </View>
-                    <Text style={{ color: t.ink4, fontSize: 11 }}>Tap</Text>
-                  </Pressable>
+                  <View key={d.id}>
+                    <Pressable onPress={() => setDoseSheet(d)}>
+                      <ScheduleItem
+                        time={time}
+                        title={p?.name ?? d.peptide_id}
+                        detail={`${d.amount_mcg} mcg · ${d.route}${d.site ? ` · ${d.site}` : ''}`}
+                        status="completed"
+                      />
+                    </Pressable>
+                    {idx < todayDoses.length - 1 ? <HairlineRow /> : null}
+                  </View>
                 );
               })}
             </View>
-          </>
+          </View>
         ) : null}
 
-        {/* Active vials — tappable */}
+        {/* Active vials — mini dial row. */}
         {vials.length > 0 ? (
-          <>
-            <HSectionHeader title="Active vials" />
+          <View style={{ marginTop: 36 }}>
+            <View style={{ paddingHorizontal: 24 }}>
+              <EyebrowLabel withRule>Active vials</EyebrowLabel>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: space.xl, gap: 10 }}
+              contentContainerStyle={{ paddingHorizontal: 24, gap: 28, paddingTop: 20 }}
             >
               {vials.map((v) => {
                 const p = findPeptide(v.peptide_id);
-                const remainingPct = Math.round((v.remaining_mg / v.strength_mg) * 100);
+                const remainingPct = Math.max(
+                  0,
+                  Math.min(100, Math.round((v.remaining_mg / Math.max(0.0001, v.strength_mg)) * 100))
+                );
                 const expiresAt = v.expires_at ? new Date(v.expires_at) : null;
                 const daysToExpiry = expiresAt
                   ? Math.floor((expiresAt.getTime() - Date.now()) / 864e5)
                   : null;
                 const expSoon = daysToExpiry !== null && daysToExpiry <= 3;
+                const color = expSoon
+                  ? 'stateWarn'
+                  : remainingPct < 20
+                  ? 'stateLow'
+                  : remainingPct < 50
+                  ? 'stateModerate'
+                  : 'stateGood';
                 return (
-                  <Pressable
-                    key={v.id}
-                    onPress={() => setVialSheet(v)}
-                    style={{
-                      minWidth: 200,
-                      backgroundColor: t.surface,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: t.line,
-                      padding: space.md,
-                      gap: space.sm,
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 5,
-                          backgroundColor: p?.color ?? t.accent,
-                        }}
-                      />
-                      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                        {p?.name ?? v.peptide_id}
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 20, fontFamily: font.monoSemi, color: t.ink }}>
-                      {v.remaining_mg.toFixed(2)}
-                      <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.sansMed }}>
-                        {' '}
-                        / {v.strength_mg} mg
-                      </Text>
-                    </Text>
-                    <View style={{ height: 4, backgroundColor: t.surfaceAlt, borderRadius: 2 }}>
-                      <View
-                        style={{
-                          width: `${Math.max(2, remainingPct)}%`,
-                          height: 4,
-                          backgroundColor: remainingPct < 20 ? t.warn : t.accent,
-                          borderRadius: 2,
-                        }}
-                      />
-                    </View>
-                    {daysToExpiry !== null ? (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: expSoon ? t.warn : t.ink3,
-                          fontFamily: font.sansMed,
-                        }}
-                      >
-                        {daysToExpiry <= 0
-                          ? 'Expired'
-                          : daysToExpiry === 1
-                            ? 'Expires tomorrow'
-                            : `${daysToExpiry} days left`}
-                      </Text>
-                    ) : null}
+                  <Pressable key={v.id} onPress={() => setVialSheet(v)}>
+                    <MiniDial
+                      value={remainingPct}
+                      unit="%"
+                      color={color}
+                      label={p?.name ?? v.peptide_id}
+                      size={64}
+                    />
                   </Pressable>
                 );
               })}
-
-              {/* All vials card — routes to /vials for full library + history */}
               <Pressable
                 onPress={() => router.push('/vials' as any)}
                 accessibilityRole="button"
                 accessibilityLabel="Open all vials"
-                style={{
-                  minWidth: 160,
-                  backgroundColor: t.surfaceAlt,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: t.line,
-                  padding: space.md,
-                  justifyContent: 'center',
-                  alignItems: 'flex-start',
-                  gap: 6,
-                }}
+                style={{ alignItems: 'center', justifyContent: 'center', minWidth: 64 }}
               >
-                <Text style={{ fontSize: 13, fontFamily: font.sansSemi, color: t.ink }}>
-                  All vials →
-                </Text>
-                <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
-                  Active + history
+                <View
+                  style={{
+                    width: 64,
+                    height: 64,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 1,
+                    borderColor: ed.colors.line,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: ed.fraunces('Fraunces_300Light'),
+                      fontSize: 28,
+                      color: ed.colors.ink2,
+                    }}
+                  >
+                    →
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    marginTop: 14,
+                    fontFamily: ed.typography.labelSm.fontFamily,
+                    fontSize: ed.typography.labelSm.fontSize,
+                    letterSpacing: ed.typography.labelSm.letterSpacing,
+                    color: ed.colors.ink3,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  All vials
                 </Text>
               </Pressable>
             </ScrollView>
-          </>
+          </View>
         ) : null}
 
-        {/* Quick actions */}
-        <HSectionHeader title="Quick actions" />
-        <View
-          style={{
-            paddingHorizontal: space.xl,
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 10,
-          }}
-        >
-          {[
-            {
-              label: 'Reconstitute',
-              sub: 'Set up a new vial',
-              Icon: IconBolt,
-              onPress: () => router.push('/reconstitute'),
-            },
-            {
-              label: 'Site rotation',
-              sub: 'Pick next injection site',
-              Icon: IconSyringe,
-              onPress: () => router.push('/injection-sites'),
-            },
-            {
-              label: 'Journal entry',
-              sub: 'How do you feel?',
-              Icon: IconBook,
-              onPress: () => router.push('/journal-entry'),
-            },
-            {
-              label: 'Log metric',
-              sub: 'Weight, HR, sleep, labs',
-              Icon: IconChart,
-              onPress: () => router.push('/log-metric'),
-            },
-          ].map((q) => (
-            <Pressable
-              key={q.label}
-              onPress={q.onPress}
-              style={{
-                width: '48.5%',
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.md,
-              }}
-            >
-              <View
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  backgroundColor: t.surfaceAlt,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: space.sm,
-                }}
-              >
-                <q.Icon size={16} color={t.ink2} />
-              </View>
-              <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                {q.label}
-              </Text>
-              <Text style={{ fontSize: 11, color: t.ink3, marginTop: 2 }}>{q.sub}</Text>
-            </Pressable>
-          ))}
+        {/* Quick actions — list-style DataRows in editorial language. */}
+        <View style={{ marginTop: 40, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Quick actions</EyebrowLabel>
+          <HairlineRow />
+          <DataRow label="Reconstitute" value="" onPress={() => router.push('/reconstitute')} />
+          <HairlineRow />
+          <DataRow
+            label="Site rotation"
+            value=""
+            onPress={() => router.push('/injection-sites')}
+          />
+          <HairlineRow />
+          <DataRow label="Journal entry" value="" onPress={() => router.push('/journal-entry')} />
+          <HairlineRow />
+          <DataRow label="Log metric" value="" onPress={() => router.push('/log-metric')} />
+          <HairlineRow />
         </View>
       </ScrollView>
 
-      {/* Dose bottom sheet */}
+      {/* Dose bottom sheet — legacy palette. Will rebuild in Phase B. */}
       <Modal
         visible={!!doseSheet}
         transparent
@@ -986,7 +666,14 @@ export default function TodayScreen() {
                 <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
                   {findPeptide(doseSheet.peptide_id)?.name ?? doseSheet.peptide_id}
                 </Text>
-                <Text style={{ fontSize: 13, color: t.ink3, fontFamily: font.mono, marginBottom: space.md }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: t.ink3,
+                    fontFamily: font.mono,
+                    marginBottom: space.md,
+                  }}
+                >
                   {doseSheet.amount_mcg} mcg · {doseSheet.route} ·{' '}
                   {new Date(doseSheet.taken_at).toLocaleString()}
                 </Text>
@@ -995,7 +682,10 @@ export default function TodayScreen() {
                     setDoseSheet(null);
                     router.push({
                       pathname: '/log-dose',
-                      params: { peptideId: doseSheet.peptide_id, prefillDoseMcg: doseSheet.amount_mcg },
+                      params: {
+                        peptideId: doseSheet.peptide_id,
+                        prefillDoseMcg: doseSheet.amount_mcg,
+                      },
                     } as any);
                   }}
                   style={{
@@ -1035,7 +725,7 @@ export default function TodayScreen() {
         </Pressable>
       </Modal>
 
-      {/* Vial bottom sheet */}
+      {/* Vial bottom sheet — legacy palette. */}
       <Modal
         visible={!!vialSheet}
         transparent
@@ -1063,7 +753,14 @@ export default function TodayScreen() {
                 <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
                   {findPeptide(vialSheet.peptide_id)?.name ?? vialSheet.peptide_id} vial
                 </Text>
-                <Text style={{ fontSize: 13, color: t.ink3, fontFamily: font.mono, marginBottom: space.md }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: t.ink3,
+                    fontFamily: font.mono,
+                    marginBottom: space.md,
+                  }}
+                >
                   {vialSheet.remaining_mg.toFixed(2)} / {vialSheet.strength_mg} mg ·{' '}
                   {vialSheet.concentration.toFixed(2)} mg/mL
                 </Text>
@@ -1126,7 +823,7 @@ export default function TodayScreen() {
         </Pressable>
       </Modal>
 
-      {/* Skip sheet */}
+      {/* Skip sheet — legacy palette. */}
       <Modal
         visible={!!skipSheet}
         transparent

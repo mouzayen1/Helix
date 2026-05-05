@@ -6,6 +6,15 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import { IBMPlexMono_400Regular, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
+import {
+  Fraunces_300Light,
+  Fraunces_300Light_Italic,
+  Fraunces_400Regular,
+  Fraunces_400Regular_Italic,
+  Fraunces_500Medium,
+  Fraunces_500Medium_Italic,
+} from '@expo-google-fonts/fraunces';
+import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SplashScreen from 'expo-splash-screen';
@@ -193,6 +202,14 @@ export default function RootLayout() {
     Inter_700Bold,
     IBMPlexMono_400Regular,
     IBMPlexMono_600SemiBold,
+    Fraunces_300Light,
+    Fraunces_300Light_Italic,
+    Fraunces_400Regular,
+    Fraunces_400Regular_Italic,
+    Fraunces_500Medium,
+    Fraunces_500Medium_Italic,
+    DMMono_400Regular,
+    DMMono_500Medium,
   });
 
   useEffect(() => {
