@@ -29,6 +29,22 @@ function describeFreq(freq) {
   if (semi >= 0) f = f.slice(0, semi);
   f = f.replace(/\s+/g, ' ').trim();
 
+  // N-on/M-off: "5 on / 2 off", "5-on/2-off", "5 on 2 off", "5/2".
+  const onOff =
+    f.match(/(\d+)\s*-?\s*on\s*(?:[/,-]|\s)\s*(\d+)\s*-?\s*off/) ||
+    (/^(\d+)\s*\/\s*(\d+)$/.exec(f));
+  if (onOff) {
+    const on = parseInt(onOff[1], 10);
+    const off = parseInt(onOff[2], 10);
+    if (on > 0 && off > 0) {
+      const period = on + off;
+      return {
+        perDay: on / period, daysPerDose: period / on,
+        displayUnit: 'days', label: `${on}-on/${off}-off`,
+      };
+    }
+  }
+
   const hasCadence =
     /\b(daily|nightly|weekly|every other day|eod|per\s*week|per\s*day|once|twice|thrice|×|x)\s*(daily|weekly|day|week|night|nightly)?/i.test(f) ||
     /\b(once|twice|thrice|1×|2×|3×|1x|2x|3x|[1-9]–[1-9][×x])\s*(daily|weekly)/i.test(f);

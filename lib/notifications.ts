@@ -18,7 +18,7 @@ import {
   type CycleProtocolItem,
   type Vial,
 } from './db';
-import { isScheduledOnDay } from './freq';
+import { isItemScheduledOnDay, resolvePhase } from './cycle-helpers';
 
 type NotificationsModule = typeof Notifications;
 
@@ -160,7 +160,7 @@ function dayOfCycleOn(cycle: Cycle, date: Date) {
 }
 
 function isScheduledOn(row: CycleProtocolItem, dayOfCycle: number): boolean {
-  return isScheduledOnDay(row.freq, dayOfCycle);
+  return isItemScheduledOnDay(row, dayOfCycle);
 }
 
 // ---- Schedule all -------------------------------------------------------

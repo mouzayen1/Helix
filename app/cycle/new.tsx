@@ -20,11 +20,15 @@ import { getPeptideExtras } from '../../lib/peptide-extras';
 import {
   attachVialToCycle,
   createCycle,
+  dismissBanner,
   listCycles,
   matchingVialsForCycle,
+  parseDismissedBanners,
   type CycleProtocolItem,
+  type CycleProtocolItemPhase,
   type Vial,
 } from '../../lib/db';
+import { useProfile } from '../../lib/profile-context';
 
 type Phase = 'loading' | 'active' | 'taper' | 'washout';
 
@@ -69,7 +73,38 @@ const FREQ_OPTIONS: string[] = [
   'every other day',
   'twice weekly',
   'weekly',
+  '5 on / 2 off',
+  '4 on / 3 off',
 ];
+
+// Pulls a canonical freq string out of a peptide-extras dose_modifier
+// like "5 days on + 2 days off, 100 mcg SubQ" or "0.6 mg SubQ daily".
+// Falls back to the cycle template's base freq if no keyword matches.
+function deriveFreqFromModifier(modifier: string | undefined, fallback: string): string {
+  const m = (modifier ?? '').toLowerCase();
+  if (/\b\d+\s*[-/]?\s*(days?\s*)?on\b.*\b\d+\s*[-/]?\s*(days?\s*)?off\b/.test(m)) {
+    const match = m.match(/(\d+)\s*[-/]?\s*(?:days?\s*)?on\b[^a-z0-9]*?(\d+)\s*[-/]?\s*(?:days?\s*)?off/);
+    if (match) return `${match[1]} on / ${match[2]} off`;
+  }
+  if (m.includes('twice daily') || /\b2\s*[x×]\s*daily/.test(m)) return 'twice daily';
+  if (m.includes('every other day') || m.includes('eod')) return 'every other day';
+  if (m.includes('twice weekly') || /\b2\s*[x×]\s*weekly/.test(m)) return 'twice weekly';
+  if (m.includes('weekly')) return 'weekly';
+  if (m.includes('daily') || m.includes('per day')) return 'daily';
+  return fallback;
+}
+
+// Parses the FIRST mg/mcg quantity out of a dose_modifier string,
+// normalizing mg → mcg. "1.7 mg SubQ weekly" → 1700. Falls back to the
+// cycle template's base dose_mcg if nothing parseable is found.
+function deriveDoseFromModifier(modifier: string | undefined, fallback: number): number {
+  const m = (modifier ?? '').toLowerCase();
+  const match = m.match(/(\d+(?:\.\d+)?)\s*(mg|mcg)\b/);
+  if (!match) return fallback;
+  const n = parseFloat(match[1]);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.round(match[2] === 'mg' ? n * 1000 : n);
+}
 
 const TIME_OPTIONS: string[] = ['morning', 'evening', 'pre-workout', 'pre-bed'];
 
@@ -741,6 +776,20 @@ export default function NewCycle() {
   const [matchingVials, setMatchingVials] = useState<Vial[]>([]);
   const [vialsToAttach, setVialsToAttach] = useState<Set<string>>(new Set());
 
+  // Titration banner state. profile.dismissed_banners is the durable
+  // record; bannerDismissedLocal is an optimistic flip while the DB
+  // write is in flight (and after first phase edit auto-dismisses).
+  const { profile } = useProfile();
+  const [bannerDismissedLocal, setBannerDismissedLocal] = useState<boolean>(false);
+  const isTitrationBannerDismissed =
+    bannerDismissedLocal ||
+    parseDismissedBanners(profile?.dismissed_banners).includes('titration_v1');
+  const dismissTitrationBanner = (): void => {
+    if (bannerDismissedLocal) return;
+    setBannerDismissedLocal(true);
+    dismissBanner('titration_v1').catch(() => {});
+  };
+
   const isCustom = goal === 'Custom';
 
   // Pre-fill from copy-from-cycle, jumping to step 3.
@@ -841,7 +890,20 @@ export default function NewCycle() {
   const canAdvance: boolean = (() => {
     if (step === 1) return goal !== null;
     if (step === 2) return selectionId !== null;
-    if (step === 3) return items.length > 0 && cycleName.trim().length > 0;
+    if (step === 3) {
+      if (items.length === 0 || cycleName.trim().length === 0) return false;
+      // Block save while any phase row is invalid (empty name, duplicate
+      // name within a peptide, or any other validation surfaced inline).
+      for (const it of items) {
+        const phases = it.phases ?? [];
+        if (phases.length === 0) continue;
+        const names = phases.map((p) => (p.name ?? '').trim());
+        if (names.some((n) => n.length === 0)) return false;
+        if (names.some((n) => n.length > 32)) return false;
+        if (new Set(names).size !== names.length) return false;
+      }
+      return true;
+    }
     if (step === 4) return !saving && (conflicts.length === 0 || acceptConflicts);
     return true;
   })();
@@ -856,7 +918,27 @@ export default function NewCycle() {
     }
     const tpl = TEMPLATES.find((x) => x.id === sel);
     if (!tpl) return;
-    setItems(tpl.items.map((i) => ({ ...i })));
+    // Auto-seed phases from peptide-extras cycleTemplate.phases when the
+    // template defines >=2 phases. The wizard surfaces this as a dimmed
+    // single-freq UI + an editable phase list (see ItemEditor).
+    const seeded = tpl.items.map((i) => {
+      const extras = getPeptideExtras(i.peptide_id);
+      const tplPhases = extras?.cycleTemplate?.phases ?? [];
+      if (tplPhases.length < 2) return { ...i };
+      let cursor = 1;
+      const phases = tplPhases.map((p) => {
+        const phase = {
+          startWeek: cursor,
+          name: p.name,
+          freq: deriveFreqFromModifier(p.dose_modifier, i.freq),
+          dose_mcg: deriveDoseFromModifier(p.dose_modifier, i.dose_mcg),
+        };
+        cursor += p.weeks;
+        return phase;
+      });
+      return { ...i, phases };
+    });
+    setItems(seeded);
     setDurationWeeks(tpl.duration_weeks);
     setPhase(tpl.phase);
     setCycleName(tpl.name);
@@ -1012,6 +1094,54 @@ export default function NewCycle() {
 
   const updateItem = (idx: number, patch: Partial<CycleProtocolItem>): void => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  };
+
+  const updatePhase = (
+    idx: number,
+    pi: number,
+    patch: Partial<CycleProtocolItemPhase>,
+  ): void => {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        const phases = (it.phases ?? []).map((p, j) => (j === pi ? { ...p, ...patch } : p));
+        return { ...it, phases };
+      })
+    );
+    // First edit silently dismisses the titration banner; the user
+    // has clearly understood they can customize.
+    if (!isTitrationBannerDismissed) dismissTitrationBanner();
+  };
+
+  const addPhase = (idx: number): void => {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        const existing = it.phases ?? [];
+        const startWeek = existing.length > 0
+          ? Math.max(...existing.map((p) => p.startWeek)) + 1
+          : 1;
+        const phase: CycleProtocolItemPhase = {
+          startWeek,
+          name: `Phase ${existing.length + 1}`,
+          freq: it.freq,
+          dose_mcg: it.dose_mcg,
+        };
+        return { ...it, phases: [...existing, phase] };
+      })
+    );
+  };
+
+  const removePhase = (idx: number, pi: number): void => {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        const phases = (it.phases ?? []).filter((_, j) => j !== pi);
+        // Collapsing back to <2 phases is fine — resolver falls through
+        // to the legacy single-freq path automatically.
+        return { ...it, phases };
+      })
+    );
   };
 
   const setDoseFromInput = (idx: number, peptide_id: string, raw: string): void => {
@@ -1589,9 +1719,209 @@ export default function NewCycle() {
               label={f}
               onPress={() => updateItem(idx, { freq: f })}
               ed={ed}
+              disabled={(it.phases?.length ?? 0) >= 2}
             />
           ))}
         </View>
+        {(it.phases?.length ?? 0) >= 2 ? (
+          <Text
+            style={{
+              marginTop: 6,
+              fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+              fontSize: 12,
+              lineHeight: 16,
+              color: ed.colors.ink3,
+            }}
+          >
+            Frequency is set per phase below.
+          </Text>
+        ) : null}
+
+        {(() => {
+          const phases = it.phases ?? [];
+          const trimmed = phases.map((p) => (p.name ?? '').trim());
+          const nameCounts = trimmed.reduce<Record<string, number>>((acc, n) => {
+            acc[n] = (acc[n] ?? 0) + 1;
+            return acc;
+          }, {});
+          const renderPhaseRow = (ph: CycleProtocolItemPhase, pi: number) => {
+            const tName = trimmed[pi];
+            const errors: string[] = [];
+            if (tName.length === 0) errors.push('Name is required.');
+            else if (tName.length > 32) errors.push('Name must be 32 characters or fewer.');
+            else if (nameCounts[tName] > 1) errors.push('Phase names must be unique within a peptide.');
+            if (ph.startWeek > durationWeeks) {
+              errors.push("This phase starts after your cycle ends — it won't activate.");
+            }
+            return (
+              <View
+                key={pi}
+                style={{
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTopWidth: 1,
+                  borderTopColor: ed.colors.line,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Pressable
+                    onPress={() =>
+                      updatePhase(idx, pi, { startWeek: Math.max(1, ph.startWeek - 1) })
+                    }
+                    hitSlop={8}
+                  >
+                    <Text style={{ fontFamily: ed.typography.dataLg.fontFamily, fontSize: 18, color: ed.colors.ink3, paddingHorizontal: 8 }}>−</Text>
+                  </Pressable>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: ed.typography.dataMd.fontSize,
+                      letterSpacing: ed.typography.dataMd.letterSpacing,
+                      color: ed.colors.ink2,
+                      minWidth: 56,
+                    }}
+                  >
+                    WK {ph.startWeek}
+                  </Text>
+                  <Pressable
+                    onPress={() => updatePhase(idx, pi, { startWeek: ph.startWeek + 1 })}
+                    hitSlop={8}
+                  >
+                    <Text style={{ fontFamily: ed.typography.dataLg.fontFamily, fontSize: 18, color: ed.colors.ink3, paddingHorizontal: 8 }}>+</Text>
+                  </Pressable>
+                  <TextInput
+                    value={ph.name ?? ''}
+                    onChangeText={(v) => updatePhase(idx, pi, { name: v })}
+                    placeholder="Phase name"
+                    placeholderTextColor={ed.colors.ink4}
+                    selectionColor={ed.colors.brand}
+                    maxLength={48}
+                    style={{
+                      flex: 1,
+                      fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                      fontSize: 16,
+                      color: ed.colors.ink1,
+                      paddingVertical: 4,
+                      borderBottomWidth: 1,
+                      borderBottomColor: ed.colors.line,
+                    }}
+                  />
+                  <Pressable onPress={() => removePhase(idx, pi)} hitSlop={8}>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.dataLg.fontFamily,
+                        fontSize: 22,
+                        color: ed.colors.ink3,
+                        paddingHorizontal: 6,
+                      }}
+                    >
+                      ×
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {FREQ_OPTIONS.map((f) => (
+                    <Chip
+                      key={f}
+                      active={ph.freq === f}
+                      label={f}
+                      onPress={() => updatePhase(idx, pi, { freq: f })}
+                      ed={ed}
+                    />
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                  <Pressable
+                    onPress={() => {
+                      const cur = ph.dose_mcg ?? it.dose_mcg;
+                      updatePhase(idx, pi, { dose_mcg: Math.max(0, cur - doseStepFor(cur)) });
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={{ fontFamily: ed.typography.dataLg.fontFamily, fontSize: 18, color: ed.colors.ink3, paddingHorizontal: 12 }}>−</Text>
+                  </Pressable>
+                  <Text
+                    style={{
+                      flex: 1,
+                      textAlign: 'center',
+                      fontFamily: ed.fraunces('Fraunces_400Regular'),
+                      fontSize: 18,
+                      color: ed.colors.ink1,
+                    }}
+                  >
+                    {ph.dose_mcg ?? it.dose_mcg} mcg
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      const cur = ph.dose_mcg ?? it.dose_mcg;
+                      updatePhase(idx, pi, { dose_mcg: cur + doseStepFor(cur) });
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text style={{ fontFamily: ed.typography.dataLg.fontFamily, fontSize: 18, color: ed.colors.ink3, paddingHorizontal: 12 }}>+</Text>
+                  </Pressable>
+                </View>
+                {errors.length > 0 ? (
+                  <Text
+                    style={{
+                      marginTop: 6,
+                      fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                      fontSize: 12,
+                      lineHeight: 16,
+                      color: ed.colors.stateWarn,
+                    }}
+                  >
+                    {errors.join(' ')}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          };
+          // Auto-sort by startWeek for display so users always see
+          // chronological order regardless of insertion order. Internal
+          // state still keeps insertion order; the render-time sort just
+          // pairs each phase with its original index for editing.
+          const indexedSorted = phases
+            .map((ph, pi) => ({ ph, pi }))
+            .sort((a, b) => a.ph.startWeek - b.ph.startWeek);
+          return (
+            <View style={{ marginTop: 18 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {phases.length === 0 ? 'Phases · none' : `Phases · ${phases.length}`}
+              </Text>
+              {indexedSorted.map(({ ph, pi }) => renderPhaseRow(ph, pi))}
+              <Pressable
+                onPress={() => addPhase(idx)}
+                style={{
+                  marginTop: 10,
+                  paddingVertical: 10,
+                  borderTopWidth: 1,
+                  borderTopColor: ed.colors.line,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: ed.typography.labelSm.fontFamily,
+                    fontSize: ed.typography.labelSm.fontSize,
+                    letterSpacing: ed.typography.labelSm.letterSpacing,
+                    color: ed.colors.brand,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  + Add phase
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })()}
 
         <Text
           style={{
@@ -1933,6 +2263,71 @@ export default function NewCycle() {
       </View>
 
       {showPicker ? <PeptidePicker /> : null}
+
+      {(() => {
+        // Titration banner: visible once any item carries a >=3-phase
+        // titration ramp (same freq, varying dose) AND the user hasn't
+        // dismissed it. Auto-dismisses on first phase edit.
+        const hasTitrationRamp = items.some((it) => {
+          const phases = it.phases ?? [];
+          if (phases.length < 3) return false;
+          const freqs = new Set(phases.map((p) => p.freq));
+          if (freqs.size !== 1) return false;
+          const doses = new Set(phases.map((p) => p.dose_mcg ?? it.dose_mcg));
+          return doses.size >= 2;
+        });
+        if (!hasTitrationRamp || isTitrationBannerDismissed) return null;
+        return (
+          <View
+            style={{
+              marginTop: 18,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: ed.colors.brandLine,
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 12,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.brand,
+                  textTransform: 'uppercase',
+                  marginBottom: 4,
+                }}
+              >
+                Titration pre-filled
+              </Text>
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                  fontSize: 14,
+                  lineHeight: 20,
+                  color: ed.colors.ink2,
+                }}
+              >
+                Standard titration pre-filled — adjust each phase to match your protocol.
+              </Text>
+            </View>
+            <Pressable onPress={dismissTitrationBanner} hitSlop={10}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.dataLg.fontFamily,
+                  fontSize: 22,
+                  color: ed.colors.ink3,
+                  paddingHorizontal: 4,
+                }}
+              >
+                ×
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })()}
 
       {items.length === 0 ? (
         <Text
@@ -2682,23 +3077,27 @@ function Chip({
   tone = 'ink',
   onPress,
   ed,
+  disabled = false,
 }: {
   active: boolean;
   label: string;
   tone?: 'ink' | 'brand';
   onPress: () => void;
   ed: EditorialTheme;
+  disabled?: boolean;
 }) {
   const fill = tone === 'brand' ? ed.colors.brand : ed.colors.ink1;
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={{
         paddingVertical: 8,
         paddingHorizontal: 14,
         backgroundColor: active ? fill : 'transparent',
         borderWidth: 1,
         borderColor: active ? fill : ed.colors.lineStrong,
+        opacity: disabled ? 0.4 : 1,
       }}
     >
       <Text

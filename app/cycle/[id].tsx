@@ -12,6 +12,7 @@ import { EditorialHeadline } from '../../components/editorial/EditorialHeadline'
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { HeroRing } from '../../components/editorial/HeroRing';
+import { PhaseTimeline } from '../../components/editorial/PhaseTimeline';
 import { ScheduleItem } from '../../components/editorial/ScheduleItem';
 import { StatPair } from '../../components/editorial/StatPair';
 import { useEditorialTheme } from '../../lib/design/theme';
@@ -27,6 +28,7 @@ import {
   resumeCycle,
   updateCycle,
   type Cycle,
+  type CycleProtocolItem,
   type JournalEntry,
   type Vial,
 } from '../../lib/db';
@@ -41,12 +43,7 @@ import { haptic } from '../../lib/haptics';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
 
-type ProtocolItem = {
-  peptide_id: string;
-  dose_mcg: number;
-  freq: string;
-  time_of_day: string;
-};
+type ProtocolItem = CycleProtocolItem;
 
 const FREQUENCIES = ['daily', 'twice daily', 'every other day', 'twice weekly', 'weekly'];
 const TIMES = ['morning', 'evening', 'pre-workout', 'pre-bed'];
@@ -763,6 +760,71 @@ export default function CycleDetail() {
         </View>
       ) : null}
 
+      {!editing
+        ? (() => {
+            // Map each item's phases into PhaseTimeline-friendly slices.
+            // Last phase fills the rest of the cycle since we don't store
+            // its explicit length on disk; previous phases use the next
+            // phase's startWeek - this phase's startWeek.
+            const totalDays = total;
+            const totalWeeks = Math.max(1, Math.ceil(totalDays / 7) + 1);
+            const phased = items
+              .map((row, i) => {
+                const phases = row.phases ?? [];
+                if (phases.length < 2) return null;
+                const sorted = phases.slice().sort((a, b) => a.startWeek - b.startWeek);
+                const slices = sorted.map((p, pi) => {
+                  const nextStart = sorted[pi + 1]?.startWeek ?? totalWeeks;
+                  return {
+                    name: p.name ?? `Phase ${pi + 1}`,
+                    days: Math.max(1, (nextStart - p.startWeek) * 7),
+                  };
+                });
+                return { row, slices, key: `${row.peptide_id}-${i}` };
+              })
+              .filter((x): x is { row: typeof items[number]; slices: { name: string; days: number }[]; key: string } => !!x);
+            if (phased.length === 0) return null;
+            const single = phased.length === 1;
+            return (
+              <View style={{ paddingHorizontal: 24, marginTop: 18 }}>
+                <EyebrowLabel withRule>
+                  {single ? 'Phase timeline' : `Phase timelines · ${phased.length}`}
+                </EyebrowLabel>
+                {single
+                  ? (() => {
+                      const ph = phased[0];
+                      return (
+                        <View style={{ marginTop: 8 }}>
+                          <Text
+                            style={{
+                              fontFamily: ed.fraunces('Fraunces_400Regular'),
+                              fontSize: 18,
+                              color: ed.colors.ink1,
+                            }}
+                          >
+                            {findPeptide(ph.row.peptide_id)?.name ?? ph.row.peptide_id}
+                          </Text>
+                          <PhaseTimeline phases={ph.slices} currentDay={day} />
+                        </View>
+                      );
+                    })()
+                  : (
+                    // Multiple phased peptides → collapsible to keep cycle
+                    // detail from getting visually heavy.
+                    <CollapsibleTimelines
+                      items={phased.map((ph) => ({
+                        key: ph.key,
+                        name: findPeptide(ph.row.peptide_id)?.name ?? ph.row.peptide_id,
+                        slices: ph.slices,
+                      }))}
+                      currentDay={day}
+                    />
+                  )}
+              </View>
+            );
+          })()
+        : null}
+
       <View style={{ paddingHorizontal: 24 }}>
         {items.map((row, i) => {
           const p = findPeptide(row.peptide_id);
@@ -1390,5 +1452,50 @@ function DateAdjuster({
       onPlus={() => onChange(addDays(value, 1))}
       display={display}
     />
+  );
+}
+
+function CollapsibleTimelines({
+  items,
+  currentDay,
+}: {
+  items: { key: string; name: string; slices: { name: string; days: number }[] }[];
+  currentDay: number;
+}) {
+  const ed = useEditorialTheme();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={{ marginTop: 8 }}>
+      <Pressable onPress={() => setExpanded((v) => !v)} hitSlop={6}>
+        <Text
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.brand,
+            textTransform: 'uppercase',
+            paddingVertical: 8,
+          }}
+        >
+          {expanded ? '− Hide' : '+ Show'}
+        </Text>
+      </Pressable>
+      {expanded
+        ? items.map((it) => (
+            <View key={it.key} style={{ marginTop: 12 }}>
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 18,
+                  color: ed.colors.ink1,
+                }}
+              >
+                {it.name}
+              </Text>
+              <PhaseTimeline phases={it.slices} currentDay={currentDay} />
+            </View>
+          ))
+        : null}
+    </View>
   );
 }

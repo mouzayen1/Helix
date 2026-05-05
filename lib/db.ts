@@ -199,6 +199,9 @@ export async function initDatabase() {
   // When a cycle completes the column is NULLed back to free inventory
   // so the next cycle can claim the same vial.
   await addColumnIfMissing(d, 'vials', 'cycle_id', 'TEXT');
+  // v1.3: dismissed in-app banner keys (JSON string array). Generic so
+  // future banners just add new keys without new columns.
+  await addColumnIfMissing(d, 'profile', 'dismissed_banners', "TEXT NOT NULL DEFAULT '[]'");
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
@@ -243,6 +246,8 @@ export type Profile = {
   // v1.1: JSON blob for notification prefs (sub-toggles, quiet hours,
   // preferred times per time_of_day). See lib/notifications.ts for schema.
   notif_prefs_json: string | null;
+  // v1.3: JSON-encoded string[] of dismissed in-app banner keys.
+  dismissed_banners: string;
 };
 
 export async function getProfile(): Promise<Profile | null> {
@@ -255,6 +260,24 @@ export async function updateProfile(patch: Partial<Profile>) {
   const set = entries.map(([k]) => `${k} = ?`).join(', ');
   const values = entries.map(([, v]) => v as string | number | null);
   await db().runAsync(`UPDATE profile SET ${set} WHERE id = 1`, ...values);
+}
+
+export function parseDismissedBanners(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((k) => typeof k === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function dismissBanner(key: string): Promise<void> {
+  const prof = await getProfile();
+  const current = parseDismissedBanners(prof?.dismissed_banners);
+  if (current.includes(key)) return;
+  current.push(key);
+  await updateProfile({ dismissed_banners: JSON.stringify(current) });
 }
 
 // ---- Saved peptides --------------------------------------------------------
@@ -750,11 +773,19 @@ export type Cycle = {
   paused_total_days: number;
 };
 
+export type CycleProtocolItemPhase = {
+  startWeek: number;       // 1-indexed cycle week this phase begins on
+  name?: string;
+  freq: string;            // active freq while this phase is current
+  dose_mcg?: number;       // optional; falls back to item.dose_mcg
+};
+
 export type CycleProtocolItem = {
   peptide_id: string;
   dose_mcg: number;
   freq: string;       // 'daily' | 'weekly' | 'every other day' | etc.
   time_of_day: string; // 'morning' | 'evening' | 'HH:MM'
+  phases?: CycleProtocolItemPhase[]; // v1.3: optional phase ramp; absent = legacy single-phase
 };
 
 export async function createCycle(input: {

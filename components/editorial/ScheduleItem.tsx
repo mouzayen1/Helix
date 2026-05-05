@@ -11,12 +11,17 @@ export function ScheduleItem({
   time,
   title,
   detail,
+  caption,
   status,
   onPress,
 }: {
   time: string;
   title: string;
   detail?: string;
+  /** Optional eyebrow above the title — used for phase labels like
+   *  "MAINTENANCE · WK 5 / 18" on phased cycle peptides. Mono uppercase,
+   *  brass-tinted on the active row, ink3 on completed rows. */
+  caption?: string;
   status: ScheduleStatus;
   onPress?: () => void;
 }) {
@@ -64,6 +69,21 @@ export function ScheduleItem({
         {time}
       </Text>
       <View style={{ flex: 1 }}>
+        {caption ? (
+          <Text
+            style={{
+              fontFamily: theme.typography.labelSm.fontFamily,
+              fontSize: theme.typography.labelSm.fontSize,
+              letterSpacing: theme.typography.labelSm.letterSpacing,
+              textTransform: 'uppercase',
+              color: completed ? theme.colors.ink4 : theme.colors.brand,
+              marginBottom: 2,
+            }}
+            numberOfLines={1}
+          >
+            {caption}
+          </Text>
+        ) : null}
         <Text
           style={{
             fontFamily: theme.fraunces('Fraunces_400Regular'),

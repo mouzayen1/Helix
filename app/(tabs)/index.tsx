@@ -33,7 +33,7 @@ import {
   type DoseSkip,
   type Vial,
 } from '../../lib/db';
-import { isScheduledOnDay } from '../../lib/freq';
+import { isItemScheduledOnDay, resolvePhase } from '../../lib/cycle-helpers';
 import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
 import { useProfile } from '../../lib/profile-context';
@@ -79,7 +79,7 @@ function timeLabelForWindow(time_of_day: string, window: 'AM' | 'PM' | 'ALL'): s
 }
 
 function isScheduledToday(row: CycleProtocolItem, dayOfCycle: number): boolean {
-  return isScheduledOnDay(row.freq, dayOfCycle);
+  return isItemScheduledOnDay(row, dayOfCycle);
 }
 
 export default function TodayScreen() {
@@ -157,11 +157,24 @@ export default function TodayScreen() {
         logged: boolean;
         skip: DoseSkip | null;
         window: 'AM' | 'PM' | 'ALL';
+        resolvedDose: number;
+        resolvedFreq: string;
+        phaseCaption?: string;
       })[] = [];
       for (const row of matching) {
-        const isTwice =
-          (row.freq || '').toLowerCase().includes('twice daily') ||
-          (row.freq || '').toLowerCase().includes('2x daily');
+        // resolvePhase picks the active phase's freq + dose so phased
+        // ramps (Tesa daily→5-on/2-off, Sema titration) display the
+        // right values without re-implementing the math here.
+        const rp = resolvePhase(row, cycleView.day);
+        const activeFreq = rp.freq.toLowerCase();
+        const isTwice = activeFreq.includes('twice daily') || activeFreq.includes('2x daily');
+        const phaseCaption =
+          rp.phaseCount > 1
+            ? `${(rp.phaseName ?? `Phase ${rp.phaseIndex + 1}`).toUpperCase()} · WK ${rp.weekInPhase} / ${
+                Number.isFinite(rp.totalPhaseWeeks) ? rp.totalPhaseWeeks : '∞'
+              }`
+            : undefined;
+        const base = { resolvedDose: rp.dose_mcg, resolvedFreq: rp.freq, phaseCaption };
         if (isTwice) {
           const amLogged = todayDoses.some(
             (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() < 12
@@ -169,11 +182,11 @@ export default function TodayScreen() {
           const pmLogged = todayDoses.some(
             (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() >= 12
           );
-          out.push({ ...row, logged: amLogged, skip: skipFor(row.peptide_id, 'AM'), window: 'AM' });
-          out.push({ ...row, logged: pmLogged, skip: skipFor(row.peptide_id, 'PM'), window: 'PM' });
+          out.push({ ...row, logged: amLogged, skip: skipFor(row.peptide_id, 'AM'), window: 'AM', ...base });
+          out.push({ ...row, logged: pmLogged, skip: skipFor(row.peptide_id, 'PM'), window: 'PM', ...base });
         } else {
           const logged = todayDoses.some((d) => d.peptide_id === row.peptide_id);
-          out.push({ ...row, logged, skip: skipFor(row.peptide_id, 'ALL'), window: 'ALL' });
+          out.push({ ...row, logged, skip: skipFor(row.peptide_id, 'ALL'), window: 'ALL', ...base });
         }
       }
       return out;
@@ -286,7 +299,7 @@ export default function TodayScreen() {
     }
     router.push({
       pathname: '/log-dose',
-      params: { peptideId: row.peptide_id, prefillDoseMcg: row.dose_mcg },
+      params: { peptideId: row.peptide_id, prefillDoseMcg: row.resolvedDose },
     } as any);
   };
 
@@ -470,8 +483,8 @@ export default function TodayScreen() {
                   : 'next';
                 const time = timeLabelForWindow(row.time_of_day, row.window);
                 const detail = row.skip
-                  ? `${row.dose_mcg} mcg · ${row.skip.reason ?? 'skipped'}`
-                  : `${row.dose_mcg} mcg · ${row.freq}`;
+                  ? `${row.resolvedDose} mcg · ${row.skip.reason ?? 'skipped'}`
+                  : `${row.resolvedDose} mcg · ${row.resolvedFreq}`;
                 return (
                   <View key={`${row.peptide_id}-${row.window}-${idx}`}>
                     <Pressable
@@ -483,6 +496,7 @@ export default function TodayScreen() {
                         time={time}
                         title={p.name}
                         detail={detail}
+                        caption={row.phaseCaption}
                         status={
                           // Override label for the skip case — ScheduleItem's
                           // 'overdue' renders the "OVERDUE" word; we want

@@ -10,8 +10,9 @@
     "lint": "expo lint",
     "check:catalog": "node scripts/check-catalog-math.mjs",
     "check:freq": "node scripts/check-freq-coverage.mjs",
+    "check:phases": "node scripts/check-cycle-phases.mjs",
     "check:types": "tsc --noEmit",
-    "check": "npm run check:types && npm run check:catalog && npm run check:freq"
+    "check": "npm run check:types && npm run check:catalog && npm run check:freq && npm run check:phases"
   },
   "dependencies": {
     "@expo-google-fonts/dm-mono": "^0.4.2",

@@ -46,6 +46,29 @@ export function describeFreq(freq: string | null | undefined): FreqShape {
   if (semi >= 0) f = f.slice(0, semi);
   f = f.replace(/\s+/g, ' ').trim();
 
+  // ----- N-on / M-off ----------------------------------------------------
+  // Pulsed schedules: "5 on / 2 off", "5-on/2-off", "5 on 2 off", "5/2".
+  // Counts from the cycle (or phase) start day, NOT the calendar week — a
+  // phase that begins on a Wednesday starts its "on" window on Wednesday.
+  // perDay = N/(N+M), daysPerDose = (N+M)/N for vial-life math; the on/off
+  // pattern itself is enforced by isScheduledOnDay below.
+  const onOff =
+    f.match(/(\d+)\s*-?\s*on\s*(?:[/,-]|\s)\s*(\d+)\s*-?\s*off/) ||
+    (/^(\d+)\s*\/\s*(\d+)$/.exec(f));
+  if (onOff) {
+    const on = parseInt(onOff[1], 10);
+    const off = parseInt(onOff[2], 10);
+    if (on > 0 && off > 0) {
+      const period = on + off;
+      return {
+        perDay: on / period,
+        daysPerDose: period / on,
+        displayUnit: 'days',
+        label: `${on}-on/${off}-off`,
+      };
+    }
+  }
+
   // hasCadence: at least one frequency-keyword survived the cleaning.
   // Only when no keyword is present do we treat this as "as-needed" — that
   // way "Daily during loading … then as-needed" still parses as daily, and
@@ -201,6 +224,16 @@ export function describeFreq(freq: string | null | undefined): FreqShape {
 export function isScheduledOnDay(freq: string | null | undefined, dayOfCycle: number): boolean {
   const shape = describeFreq(freq);
   if (shape.perDay === 0) return false;
+  // N-on/M-off: first N days of each (N+M)-day window are "on".
+  // Match the label ahead of the daily fall-through because daysPerDose
+  // here is fractional (1.4 for 5/2) — the daily rule below would treat
+  // it as on every day.
+  const onOff = /^(\d+)-on\/(\d+)-off$/.exec(shape.label);
+  if (onOff) {
+    const on = parseInt(onOff[1], 10);
+    const off = parseInt(onOff[2], 10);
+    return dayOfCycle % (on + off) < on;
+  }
   if (shape.daysPerDose <= 1) return true; // daily / twice-daily
   // Weekly / EOD / twice-weekly land on specific days of the cycle.
   // Twice-weekly: days 0 and 3 of each 7-day window (Mon + Thu spacing).
