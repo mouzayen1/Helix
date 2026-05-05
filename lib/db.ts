@@ -195,6 +195,10 @@ export async function initDatabase() {
   await addColumnIfMissing(d, 'cycles', 'paused_total_days', 'INTEGER NOT NULL DEFAULT 0');
   // v1.1 Phase 6: notification preferences (JSON blob on profile).
   await addColumnIfMissing(d, 'profile', 'notif_prefs_json', 'TEXT');
+  // v1.2: vial-cycle attachment. Nullable single-owner FK back to cycles.
+  // When a cycle completes the column is NULLed back to free inventory
+  // so the next cycle can claim the same vial.
+  await addColumnIfMissing(d, 'vials', 'cycle_id', 'TEXT');
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
@@ -299,6 +303,9 @@ export type Vial = {
   depleted_at: string | null;
   first_used_at: string | null;
   total_doses_drawn: number;
+  // v1.2: nullable, single-owner attachment to a cycle. NULL means the
+  // vial is free inventory and any cycle can claim it.
+  cycle_id: string | null;
 };
 
 // v1.1: recorded intentional skip of a scheduled dose.
@@ -422,6 +429,69 @@ export async function getVialsForPeptide(peptideId: string, activeOnly = false):
 
 // v1.1: alias matching the spec name.
 export const getVialById = getVial;
+
+// ---- v1.2: vial-cycle attachment ------------------------------------------
+//
+// Single-owner: a vial can be attached to AT MOST one cycle. The DB doesn't
+// enforce this — the application layer does, by overwriting cycle_id on
+// attach (so 'move from old cycle to new cycle' is a single UPDATE rather
+// than a two-step detach + attach).
+//
+// When a cycle ends (status flips to 'complete' or 'cancelled'), every
+// attached vial's cycle_id is NULLed back to free inventory. The dose
+// history retains the cycle linkage on each individual dose row, so cycle
+// detail can still reconstruct "which vials were used during this cycle"
+// via a join through doses.
+
+// Vials whose peptide_id appears in this cycle's protocol AND that are
+// either currently active OR depleted within the last 30 days. Past 30d
+// vials are clutter — users have moved on.
+//
+// Sorted active-first, then most-recently reconstituted.
+export async function matchingVialsForCycle(
+  cycle: Pick<Cycle, 'id' | 'protocol_json'>
+): Promise<Vial[]> {
+  let peptideIds: string[] = [];
+  try {
+    const protocol = JSON.parse(cycle.protocol_json || '[]') as { peptide_id: string }[];
+    peptideIds = Array.from(new Set(protocol.map((p) => p.peptide_id).filter(Boolean)));
+  } catch {
+    return [];
+  }
+  if (peptideIds.length === 0) return [];
+  const placeholders = peptideIds.map(() => '?').join(',');
+  const cutoff = new Date(Date.now() - 30 * 864e5).toISOString();
+  return db().getAllAsync<Vial>(
+    `SELECT * FROM vials
+       WHERE peptide_id IN (${placeholders})
+         AND (is_active = 1 OR (depleted_at IS NOT NULL AND depleted_at >= ?))
+       ORDER BY is_active DESC, reconstituted_at DESC`,
+    ...peptideIds,
+    cutoff
+  );
+}
+
+// Vials currently attached to this cycle. Used by cycle detail's "Vials"
+// section.
+export async function getVialsForCycle(cycle_id: string): Promise<Vial[]> {
+  return db().getAllAsync<Vial>(
+    `SELECT * FROM vials WHERE cycle_id = ? ORDER BY reconstituted_at DESC`,
+    cycle_id
+  );
+}
+
+// Single-owner: writes cycle_id directly. If the vial was already attached
+// to another cycle, that link is overwritten. The UI should prompt before
+// reaching this function in that case so the user understands the move.
+export async function attachVialToCycle(vial_id: string, cycle_id: string) {
+  await db().runAsync('UPDATE vials SET cycle_id = ? WHERE id = ?', cycle_id, vial_id);
+}
+
+// Returns vial back to free inventory. Doses logged from this vial keep
+// their existing cycle_id — detaching the vial doesn't rewrite history.
+export async function detachVial(vial_id: string) {
+  await db().runAsync('UPDATE vials SET cycle_id = NULL WHERE id = ?', vial_id);
+}
 
 // v1.1: all doses drawn from a specific vial (timeline on vial detail).
 export async function getDosesForVial(vialId: string): Promise<Dose[]> {
@@ -579,12 +649,22 @@ export async function logDose(input: {
     if (auto) vial_id = auto.id;
   }
 
+  // v1.1: if cycle_id omitted, auto-attach to the active cycle whose
+  // protocol covers this peptide. Eliminates the 'orphan dose' surprise
+  // on dose-history when a user logs mid-cycle without explicitly
+  // selecting the cycle every time.
+  let cycle_id: string | null = input.cycle_id ?? null;
+  if (cycle_id === null) {
+    const cov = await getActiveCycleForPeptide(input.peptide_id);
+    if (cov) cycle_id = cov.id;
+  }
+
   await d.withTransactionAsync(async () => {
     await d.runAsync(
       `INSERT INTO doses (id, peptide_id, vial_id, cycle_id, amount_mcg, volume_units,
                           route, site, taken_at, note)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      id, input.peptide_id, vial_id, input.cycle_id ?? null,
+      id, input.peptide_id, vial_id, cycle_id,
       input.amount_mcg, input.volume_units ?? null, input.route,
       input.site ?? null, taken_at, input.note ?? null
     );
@@ -621,6 +701,19 @@ export async function listDoses(opts: { limit?: number; from?: string; to?: stri
   sql += ' ORDER BY taken_at DESC LIMIT ?';
   args.push(limit);
   return db().getAllAsync<Dose>(sql, ...args as (string | number)[]);
+}
+
+export async function getLastDoseForCyclePeptide(
+  cycle_id: string,
+  peptide_id: string
+): Promise<Dose | null> {
+  return db().getFirstAsync<Dose>(
+    `SELECT * FROM doses
+      WHERE cycle_id = ? AND peptide_id = ?
+      ORDER BY taken_at DESC LIMIT 1`,
+    cycle_id,
+    peptide_id
+  );
 }
 
 export async function deleteDose(id: string) {
@@ -690,12 +783,49 @@ export async function getActiveCycle(): Promise<Cycle | null> {
   );
 }
 
+// v1.1: list ALL currently-active cycles. Multiple concurrent cycles are
+// a first-class case (e.g. running a healing protocol alongside a fat-loss
+// one with different durations). Today / Stacks / notifications all merge
+// the protocols across the result; getActiveCycle stays for callers that
+// genuinely need a single representative cycle.
+export async function listActiveCycles(): Promise<Cycle[]> {
+  return db().getAllAsync<Cycle>(
+    `SELECT * FROM cycles WHERE status IN ('active', 'paused') ORDER BY starts_on DESC`
+  );
+}
+
+// v1.1: find the active cycle (if any) whose protocol includes this
+// peptide. Used by logDose to auto-attach cycle_id so doses stop
+// accumulating as 'orphan' when a covering cycle is running. When more
+// than one active cycle covers the same peptide, returns the most
+// recently started one — the user's clearest intent.
+export async function getActiveCycleForPeptide(peptideId: string): Promise<Cycle | null> {
+  const all = await listActiveCycles();
+  for (const c of all) {
+    if (c.status !== 'active') continue;
+    try {
+      const protocol = JSON.parse(c.protocol_json || '[]') as { peptide_id: string }[];
+      if (protocol.some((row) => row.peptide_id === peptideId)) return c;
+    } catch {
+      // Malformed protocol_json — skip; don't crash the lookup.
+    }
+  }
+  return null;
+}
+
 export async function listCycles(): Promise<Cycle[]> {
   return db().getAllAsync<Cycle>('SELECT * FROM cycles ORDER BY starts_on DESC');
 }
 
 export async function endCycle(id: string) {
-  await db().runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    await d.runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+    // v1.2: when a cycle ends, attached vials return to free inventory so
+    // a follow-up cycle can claim them. Doses keep their per-row cycle_id
+    // so the historical accounting stays intact.
+    await d.runAsync(`UPDATE vials SET cycle_id = NULL WHERE cycle_id = ?`, id);
+  });
 }
 
 // v1.1: pause an active cycle. Today stops scheduling from it until resumed.
@@ -1037,6 +1167,23 @@ export async function siteRecency(): Promise<SiteSuggestion[]> {
       total_uses: h?.uses ?? 0,
     };
   });
+}
+
+// v1.1: most recent doses logged AT a given site, joined back to the
+// doses table so the site-detail sheet can show peptide / amount /
+// timestamp without an extra round-trip per row. Limit defaults to 10
+// — the bottom sheet has no virtualization so we don't want to hand it
+// 500 rows.
+export async function listDosesAtSite(site: string, limit = 10): Promise<Dose[]> {
+  return db().getAllAsync<Dose>(
+    `SELECT d.* FROM doses d
+       INNER JOIN injection_sites_log s ON s.dose_id = d.id
+      WHERE s.site = ?
+      ORDER BY d.taken_at DESC
+      LIMIT ?`,
+    site,
+    limit
+  );
 }
 
 // ---- Export ----------------------------------------------------------------

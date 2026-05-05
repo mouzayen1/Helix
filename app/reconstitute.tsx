@@ -5,17 +5,22 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Line, Rect } from 'react-native-svg';
 import { IconChevronRight, IconClose } from '../components/Icons';
 import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
-import { createVial } from '../lib/db';
+import { SyringeDiagram } from '../components/SyringeDiagram';
+import { createVial, getActiveVial } from '../lib/db';
+import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
+import type { Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../lib/peptides';
 import { useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 
-const STRENGTH_PRESETS = [2, 5, 10, 15];
+// Default vial-strength chip row. Peptides with `commonVialSizes` in the
+// catalog override this — GHK-Cu shows 10/50/100/200, NAD+ shows
+// 100/250/500/1000, etc. Default covers the bulk of standard peptides.
+const STRENGTH_PRESETS_DEFAULT = [2, 5, 10, 15];
 
 // Parse strings like "5 mg + 2 mL BAC = 2.5 mg/mL · 10 units = 250 mcg" or
 // "5 mg + 1 mL BAC = 5 mg/mL · 32 units = 1.6 mg" into
@@ -63,6 +68,8 @@ export default function ReconstituteModal() {
 
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
   const [peptideId, setPeptideId] = useState<string>(initialId || PEPTIDES[0].id);
+  const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
+  const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
   const [strengthMg, setStrengthMg] = useState(5);
   const [strengthText, setStrengthText] = useState('5');
   const [bacMl, setBacMl] = useState(2);
@@ -72,6 +79,17 @@ export default function ReconstituteModal() {
   const [beginnerMode, setBeginnerMode] = useState(false);
   const [coReconstitutePartner, setCoReconstitutePartner] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // v1.2.2 reverse-calc mode. Forward (default) computes the dose volume
+  // from a chosen BAC. Reverse flips the question: the user picks a
+  // clean target draw (e.g. 20u) and the app solves for the BAC water
+  // needed to make that draw produce their target dose.
+  //   forward:  units = (dose_mcg / 1000) * BAC / strength * 100
+  //   reverse:  BAC   = units * strength * 10 / dose_mcg
+  // PeptideFox is the only competitor with this mode — it matches how
+  // researchers actually plan a vial ("I want clean 20u draws of 1 mg").
+  const [calcMode, setCalcMode] = useState<'forward' | 'reverse'>('forward');
+  const [targetUnits, setTargetUnits] = useState(20);
+  const [targetUnitsText, setTargetUnitsText] = useState('20');
 
   const peptide = findPeptide(peptideId)!;
   const extras = getPeptideExtras(peptideId);
@@ -79,6 +97,50 @@ export default function ReconstituteModal() {
     () => extras?.coAdministration.filter((ca) => ca.co_reconstitute) ?? [],
     [extras]
   );
+
+  // Pull active-cycle peptide list once on mount; figure out which of those
+  // peptides still need a vial. The picker uses this to:
+  //   1. Pin "needed for active cycle" peptides at the top with a NEEDED pill.
+  //   2. Pre-select the first needy peptide if no `?peptideId=` was passed.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const byPeptide = await getActiveCyclesByPeptide();
+      if (cancelled) return;
+      setActiveCycleByPeptide(byPeptide);
+
+      const needs = new Set<string>();
+      for (const pid of byPeptide.keys()) {
+        const v = await getActiveVial(pid);
+        if (!v || v.remaining_mg <= 0) needs.add(pid);
+      }
+      if (cancelled) return;
+      setNeedyPeptides(needs);
+
+      // Default-select the first needy peptide on first paint, but only if
+      // the URL did not pin a peptide.
+      if (!initialId && needs.size > 0) {
+        const first = Array.from(needs)[0];
+        setPeptideId(first);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sorted peptide list for the picker — needed (no vial) first, then needed
+  // (with vial), then everything else. Order within each bucket follows the
+  // canonical PEPTIDES array.
+  const sortedPeptides = useMemo(() => {
+    const bucket = (id: string) => {
+      if (needyPeptides.has(id)) return 0;
+      if (activeCycleByPeptide.has(id)) return 1;
+      return 2;
+    };
+    return [...PEPTIDES].sort((a, b) => bucket(a.id) - bucket(b.id));
+  }, [activeCycleByPeptide, needyPeptides]);
 
   // Auto-fill numeric fields from the selected peptide's suggested
   // reconstitution. Pass defaultDoseMcg so peptides whose example dose can't
@@ -98,6 +160,21 @@ export default function ReconstituteModal() {
     setCoReconstitutePartner(null);
   }, [peptide.defaultDoseMcg, peptide.id, peptide.reconstitution]);
 
+  // In reverse mode, BAC water is computed from (target dose, target
+  // units, vial strength) and synced into bacMl so save() / the result
+  // card / the soft-warn tier all read the same value. Switching back to
+  // forward leaves the user's last computed value in place — they can
+  // tune it from there.
+  useEffect(() => {
+    if (calcMode !== 'reverse') return;
+    if (targetUnits <= 0 || targetDoseMcg <= 0 || strengthMg <= 0) return;
+    const computed = (targetUnits * strengthMg * 10) / targetDoseMcg;
+    if (!isFinite(computed) || computed <= 0) return;
+    const rounded = Math.round(computed * 100) / 100;
+    setBacMl(rounded);
+    setBacText(String(rounded));
+  }, [calcMode, targetUnits, targetDoseMcg, strengthMg]);
+
   const calc = useMemo(() => {
     const concMgPerMl = strengthMg / bacMl;
     const volMlPerDose = targetDoseMcg / (concMgPerMl * 1000);
@@ -110,8 +187,6 @@ export default function ReconstituteModal() {
       totalDoses: isFinite(totalDoses) ? totalDoses : 0,
     };
   }, [strengthMg, bacMl, targetDoseMcg]);
-
-  const fillPct = Math.max(0.02, Math.min(1, calc.unitsPerDose / 100));
 
   const commitNum = (
     text: string,
@@ -301,29 +376,56 @@ export default function ReconstituteModal() {
               }}
             >
               <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-                {PEPTIDES.map((p) => (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => {
-                      setPeptideId(p.id);
-                      setShowPeptidePicker(false);
-                    }}
-                    style={{
-                      padding: space.md,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      borderBottomWidth: 1,
-                      borderBottomColor: t.line,
-                    }}
-                  >
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
-                    <Text style={{ flex: 1, color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
-                      {p.name}
-                    </Text>
-                    <Text style={{ color: t.ink3, fontSize: 11 }}>{p.class.split('/')[0].trim()}</Text>
-                  </Pressable>
-                ))}
+                {sortedPeptides.map((p) => {
+                  const cycle = activeCycleByPeptide.get(p.id);
+                  const needed = needyPeptides.has(p.id);
+                  return (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => {
+                        setPeptideId(p.id);
+                        setShowPeptidePicker(false);
+                      }}
+                      style={{
+                        padding: space.md,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 10,
+                        borderBottomWidth: 1,
+                        borderBottomColor: t.line,
+                        backgroundColor: needed ? t.warnSoft : 'transparent',
+                      }}
+                    >
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
+                          {p.name}
+                        </Text>
+                        {cycle ? (
+                          <Text style={{ color: t.ink3, fontSize: 11, marginTop: 2 }}>
+                            Active cycle: {cycle.name}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {needed ? (
+                        <View
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: radius.pill,
+                            backgroundColor: t.warn,
+                          }}
+                        >
+                          <Text style={{ color: t.bg, fontSize: 9, fontFamily: font.sansBold, letterSpacing: 0.6 }}>
+                            NEEDED
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={{ color: t.ink3, fontSize: 11 }}>{p.class.split('/')[0].trim()}</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             </View>
           ) : null}
@@ -343,8 +445,8 @@ export default function ReconstituteModal() {
           >
             Vial strength
           </Text>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {STRENGTH_PRESETS.map((s) => {
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {(peptide.commonVialSizes ?? STRENGTH_PRESETS_DEFAULT).map((s) => {
               const active = s === strengthMg;
               return (
                 <Pressable
@@ -376,6 +478,66 @@ export default function ReconstituteModal() {
               );
             })}
           </View>
+        </View>
+
+        {/* Calc-mode toggle. Forward = "I'm putting X mg in Y mL, what
+            dose do I get?" Reverse = "I want a Z mcg dose at N units,
+            how much BAC do I add?" Reverse is the moat — only PeptideFox
+            had it before now. */}
+        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              padding: 3,
+              backgroundColor: t.surfaceAlt,
+              borderRadius: radius.md,
+            }}
+          >
+            {(['forward', 'reverse'] as const).map((m) => {
+              const on = calcMode === m;
+              const label = m === 'forward' ? 'Calculate concentration' : 'Find ideal BAC';
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => setCalcMode(m)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={label}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 8,
+                    borderRadius: radius.md - 3,
+                    backgroundColor: on ? t.surface : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: on ? t.ink : t.ink3,
+                      fontFamily: font.sansSemi,
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {calcMode === 'reverse' ? (
+            <Text
+              style={{
+                marginTop: space.sm,
+                fontSize: 11,
+                color: t.ink3,
+                lineHeight: 16,
+                fontStyle: 'italic',
+              }}
+            >
+              Pick the dose you want and how many units you want to draw — the app solves for the
+              BAC water needed.
+            </Text>
+          ) : null}
         </View>
 
         {/* Typed-number inputs */}
@@ -415,7 +577,42 @@ export default function ReconstituteModal() {
               setBacMl(v);
               setBacText(String(v));
             }}
+            readOnly={calcMode === 'reverse'}
+            readOnlyHint={
+              calcMode === 'reverse'
+                ? 'Solved from your target dose and target draw.'
+                : undefined
+            }
           />
+          {/* Soft capacity hint — vial physical capacity isn't knowable
+              from peptide data alone, so we never block. Tier copy puts
+              agency on the user. Silent ≤3 mL (most common). */}
+          {bacMl > 5 ? (
+            <Text
+              style={{
+                marginTop: -space.sm,
+                marginBottom: space.sm,
+                fontSize: 11,
+                color: t.warn,
+                fontFamily: font.sansMed,
+                lineHeight: 15,
+              }}
+            >
+              Most peptide vials hold 2–5 mL. Check your vial can fit this volume before reconstituting.
+            </Text>
+          ) : bacMl > 3 ? (
+            <Text
+              style={{
+                marginTop: -space.sm,
+                marginBottom: space.sm,
+                fontSize: 11,
+                color: t.ink3,
+                lineHeight: 15,
+              }}
+            >
+              Most vials hold 2–5 mL — verify yours fits.
+            </Text>
+          ) : null}
           <TypedField
             label="Target dose"
             unit="mcg"
@@ -435,6 +632,27 @@ export default function ReconstituteModal() {
               setTargetDoseText(String(v));
             }}
           />
+          {calcMode === 'reverse' ? (
+            <TypedField
+              label="Target draw"
+              unit="units"
+              value={targetUnitsText}
+              onChangeText={setTargetUnitsText}
+              onCommit={() =>
+                commitNum(targetUnitsText, setTargetUnits, setTargetUnitsText, 1, 100, targetUnits)
+              }
+              onMinus={() => {
+                const v = Math.max(1, targetUnits - 5);
+                setTargetUnits(v);
+                setTargetUnitsText(String(v));
+              }}
+              onPlus={() => {
+                const v = Math.min(100, targetUnits + 5);
+                setTargetUnits(v);
+                setTargetUnitsText(String(v));
+              }}
+            />
+          ) : null}
         </View>
 
         {/* Result card */}
@@ -571,6 +789,49 @@ export default function ReconstituteModal() {
           </View>
         </View>
 
+        {/* Syringe-size guidance — passive copy, no popups. Picks the
+            right tip based on the resulting draw. The >100u case is a
+            real safety issue: a user computing a 120u draw who tries it
+            in one pull either has no syringe that holds it or
+            under-doses. Telling them HOW to split (60u + 60u) turns a
+            warning into an instruction. */}
+        {(() => {
+          const u = calc.unitsPerDose;
+          if (!isFinite(u) || u <= 0) return null;
+          let tip: string | null = null;
+          let tone: 'hint' | 'warn' = 'hint';
+          if (u < 10) {
+            tip = 'A 0.3 mL / 30u syringe gives better precision at this volume than a 100u syringe.';
+          } else if (u > 100) {
+            tone = 'warn';
+            const total = Math.round(u);
+            if (total > 200) {
+              const draws = Math.ceil(total / 100);
+              const per = Math.ceil(total / draws);
+              tip = `Exceeds a 1 mL / 100u insulin syringe. Split into ${draws} draws of ~${per}u each.`;
+            } else {
+              const half1 = Math.ceil(total / 2);
+              const half2 = total - half1;
+              tip = `Exceeds a 1 mL / 100u insulin syringe. Split into two draws (${half1}u + ${half2}u) or use a 3 mL syringe.`;
+            }
+          }
+          if (!tip) return null;
+          return (
+            <View style={{ paddingHorizontal: space.xl, marginTop: space.sm }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: tone === 'warn' ? t.warn : t.ink3,
+                  fontFamily: tone === 'warn' ? font.sansMed : font.sans,
+                  lineHeight: 16,
+                }}
+              >
+                {tip}
+              </Text>
+            </View>
+          );
+        })()}
+
         {/* Syringe */}
         <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
           <Text
@@ -632,36 +893,7 @@ export default function ReconstituteModal() {
               = {calc.volMlPerDose.toFixed(3)} mL · {targetDoseMcg} mcg per dose
             </Text>
           </View>
-          <View
-            style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              paddingVertical: space.lg,
-              paddingHorizontal: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            <Svg viewBox="0 0 320 60" width="100%" height={56}>
-              <Rect x={8} y={18} width={240} height={24} rx={2} fill="none" stroke={t.ink3} strokeWidth={1.5} />
-              {Array.from({ length: 11 }).map((_, i) => (
-                <Line
-                  key={i}
-                  x1={8 + i * 24}
-                  y1={14}
-                  x2={8 + i * 24}
-                  y2={18}
-                  stroke={t.ink3}
-                  strokeWidth={1}
-                />
-              ))}
-              <Rect x={9} y={19.5} width={238 * fillPct} height={21} fill={t.accent} opacity={0.8} />
-              <Rect x={248} y={18} width={6} height={24} fill={t.ink3} />
-              <Rect x={254} y={22} width={50} height={16} fill="none" stroke={t.ink3} strokeWidth={1.5} />
-              <Rect x={304} y={18} width={8} height={24} rx={1} fill={t.ink3} />
-              <Line x1={0} y1={30} x2={8} y2={30} stroke={t.ink3} strokeWidth={1.5} />
-            </Svg>
-          </View>
+          <SyringeDiagram unitsToDraw={calc.unitsPerDose} />
         </View>
 
         {/* Co-reconstitute partners */}
@@ -824,6 +1056,8 @@ function TypedField({
   onCommit,
   onMinus,
   onPlus,
+  readOnly,
+  readOnlyHint,
 }: {
   label: string;
   unit: string;
@@ -832,33 +1066,58 @@ function TypedField({
   onCommit: () => void;
   onMinus: () => void;
   onPlus: () => void;
+  // v1.2.2: read-only fields render with a "computed" pill and hidden
+  // steppers — used for BAC water in reverse-calc mode where the value
+  // is solved from target dose + units.
+  readOnly?: boolean;
+  readOnlyHint?: string;
 }) {
   const { t } = useTheme();
   return (
     <View
       style={{
-        backgroundColor: t.surface,
+        backgroundColor: readOnly ? t.surfaceAlt : t.surface,
         borderRadius: radius.md,
         paddingVertical: 10,
         paddingHorizontal: 14,
         borderWidth: 1,
-        borderColor: t.line,
+        borderColor: readOnly ? t.line : t.line,
         flexDirection: 'row',
         alignItems: 'center',
       }}
     >
       <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontSize: 10,
-            color: t.ink3,
-            letterSpacing: 0.3,
-            fontFamily: font.sansSemi,
-            textTransform: 'uppercase',
-          }}
-        >
-          {label}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            style={{
+              fontSize: 10,
+              color: t.ink3,
+              letterSpacing: 0.3,
+              fontFamily: font.sansSemi,
+              textTransform: 'uppercase',
+            }}
+          >
+            {label}
+          </Text>
+          {readOnly ? (
+            <Text
+              style={{
+                fontSize: 9,
+                color: t.accentInk,
+                backgroundColor: t.accentSoft,
+                paddingHorizontal: 6,
+                paddingVertical: 1,
+                borderRadius: radius.pill,
+                fontFamily: font.sansSemi,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                overflow: 'hidden',
+              }}
+            >
+              Computed
+            </Text>
+          ) : null}
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 3 }}>
           <TextInput
             value={value}
@@ -867,10 +1126,11 @@ function TypedField({
             onSubmitEditing={onCommit}
             keyboardType="decimal-pad"
             returnKeyType="done"
+            editable={!readOnly}
             style={{
               fontSize: 17,
               fontFamily: font.monoSemi,
-              color: t.ink,
+              color: readOnly ? t.ink2 : t.ink,
               padding: 0,
               minWidth: 50,
             }}
@@ -886,7 +1146,21 @@ function TypedField({
             {unit}
           </Text>
         </View>
+        {readOnly && readOnlyHint ? (
+          <Text
+            style={{
+              fontSize: 11,
+              color: t.ink3,
+              fontFamily: font.sans,
+              marginTop: 2,
+              lineHeight: 15,
+            }}
+          >
+            {readOnlyHint}
+          </Text>
+        ) : null}
       </View>
+      {readOnly ? null : (
       <View style={{ flexDirection: 'row', gap: 6 }}>
         <Pressable
           onPress={onMinus}
@@ -917,6 +1191,7 @@ function TypedField({
           <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>+</Text>
         </Pressable>
       </View>
+      )}
     </View>
   );
 }

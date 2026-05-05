@@ -21,7 +21,14 @@ import {
 import { DosingDisclaimer } from '../../components/Primitives';
 import { PEPTIDES, findPeptide } from '../../lib/peptides';
 import { getPeptideExtras } from '../../lib/peptide-extras';
-import { createCycle, listCycles, type CycleProtocolItem } from '../../lib/db';
+import {
+  attachVialToCycle,
+  createCycle,
+  listCycles,
+  matchingVialsForCycle,
+  type CycleProtocolItem,
+  type Vial,
+} from '../../lib/db';
 
 type Phase = 'loading' | 'active' | 'taper' | 'washout';
 
@@ -33,6 +40,14 @@ type Template = {
   phase: Phase;
   description: string;
   items: CycleProtocolItem[];
+  /** 2-4 short outcome bullets — what this stack is researched for. */
+  benefits: string[];
+  /** 2-4 short side-effect bullets in plain language. */
+  sideEffects: string[];
+  /** One-line ramp-up guidance, optional for templates that don't titrate. */
+  rampUp?: string;
+  /** Pin to the top of the goal section. */
+  popular?: boolean;
 };
 
 type Goal = {
@@ -67,128 +82,623 @@ const TIME_OPTIONS: string[] = [
   'pre-bed',
 ];
 
-const PHASE_OPTIONS: { id: Phase; label: string; desc: string }[] = [
-  { id: 'loading', label: 'Loading', desc: 'Ramp-up phase' },
-  { id: 'active', label: 'Active', desc: 'Main protocol' },
-  { id: 'taper', label: 'Taper', desc: 'Wind-down' },
-  { id: 'washout', label: 'Washout', desc: 'Rest between cycles' },
+const PHASE_OPTIONS: { id: Phase; label: string; desc: string; explainer: string }[] = [
+  {
+    id: 'loading',
+    label: 'Loading',
+    desc: 'Ramp up',
+    explainer:
+      'Doses ramp up over the first 1–2 weeks so side-effects stay tolerable. Use loading on first cycles or whenever a peptide titrates (semaglutide, tirzepatide, MT-2, NAD+).',
+  },
+  {
+    id: 'active',
+    label: 'Active',
+    desc: 'Full research dose',
+    explainer:
+      'Steady-state main protocol. Most healing, growth, and longevity stacks live here for the bulk of the cycle.',
+  },
+  {
+    id: 'taper',
+    label: 'Taper',
+    desc: 'Scale down',
+    explainer:
+      'Step doses down at the end of a cycle to soften receptor rebound. Most useful for GHRPs / GHRH stacks and GLP-1s being discontinued.',
+  },
+  {
+    id: 'washout',
+    label: 'Washout',
+    desc: 'Rest, no peptide',
+    explainer:
+      'A no-peptide stretch between cycles. Lets receptors re-sensitize so the next cycle works as intended. 2–4 weeks is typical for GHRPs; longer for TB-500.',
+  },
 ];
 
 const TEMPLATES: Template[] = [
+  // ────── HEALING ────────────────────────────────────────────────────────
+  {
+    id: 'healing_bpc_solo',
+    goal: 'Healing',
+    name: 'BPC-157 solo',
+    duration_weeks: 4,
+    phase: 'active',
+    description: 'The simplest research-protocol entry point. 4–6 weeks SubQ.',
+    popular: true,
+    items: [
+      { peptide_id: 'bpc157', dose_mcg: 250, freq: 'twice daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Tendon, ligament, and soft-tissue repair (rodent + in-vitro evidence)',
+      'GI lining protection in NSAID / IBD models',
+      'Short half-life means missed doses are forgiving',
+    ],
+    sideEffects: [
+      'Mild injection-site irritation',
+      'Occasional dizziness or lightheadedness post-dose',
+      'Headache and mild fatigue reported anecdotally',
+    ],
+    rampUp: 'No titration — start at 250 mcg twice daily and hold for the full course.',
+  },
   {
     id: 'healing_classic',
     goal: 'Healing',
-    name: 'Classic healing stack',
+    name: 'BPC-157 + TB-500 (classic)',
     duration_weeks: 4,
     phase: 'active',
-    description: 'BPC-157 + TB-500 co-reconstituted. 4 weeks.',
+    description: 'Co-reconstituted healing pair. The most-run research stack.',
+    popular: true,
     items: [
       { peptide_id: 'bpc157', dose_mcg: 250, freq: 'twice daily', time_of_day: 'morning' },
       { peptide_id: 'tb500', dose_mcg: 2500, freq: 'twice weekly', time_of_day: 'morning' },
     ],
+    benefits: [
+      'Combined angiogenic (BPC-157) + actin-cytoskeleton (TB-500) repair pathways',
+      'Co-reconstitutable in the same BAC vial — single SubQ shot',
+      'Standard go-to for tendon / ligament work',
+    ],
+    sideEffects: [
+      'Both: mild injection-site reactions',
+      'TB-500 loading week can bring transient fatigue',
+      'WADA-prohibited (TB-500) — disqualifying for tested athletes',
+    ],
+    rampUp: 'TB-500 runs a 2-week loading phase (3 mg 2×/week) before maintenance.',
   },
   {
     id: 'healing_plus',
     goal: 'Healing',
-    name: 'Extended healing + skin',
+    name: 'Extended healing + skin (BPC + TB + GHK-Cu)',
     duration_weeks: 6,
     phase: 'active',
-    description: 'BPC-157 + TB-500 + GHK-Cu. 6-week cycle.',
+    description: 'Healing pair plus copper-tripeptide for skin/scalp.',
     items: [
       { peptide_id: 'bpc157', dose_mcg: 250, freq: 'twice daily', time_of_day: 'morning' },
       { peptide_id: 'tb500', dose_mcg: 2500, freq: 'twice weekly', time_of_day: 'morning' },
       { peptide_id: 'ghkcu', dose_mcg: 1000, freq: 'daily', time_of_day: 'evening' },
     ],
+    benefits: [
+      'Three complementary repair pathways stacked',
+      'GHK-Cu adds collagen / elastin and dermal benefits',
+      '6-week duration is long enough for visible skin changes',
+    ],
+    sideEffects: [
+      'GHK-Cu: rare contact dermatitis topically; injection-site bruising SubQ',
+      'BPC + TB-500 effects as in classic stack',
+      'WADA-prohibited (TB-500)',
+    ],
+    rampUp: 'TB-500 loads first 2 weeks; BPC + GHK-Cu run flat.',
   },
+  {
+    id: 'healing_ghkcu_solo',
+    goal: 'Healing',
+    name: 'GHK-Cu skin / scalp solo',
+    duration_weeks: 8,
+    phase: 'active',
+    description: 'SubQ or topical copper-tripeptide for skin and hair research.',
+    items: [
+      { peptide_id: 'ghkcu', dose_mcg: 1000, freq: 'daily', time_of_day: 'evening' },
+    ],
+    benefits: [
+      'Collagen + elastin synthesis, SOD activation',
+      'Strongest dermatologic evidence in the catalog',
+      'Topical formulations are well-evidenced and non-injectable',
+    ],
+    sideEffects: [
+      'Topical: mild stinging or redness',
+      'SubQ: injection-site bruising, transient redness',
+      'Theoretical copper-accumulation concern at high chronic doses',
+    ],
+  },
+  {
+    id: 'healing_kpv_gut',
+    goal: 'Healing',
+    name: 'KPV — gut inflammation',
+    duration_weeks: 6,
+    phase: 'active',
+    description: 'α-MSH C-terminal tripeptide for IBD / colitis research.',
+    items: [
+      { peptide_id: 'kpv', dose_mcg: 500, freq: 'daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Anti-inflammatory in IBD / ulcerative-colitis models',
+      'Oral or SubQ route both researched',
+      'Pairs cleanly with BPC-157 if GI focus',
+    ],
+    sideEffects: [
+      'Mild GI upset (oral)',
+      'Injection-site reactions (SubQ)',
+      'Limited long-term human safety data',
+    ],
+  },
+
+  // ────── GROWTH ─────────────────────────────────────────────────────────
   {
     id: 'growth_classic',
     goal: 'Growth',
-    name: 'Ipamorelin + CJC (no DAC)',
+    name: 'Ipamorelin + CJC-1295 no-DAC (classic)',
     duration_weeks: 12,
     phase: 'active',
-    description: 'Pulsatile GH stack. 3x daily. 12 weeks, 5-on/2-off.',
+    description: 'Pulsatile GHRP + GHRH pair. 5-on / 2-off, 12 weeks.',
+    popular: true,
     items: [
       { peptide_id: 'ipamor', dose_mcg: 250, freq: 'twice daily', time_of_day: 'pre-bed' },
       { peptide_id: 'cjc_nodac', dose_mcg: 100, freq: 'twice daily', time_of_day: 'pre-bed' },
     ],
+    benefits: [
+      'Mimics a natural GH pulse — cleanest GH-secretagogue stack',
+      'Pre-bed dose stacks on the slow-wave-sleep GH pulse',
+      'Better sleep, recovery, and IGF-1 elevation reported in research',
+    ],
+    sideEffects: [
+      'Head-rush / flushing post-injection',
+      'Mild water retention; fingers/face puffiness',
+      'Glucose drift on long cycles',
+      'Hand numbness at high chronic doses',
+    ],
+    rampUp: 'Optional loading week at 100 mcg / pulse before stepping to 250 mcg.',
   },
   {
-    id: 'growth_dac',
+    id: 'growth_cjc_dac',
     goal: 'Growth',
     name: 'CJC-1295 DAC baseline',
     duration_weeks: 12,
     phase: 'active',
-    description: 'Baseline GH/IGF-1 elevation. Weekly dosing.',
+    description: 'Long half-life GHRH analog. Weekly dosing for steady IGF-1.',
     items: [
       { peptide_id: 'cjc_dac', dose_mcg: 1000, freq: 'weekly', time_of_day: 'pre-bed' },
     ],
+    benefits: [
+      'Steady GH/IGF-1 elevation rather than pulses',
+      'Weekly dosing — minimal injection burden',
+      'Pairs with Ipamorelin pulses for combined effect',
+    ],
+    sideEffects: [
+      'Sustained water retention',
+      'Glucose drift; periodic monitoring is research convention',
+      'Hand tingling at higher chronic doses',
+      'Joint achiness on extended cycles',
+    ],
   },
+  {
+    id: 'growth_cjc_dac_ipamor',
+    goal: 'Growth',
+    name: 'CJC-DAC + Ipamorelin (long + pulse)',
+    duration_weeks: 12,
+    phase: 'active',
+    description: 'Baseline GHRH (DAC) + pulsatile GHRP. 12 weeks.',
+    items: [
+      { peptide_id: 'cjc_dac', dose_mcg: 1000, freq: 'weekly', time_of_day: 'pre-bed' },
+      { peptide_id: 'ipamor', dose_mcg: 250, freq: 'twice daily', time_of_day: 'pre-bed' },
+    ],
+    benefits: [
+      'Combined steady + pulsatile GH coverage',
+      'Stronger IGF-1 elevation than either solo',
+      'Daily injection load is lighter than no-DAC pair',
+    ],
+    sideEffects: [
+      'Compounded water retention vs. either solo',
+      'Stronger glucose drift — fasting glucose worth checking',
+      'Hand numbness, joint achiness on long cycles',
+    ],
+  },
+  {
+    id: 'growth_tesamor',
+    goal: 'Growth',
+    name: 'Tesamorelin (FDA-approved GHRH)',
+    duration_weeks: 26,
+    phase: 'active',
+    description: '2 mg SubQ daily. Strongest clinical evidence in the GH class.',
+    items: [
+      { peptide_id: 'tesamor', dose_mcg: 2000, freq: 'daily', time_of_day: 'evening' },
+    ],
+    benefits: [
+      'FDA-approved (Egrifta®) for HIV-associated lipodystrophy',
+      'Best-characterized safety data in the catalog',
+      'Visceral fat + liver-fat reduction in trials',
+    ],
+    sideEffects: [
+      'Injection-site reactions (most common label finding)',
+      'Joint pain, peripheral edema, paresthesias',
+      'Elevated fasting glucose / IGF-1; monitoring per label',
+      'Hypersensitivity reactions including rash',
+    ],
+    rampUp: '5-days-on / 2-off after week 8 is research convention to preserve receptors.',
+  },
+  {
+    id: 'growth_sermor',
+    goal: 'Growth',
+    name: 'Sermorelin pre-bed solo',
+    duration_weeks: 12,
+    phase: 'active',
+    description: 'Native GHRH(1-29) pulse. Pre-bed once daily.',
+    items: [
+      { peptide_id: 'sermor', dose_mcg: 300, freq: 'daily', time_of_day: 'pre-bed' },
+    ],
+    benefits: [
+      'Promotes natural pulsatile GH release',
+      'Gentlest GHRH option; long history in pediatric diagnostics',
+      'Single pre-bed shot — minimal protocol burden',
+    ],
+    sideEffects: [
+      'Brief flushing post-injection',
+      'Headache or lightheadedness in some users',
+      'Injection-site reactions',
+    ],
+  },
+  {
+    id: 'growth_mk677',
+    goal: 'Growth',
+    name: 'MK-677 oral mono',
+    duration_weeks: 12,
+    phase: 'active',
+    description: 'Once-daily oral ghrelin agonist. No injections.',
+    items: [
+      { peptide_id: 'mk677', dose_mcg: 25000, freq: 'daily', time_of_day: 'evening' },
+    ],
+    benefits: [
+      'Sustained 24-hour GH/IGF-1 elevation',
+      'Oral — no injections required',
+      'Subjective sleep improvement reported',
+    ],
+    sideEffects: [
+      'Pronounced appetite increase',
+      'Notable water retention; puffiness',
+      'Fasting glucose elevation; insulin sensitivity drift',
+      'Vivid dreams; morning grogginess at higher doses',
+    ],
+    rampUp: '10 mg/day for the first week to assess water retention is a common research approach.',
+  },
+
+  // ────── FAT-LOSS ───────────────────────────────────────────────────────
   {
     id: 'fatloss_sema',
     goal: 'Fat-loss',
     name: 'Semaglutide titration',
-    duration_weeks: 16,
+    duration_weeks: 20,
     phase: 'loading',
-    description: 'GLP-1 titration. Start low, increase every 4 weeks.',
+    description: 'Wegovy® label titration. Start 0.25 mg, climb every 4 weeks.',
+    popular: true,
     items: [
       { peptide_id: 'sema', dose_mcg: 250, freq: 'weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'FDA-approved for chronic weight management',
+      '~15% body-weight reduction at max dose in trials',
+      'Cardiovascular risk reduction in T2D',
+    ],
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation (worst at dose increases)',
+      'Reduced appetite to the point of skipping meals',
+      'Pancreatitis (rare class risk)',
+      'Gallbladder disease',
+    ],
+    rampUp: '0.25 → 0.5 → 1.0 → 1.7 → 2.4 mg weekly, stepping every 4 weeks if tolerated.',
+  },
+  {
+    id: 'fatloss_tirz',
+    goal: 'Fat-loss',
+    name: 'Tirzepatide titration',
+    duration_weeks: 20,
+    phase: 'loading',
+    description: 'Mounjaro/Zepbound® dual GIP/GLP-1. Strongest efficacy in class.',
+    popular: true,
+    items: [
+      { peptide_id: 'tirz', dose_mcg: 2500, freq: 'weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'FDA-approved for T2D and chronic weight management',
+      '~20% body-weight reduction at max dose in trials',
+      'Superior A1c reduction vs. semaglutide',
+    ],
+    sideEffects: [
+      'Same GI cluster as semaglutide: nausea, vomiting, diarrhea',
+      'Decreased appetite; risk of inadequate intake',
+      'Injection-site reactions',
+      'Pancreatitis and gallbladder disease (class risks)',
+    ],
+    rampUp: '2.5 mg weekly × 4, then step up by 2.5 mg every 4 weeks to a max of 15 mg.',
+  },
+  {
+    id: 'fatloss_reta',
+    goal: 'Fat-loss',
+    name: 'Retatrutide titration (investigational)',
+    duration_weeks: 20,
+    phase: 'loading',
+    description: 'Triple GIP/GLP-1/GCG agonist. Largest weight-loss signal to date.',
+    items: [
+      { peptide_id: 'reta', dose_mcg: 2000, freq: 'weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      '~24% body-weight reduction at 48 weeks in phase-2 (largest seen)',
+      'Triple agonism adds glucagon-driven energy expenditure',
+    ],
+    sideEffects: [
+      'Strong GI cluster: nausea, vomiting, diarrhea',
+      'Mild heart-rate elevation in trials',
+      'Investigational — long-term safety profile not established',
+    ],
+    rampUp: '2 mg weekly × 4, then step up to 4, 8, 12 mg every 4 weeks.',
+  },
+  {
+    id: 'fatloss_cagrisema',
+    goal: 'Fat-loss',
+    name: 'CagriSema (Sema + Cagrilintide)',
+    duration_weeks: 24,
+    phase: 'loading',
+    description: 'GLP-1 + amylin combo. Phase-3 tested for additive weight-loss.',
+    items: [
+      { peptide_id: 'sema', dose_mcg: 2400, freq: 'weekly', time_of_day: 'morning' },
+      { peptide_id: 'cagri', dose_mcg: 2400, freq: 'weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Phase-3 evidence for additive weight loss vs. semaglutide alone',
+      'Amylin slows gastric emptying — extra satiety leverage',
+      'Same injection day; separate vials',
+    ],
+    sideEffects: [
+      'Compounded GI burden vs. semaglutide alone',
+      'Decreased appetite; rapid satiety',
+      'Pancreatitis and gallbladder disease (class risks)',
+    ],
+    rampUp: 'Match titration of paired semaglutide; step both upward together monthly.',
+  },
+  {
+    id: 'fatloss_aod',
+    goal: 'Fat-loss',
+    name: 'AOD-9604 morning solo',
+    duration_weeks: 12,
+    phase: 'active',
+    description: 'hGH 176-191 fragment. Morning, fasted, 5-on / 2-off.',
+    items: [
+      { peptide_id: 'aod', dose_mcg: 300, freq: 'daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Marketed as fat-only loss without GH effects',
+      'Cheap, simple morning protocol',
+      'Pairs cleanly with fasted morning cardio',
+    ],
+    sideEffects: [
+      'Effect size is modest — clinical trials have been mixed',
+      'Injection-site reactions',
+      'Mild headache or fatigue reported anecdotally',
     ],
   },
   {
-    id: 'fatloss_stack',
+    id: 'fatloss_amq',
     goal: 'Fat-loss',
-    name: 'Sema + AOD-9604',
+    name: '5-amino-1MQ oral solo',
     duration_weeks: 12,
     phase: 'active',
-    description: 'Weekly GLP-1 + daily lipolytic fragment.',
+    description: 'Oral NNMT inhibitor. Once daily with food.',
     items: [
-      { peptide_id: 'sema', dose_mcg: 250, freq: 'weekly', time_of_day: 'morning' },
-      { peptide_id: 'aod', dose_mcg: 300, freq: 'daily', time_of_day: 'morning' },
+      { peptide_id: 'amq', dose_mcg: 100000, freq: 'daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Targets adipose NAD+ / methylation pathways',
+      'Oral — no injections required',
+      'Cycled 12 weeks on / 4 weeks off in research',
+    ],
+    sideEffects: [
+      'Limited human safety data — mostly rodent studies',
+      'Mild GI upset reported anecdotally',
+      'Long-term effects of NNMT inhibition not characterized',
     ],
   },
+
+  // ────── COGNITIVE ──────────────────────────────────────────────────────
   {
     id: 'cognitive_selank',
     goal: 'Cognitive',
-    name: 'Selank (intranasal)',
+    name: 'Selank intranasal solo',
     duration_weeks: 2,
     phase: 'active',
-    description: 'Short anxiolytic course. 10-14 days.',
+    description: 'Anxiolytic course, 10–14 days. Russian clinical use.',
+    popular: true,
     items: [
       { peptide_id: 'selank', dose_mcg: 150, freq: 'twice daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Anxiety reduction without sedation',
+      'Modulates GABA + BDNF pathways',
+      'Short courses; no titration needed',
+    ],
+    sideEffects: [
+      'Mild nasal irritation',
+      'Transient drowsiness in some users',
+      'Long-term safety outside Russian clinical use is limited',
     ],
   },
   {
     id: 'cognitive_semax',
     goal: 'Cognitive',
-    name: 'Semax (intranasal)',
+    name: 'Semax intranasal solo',
     duration_weeks: 2,
     phase: 'active',
-    description: 'Short nootropic course. 10-14 days.',
+    description: 'Nootropic course, 10–14 days. Morning + early afternoon only.',
+    popular: true,
     items: [
       { peptide_id: 'semax', dose_mcg: 250, freq: 'twice daily', time_of_day: 'morning' },
     ],
+    benefits: [
+      'BDNF upregulation, focus, neuroprotection',
+      'Russian clinical use in stroke recovery',
+      'No injections — intranasal only',
+    ],
+    sideEffects: [
+      'Insomnia with late dosing — avoid evenings',
+      'Nasal irritation',
+      'Over-stimulation, headache, irritability in some users',
+    ],
   },
+  {
+    id: 'cognitive_cerebro',
+    goal: 'Cognitive',
+    name: 'Cerebrolysin pulse course',
+    duration_weeks: 3,
+    phase: 'active',
+    description: 'Porcine brain-peptide IM course, 20 days, 2–4×/year in research.',
+    items: [
+      { peptide_id: 'cerebro', dose_mcg: 10000, freq: 'daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Clinical use in stroke rehab, Alzheimer disease, TBI research',
+      'Pulsed course — long breaks between',
+      'Strong clinical literature compared to most nootropics',
+    ],
+    sideEffects: [
+      'Injection-site pain (IM)',
+      'Sweating, dizziness, nausea reported',
+      'Hot flashes / vasomotor symptoms',
+      'Hypersensitivity reactions including rash',
+    ],
+  },
+  {
+    id: 'cognitive_dihexa',
+    goal: 'Cognitive',
+    name: 'Dihexa research course',
+    duration_weeks: 4,
+    phase: 'active',
+    description: 'Oral angiotensin IV analog. Pre-clinical research only.',
+    items: [
+      { peptide_id: 'dihexa', dose_mcg: 25, freq: 'daily', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'HGF pathway activation, dendritic-spine density (rodent)',
+      'Oral-active — no injections',
+    ],
+    sideEffects: [
+      'No human safety data — research-only',
+      'Pre-clinical reports indicate BBB crossing; off-target effects unknown',
+    ],
+  },
+
+  // ────── LONGEVITY ──────────────────────────────────────────────────────
   {
     id: 'longevity_epi',
     goal: 'Longevity',
-    name: 'Epitalon course',
-    duration_weeks: 3,
+    name: 'Epitalon solo course',
+    duration_weeks: 2,
     phase: 'active',
-    description: '10-20 day pineal course.',
+    description: '5–10 mg SubQ pre-bed × 10 days. Cycled 2–4×/year.',
+    popular: true,
     items: [
-      { peptide_id: 'epi', dose_mcg: 10000, freq: 'daily', time_of_day: 'evening' },
+      { peptide_id: 'epi', dose_mcg: 5000, freq: 'daily', time_of_day: 'evening' },
     ],
+    benefits: [
+      'Khavinson telomerase research; sleep/circadian regulation',
+      'Short courses — minimal commitment',
+      'Pre-bed timing aligns with pineal rhythm',
+    ],
+    sideEffects: [
+      'Injection-site reactions',
+      'Vivid dreams or shifted sleep architecture',
+      'Long-term human safety outside Russian clinical literature is limited',
+    ],
+    rampUp: 'First course at 5 mg; subsequent courses can step to 10 mg.',
+  },
+  {
+    id: 'longevity_motsc',
+    goal: 'Longevity',
+    name: 'MOTS-c weekly solo',
+    duration_weeks: 12,
+    phase: 'active',
+    description: 'Mitochondrial-derived peptide. Weekly SubQ pre-workout.',
+    items: [
+      { peptide_id: 'motsc', dose_mcg: 10000, freq: 'weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Mitochondrial biogenesis and exercise capacity',
+      'Insulin sensitivity in research',
+      'Once-weekly dosing — minimal protocol burden',
+    ],
+    sideEffects: [
+      'Injection-site reactions',
+      'Mild fatigue or headache early in a course',
+      'Long-term human safety data limited',
+    ],
+  },
+  {
+    id: 'longevity_ta1',
+    goal: 'Longevity',
+    name: 'Thymalin / TA-1 immune course',
+    duration_weeks: 12,
+    phase: 'active',
+    description: 'Thymosin Alpha-1, 1.6 mg SubQ 2×/week × 12 weeks.',
+    items: [
+      { peptide_id: 'ta1', dose_mcg: 1600, freq: 'twice weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Approved in ~35 countries as an immune modulator',
+      'Studied for chronic hepatitis, vaccination response in older adults',
+      'Twice-weekly dosing; predictable scheduling',
+    ],
+    sideEffects: [
+      'Injection-site reactions',
+      'Mild flu-like symptoms early in a course',
+      'Hypersensitivity reactions are rare but reported',
+    ],
+  },
+  {
+    id: 'longevity_nad',
+    goal: 'Longevity',
+    name: 'NAD+ injectable course',
+    duration_weeks: 4,
+    phase: 'loading',
+    description: '100 mg SubQ 2–3×/week. Push slowly — flushing scales with rate.',
+    items: [
+      { peptide_id: 'nad', dose_mcg: 100000, freq: 'twice weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'NAD+ / sirtuin pathway support',
+      'Subjective fatigue and clarity reports',
+      '2–3×/week schedule — sustainable long-term',
+    ],
+    sideEffects: [
+      'Flushing, warmth, chest pressure during injection (rate-dependent)',
+      'Nausea or queasiness with fast pushes',
+      'Headache, mild dizziness',
+      'Theoretical concern: NAD+ may fuel proliferation in active cancer',
+    ],
+    rampUp: 'Optional loading: 100 mg daily × 7 days, then step to 2–3×/week maintenance.',
   },
   {
     id: 'longevity_mito',
     goal: 'Longevity',
-    name: 'SS-31 + NAD+',
+    name: 'SS-31 + NAD+ mitochondrial',
     duration_weeks: 12,
     phase: 'active',
-    description: 'Mitochondrial + NAD+ combination.',
+    description: 'Daily SS-31 + 2–3×/week NAD+ for combined mitochondrial support.',
     items: [
       { peptide_id: 'ss31', dose_mcg: 10000, freq: 'daily', time_of_day: 'morning' },
-      { peptide_id: 'nad', dose_mcg: 250000, freq: 'daily', time_of_day: 'morning' },
+      { peptide_id: 'nad', dose_mcg: 100000, freq: 'twice weekly', time_of_day: 'morning' },
+    ],
+    benefits: [
+      'Two complementary mitochondrial-support pathways',
+      'SS-31 trials cover heart failure, AMD, primary mitochondrial myopathy',
+      'NAD+ adds sirtuin-pathway engagement',
+    ],
+    sideEffects: [
+      'NAD+ flushing if pushed too fast',
+      'SS-31 injection-site reactions, mild headache, GI upset',
+      'Combined daily injection burden is heavier',
     ],
   },
 ];
@@ -263,6 +773,11 @@ export default function NewCycle() {
   const [acceptConflicts, setAcceptConflicts] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [doseText, setDoseText] = useState<Record<string, string>>({});
+  // v1.2: vials that match this cycle's protocol (peptide-id keyed,
+  // active or recently depleted). Loaded when the user reaches Step 4
+  // so matching is up-to-date with their final peptide selection.
+  const [matchingVials, setMatchingVials] = useState<Vial[]>([]);
+  const [vialsToAttach, setVialsToAttach] = useState<Set<string>>(new Set());
 
   const isCustom = goal === 'Custom';
 
@@ -298,10 +813,26 @@ export default function NewCycle() {
     };
   }, [copyFromCycleId]);
 
-  const filteredTemplates = useMemo(
-    () => TEMPLATES.filter((tpl) => tpl.goal === goal),
-    [goal],
-  );
+  const [templateQuery, setTemplateQuery] = useState<string>('');
+
+  const filteredTemplates = useMemo(() => {
+    const q = templateQuery.trim().toLowerCase();
+    const inGoal = TEMPLATES.filter((tpl) => tpl.goal === goal);
+    const matched = q
+      ? inGoal.filter((tpl) =>
+          [tpl.name, tpl.description, ...tpl.benefits, ...tpl.items.map((i) => findPeptide(i.peptide_id)?.name ?? '')]
+            .join(' ')
+            .toLowerCase()
+            .includes(q),
+        )
+      : inGoal;
+    // Stable sort: popular first, then original order.
+    return matched.slice().sort((a, b) => {
+      const ap = a.popular ? 0 : 1;
+      const bp = b.popular ? 0 : 1;
+      return ap - bp;
+    });
+  }, [goal, templateQuery]);
 
   const startDate = useMemo(
     () => addDays(new Date(), startOffset),
@@ -425,18 +956,67 @@ export default function NewCycle() {
     if (step < 4) setStep((s) => (s + 1) as 1 | 2 | 3 | 4);
   };
 
+  // Load vials whose peptide_id is in the current protocol when the user
+  // reaches Review. Runs again if they bounce back to Customize and edit.
+  useEffect(() => {
+    if (step !== 4 || items.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const vs = await matchingVialsForCycle({
+        id: '',
+        protocol_json: JSON.stringify(items),
+      });
+      if (cancelled) return;
+      setMatchingVials(vs);
+      // Default selection: every active matching vial. Users can untick
+      // ones they want to keep as free inventory.
+      setVialsToAttach(new Set(vs.filter((v) => v.is_active === 1).map((v) => v.id)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, items]);
+
+  // Peptides in the protocol that have NO matching vial — flagged so the
+  // user knows they'll need to reconstitute after creating the cycle.
+  const peptidesWithoutVial = useMemo(() => {
+    const matchedPids = new Set(matchingVials.map((v) => v.peptide_id));
+    const cyclePids = Array.from(new Set(items.map((it) => it.peptide_id)));
+    return cyclePids.filter((pid) => !matchedPids.has(pid));
+  }, [items, matchingVials]);
+
+  const toggleAttach = (vialId: string) => {
+    setVialsToAttach((prev) => {
+      const next = new Set(prev);
+      if (next.has(vialId)) next.delete(vialId);
+      else next.add(vialId);
+      return next;
+    });
+  };
+
   const handleSave = async (): Promise<void> => {
     if (saving) return;
     if (conflicts.length > 0 && !acceptConflicts) return;
     setSaving(true);
     try {
-      await createCycle({
+      const cycleId = await createCycle({
         name: cycleName.trim(),
         starts_on: isoDate(startDate),
         ends_on: isoDate(endDate),
         phase,
         protocol: items,
       });
+      // v1.2: attach selected vials to the freshly-created cycle.
+      // Single-owner — if a vial was attached to another cycle this
+      // overwrites that link, which matches the "move to new cycle"
+      // intent the user expressed by checking the box here.
+      for (const vid of vialsToAttach) {
+        try {
+          await attachVialToCycle(vid, cycleId);
+        } catch (err) {
+          if (__DEV__) console.warn('attachVialToCycle failed', err);
+        }
+      }
       router.replace('/(tabs)/stacks');
     } catch (e) {
       setSaving(false);
@@ -691,15 +1271,39 @@ export default function NewCycle() {
           opacity: pressed ? 0.9 : 1,
         })}
       >
-        <Text
-          style={{
-            color: t.ink,
-            fontFamily: font.sansBold,
-            fontSize: 17,
-          }}
-        >
-          {tpl.name}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.sm }}>
+          <Text
+            style={{
+              color: t.ink,
+              fontFamily: font.sansBold,
+              fontSize: 17,
+              flex: 1,
+            }}
+          >
+            {tpl.name}
+          </Text>
+          {tpl.popular ? (
+            <View
+              style={{
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: radius.pill,
+                backgroundColor: t.accent,
+              }}
+            >
+              <Text
+                style={{
+                  color: t.accentInk,
+                  fontFamily: font.sansBold,
+                  fontSize: 9,
+                  letterSpacing: 0.6,
+                }}
+              >
+                POPULAR
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <Text
           style={{
             color: t.ink2,
@@ -710,6 +1314,73 @@ export default function NewCycle() {
         >
           {tpl.description}
         </Text>
+
+        {/* Why this stack */}
+        {tpl.benefits.length > 0 ? (
+          <View style={{ marginTop: space.md }}>
+            <Text
+              style={{
+                color: t.accent,
+                fontFamily: font.sansSemi,
+                fontSize: 10,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+                marginBottom: 4,
+              }}
+            >
+              Why this stack
+            </Text>
+            {tpl.benefits.slice(0, 2).map((b) => (
+              <Text
+                key={b}
+                style={{ color: t.ink2, fontSize: 12, lineHeight: 17 }}
+              >
+                · {b}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Watch for */}
+        {tpl.sideEffects.length > 0 ? (
+          <View style={{ marginTop: space.sm }}>
+            <Text
+              style={{
+                color: t.warn,
+                fontFamily: font.sansSemi,
+                fontSize: 10,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+                marginBottom: 4,
+              }}
+            >
+              Watch for
+            </Text>
+            {tpl.sideEffects.slice(0, 2).map((s) => (
+              <Text
+                key={s}
+                style={{ color: t.ink2, fontSize: 12, lineHeight: 17 }}
+              >
+                · {s}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Ramp-up tip */}
+        {tpl.rampUp ? (
+          <Text
+            style={{
+              color: t.ink3,
+              fontSize: 12,
+              fontStyle: 'italic',
+              marginTop: space.sm,
+              lineHeight: 17,
+            }}
+          >
+            Ramp-up: {tpl.rampUp}
+          </Text>
+        ) : null}
         <View
           style={{
             flexDirection: 'row',
@@ -823,6 +1494,22 @@ export default function NewCycle() {
           'Pick a starting template',
           'Or start blank and build your own',
         )}
+        <TextInput
+          value={templateQuery}
+          onChangeText={setTemplateQuery}
+          placeholder="Search templates or peptides…"
+          placeholderTextColor={t.ink3}
+          style={{
+            backgroundColor: t.surfaceAlt,
+            borderRadius: radius.md,
+            paddingHorizontal: space.md,
+            paddingVertical: 10,
+            color: t.ink,
+            fontSize: 14,
+            fontFamily: font.sans,
+            marginBottom: space.md,
+          }}
+        />
         <View style={{ gap: space.md }}>
           {filteredTemplates.length === 0 ? (
             <View
@@ -1613,6 +2300,67 @@ export default function NewCycle() {
         })}
       </View>
 
+      {/* Phase explainer + multi-phase timeline preview */}
+      <View
+        style={{
+          marginTop: -space.sm,
+          marginBottom: space.lg,
+          padding: space.md,
+          borderRadius: radius.md,
+          backgroundColor: t.surfaceAlt,
+          borderLeftWidth: 3,
+          borderLeftColor: t.accent,
+        }}
+      >
+        <Text style={{ color: t.ink2, fontSize: 12, lineHeight: 17 }}>
+          {PHASE_OPTIONS.find((p) => p.id === phase)?.explainer}
+        </Text>
+        {(() => {
+          // Multi-phase preview when any selected peptide has phases.
+          const phased = items
+            .map((it) => ({
+              peptide: findPeptide(it.peptide_id),
+              phases: getPeptideExtras(it.peptide_id)?.cycleTemplate?.phases ?? [],
+            }))
+            .filter((x) => x.phases.length > 1);
+          if (phased.length === 0) return null;
+          return (
+            <View style={{ marginTop: space.sm, gap: 4 }}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  color: t.accent,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Built-in protocol timeline
+              </Text>
+              {phased.map(({ peptide, phases }) => (
+                <Text
+                  key={peptide?.id ?? 'x'}
+                  style={{
+                    fontSize: 11,
+                    color: t.ink2,
+                    fontFamily: font.mono,
+                    lineHeight: 15,
+                  }}
+                >
+                  {peptide?.name ?? ''}:{' '}
+                  {phases
+                    .map(
+                      (ph) =>
+                        `${ph.name} ${ph.weeks}w${ph.dose_modifier ? ` (${ph.dose_modifier})` : ''}`,
+                    )
+                    .join(' → ')}
+                </Text>
+              ))}
+            </View>
+          );
+        })()}
+      </View>
+
       <View
         style={{
           flexDirection: 'row',
@@ -1862,6 +2610,236 @@ export default function NewCycle() {
         </Text>
         {items.map((it, idx) => renderReviewItem(it, idx))}
       </View>
+
+      {/* v1.2: existing vials that match this cycle's peptides. Tick the
+          ones you want this cycle to claim. Vials reconstituted before
+          the cycle starts are fine — only forward-going doses associate
+          (retroactive backdating deferred to v2). */}
+      {matchingVials.length > 0 || peptidesWithoutVial.length > 0 ? (
+        <View
+          style={{
+            padding: space.lg,
+            borderRadius: radius.lg,
+            backgroundColor: t.surface,
+            borderWidth: 1,
+            borderColor: t.line,
+            marginBottom: space.md,
+          }}
+        >
+          <Text
+            style={{
+              color: t.ink3,
+              fontFamily: font.sansSemi,
+              fontSize: 11,
+              letterSpacing: 1,
+              marginBottom: space.sm,
+            }}
+          >
+            EXISTING VIALS
+          </Text>
+          {matchingVials.map((v) => {
+            const p = findPeptide(v.peptide_id);
+            const checked = vialsToAttach.has(v.id);
+            const reconLabel = new Date(v.reconstituted_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            });
+            const remaining = `${v.remaining_mg.toFixed(2)} / ${v.strength_mg} mg`;
+            const stale =
+              v.cycle_id && v.cycle_id !== '' ? 'Currently attached to another cycle' : null;
+            return (
+              <Pressable
+                key={v.id}
+                onPress={() => toggleAttach(v.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked }}
+                accessibilityLabel={`Attach ${p?.name ?? v.peptide_id} vial`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingVertical: space.sm,
+                  borderTopWidth: 1,
+                  borderTopColor: t.line,
+                }}
+              >
+                <View
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: 4,
+                    borderWidth: 1.5,
+                    borderColor: checked ? t.accent : t.line,
+                    backgroundColor: checked ? t.accent : 'transparent',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {checked ? (
+                    <Text style={{ color: t.bg, fontSize: 11, fontFamily: font.sansBold }}>✓</Text>
+                  ) : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{ color: t.ink, fontFamily: font.sansSemi, fontSize: 14 }}
+                  >
+                    {p?.name ?? v.peptide_id}
+                  </Text>
+                  <Text
+                    style={{
+                      color: t.ink3,
+                      fontFamily: font.mono,
+                      fontSize: 11,
+                      marginTop: 2,
+                    }}
+                  >
+                    {remaining} · reconstituted {reconLabel}
+                    {v.is_active === 0 ? ' · depleted' : ''}
+                  </Text>
+                  {stale ? (
+                    <Text
+                      style={{ color: t.warn, fontSize: 11, fontFamily: font.sansMed, marginTop: 2 }}
+                    >
+                      {stale} — checking will move it here
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+          {peptidesWithoutVial.length > 0 ? (
+            <View
+              style={{
+                marginTop: space.sm,
+                paddingTop: space.sm,
+                borderTopWidth: 1,
+                borderTopColor: t.line,
+                gap: 4,
+              }}
+            >
+              <Text
+                style={{
+                  color: t.ink3,
+                  fontSize: 11,
+                  fontFamily: font.sansSemi,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Needs reconstitution
+              </Text>
+              {peptidesWithoutVial.map((pid) => {
+                const p = findPeptide(pid);
+                return (
+                  <Text
+                    key={pid}
+                    style={{ color: t.ink2, fontSize: 13 }}
+                  >
+                    ⚠ No vial yet for {p?.name ?? pid} — reconstitute after creating this cycle.
+                  </Text>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Aggregated cycle benefits + side-effects */}
+      {(() => {
+        const tpl = TEMPLATES.find((x) => x.id === selectionId);
+        const benefits = new Set<string>();
+        const sideEffects = new Set<string>();
+        const contraindications = new Set<string>();
+        if (tpl) {
+          tpl.benefits.forEach((b) => benefits.add(b));
+          tpl.sideEffects.forEach((s) => sideEffects.add(s));
+        }
+        for (const it of items) {
+          const ex = getPeptideExtras(it.peptide_id);
+          ex?.sideEffects?.forEach((s) => sideEffects.add(s));
+          ex?.contraindications?.forEach((c) => contraindications.add(c));
+        }
+        const allBenefits = Array.from(benefits);
+        const allSideEffects = Array.from(sideEffects);
+        const allContra = Array.from(contraindications);
+        if (allBenefits.length === 0 && allSideEffects.length === 0 && allContra.length === 0) {
+          return null;
+        }
+        return (
+          <View
+            style={{
+              padding: space.lg,
+              borderRadius: radius.lg,
+              backgroundColor: t.surface,
+              borderWidth: 1,
+              borderColor: t.line,
+              marginBottom: space.md,
+              gap: space.md,
+            }}
+          >
+            {allBenefits.length > 0 ? (
+              <View>
+                <Text
+                  style={{
+                    color: t.accent,
+                    fontFamily: font.sansSemi,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    marginBottom: 6,
+                  }}
+                >
+                  CYCLE BENEFITS
+                </Text>
+                {allBenefits.map((b) => (
+                  <Text key={b} style={{ color: t.ink2, fontSize: 13, lineHeight: 19 }}>
+                    · {b}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {allSideEffects.length > 0 ? (
+              <View>
+                <Text
+                  style={{
+                    color: t.warn,
+                    fontFamily: font.sansSemi,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    marginBottom: 6,
+                  }}
+                >
+                  SIDE EFFECTS
+                </Text>
+                {allSideEffects.map((s) => (
+                  <Text key={s} style={{ color: t.ink2, fontSize: 13, lineHeight: 19 }}>
+                    · {s}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {allContra.length > 0 ? (
+              <View>
+                <Text
+                  style={{
+                    color: t.danger,
+                    fontFamily: font.sansSemi,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    marginBottom: 6,
+                  }}
+                >
+                  CONTRAINDICATIONS
+                </Text>
+                {allContra.map((c) => (
+                  <Text key={c} style={{ color: t.ink2, fontSize: 13, lineHeight: 19 }}>
+                    · {c}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        );
+      })()}
 
       {Object.keys(timingGroups).length > 0 ? (
         <View

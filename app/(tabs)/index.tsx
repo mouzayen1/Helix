@@ -12,14 +12,14 @@ import {
   IconCog,
   IconSyringe,
 } from '../../components/Icons';
+import { DoseDetailSheet } from '../../components/DoseDetailSheet';
 import { HCard, HSectionHeader, ResearchBanner } from '../../components/Primitives';
 import {
   createDoseSkip,
   deactivateVial,
-  deleteDose,
   deleteDoseSkip,
   deleteVial,
-  getActiveCycle,
+  listActiveCycles,
   listActiveVials,
   listDoseSkips,
   listDoses,
@@ -129,24 +129,29 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const { profile } = useProfile();
 
-  const [cycle, setCycle] = useState<Cycle | null>(null);
+  // Multiple concurrent cycles are first-class — Today merges schedules
+  // from every active/paused cycle and renders a status banner per paused one.
+  const [cycles, setCycles] = useState<Cycle[]>([]);
   const [vials, setVials] = useState<Vial[]>([]);
   const [todayDoses, setTodayDoses] = useState<Dose[]>([]);
   const [todaySkips, setTodaySkips] = useState<DoseSkip[]>([]);
   const [doseSheet, setDoseSheet] = useState<Dose | null>(null);
   const [vialSheet, setVialSheet] = useState<Vial | null>(null);
   // Skip sheet — peptide + cycle context for the row being skipped.
+  // cycleId is included so the skip lands against the correct active cycle
+  // when multiple cycles are running concurrently.
   const [skipSheet, setSkipSheet] = useState<{
     peptideId: string;
     peptideName: string;
     window: 'AM' | 'PM' | 'ALL';
+    cycleId: string | null;
   } | null>(null);
   const [skipReason, setSkipReason] = useState<string | null>(null);
   const [skipNote, setSkipNote] = useState('');
 
   const refresh = useCallback(async () => {
-    const [c, v] = await Promise.all([getActiveCycle(), listActiveVials()]);
-    setCycle(c);
+    const [cs, v] = await Promise.all([listActiveCycles(), listActiveVials()]);
+    setCycles(cs);
     setVials(v);
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -169,78 +174,116 @@ export default function TodayScreen() {
 
   const displayName = profile?.display_name?.trim() || 'there';
 
-  const cycleView = useMemo(() => {
-    if (!cycle) return null;
-    const start = new Date(cycle.starts_on);
-    const end = new Date(cycle.ends_on);
-    const today = new Date();
-    const total = Math.max(1, daysBetween(start, end));
-    // dayOfCycle is 0-indexed for schedule math; displayDay is 1-indexed
-    // so users see "Day 1 of 30" on the start date, not "Day 0".
-    const dayOfCycle = Math.min(total, Math.max(0, daysBetween(start, today)));
-    const displayDay = Math.min(total, dayOfCycle + 1);
-    const pct = Math.round((dayOfCycle / total) * 100);
-    return { day: dayOfCycle, displayDay, total, pct, remaining: total - dayOfCycle };
-  }, [cycle]);
+  // Per-cycle progress view. Same shape as the old single-cycle cycleView,
+  // computed for every active or paused cycle so we can render a card per
+  // cycle on Today.
+  const cycleViews = useMemo(() => {
+    return cycles.map((c) => {
+      const start = new Date(c.starts_on);
+      const end = new Date(c.ends_on);
+      const today = new Date();
+      const total = Math.max(1, daysBetween(start, end));
+      // dayOfCycle is 0-indexed for schedule math; displayDay is 1-indexed
+      // so users see "Day 1 of 30" on the start date, not "Day 0".
+      const dayOfCycle = Math.min(total, Math.max(0, daysBetween(start, today)));
+      const displayDay = Math.min(total, dayOfCycle + 1);
+      const pct = Math.round((dayOfCycle / total) * 100);
+      return {
+        cycle: c,
+        view: { day: dayOfCycle, displayDay, total, pct, remaining: total - dayOfCycle },
+      };
+    });
+  }, [cycles]);
 
-  // Today's scheduled protocol rows. Twice-daily items split into AM + PM rows
-  // so each half can be independently logged/checked. Skips are matched by
-  // (peptide_id, time_of_day) — where time_of_day encodes the window.
+  const activeCycleViews = useMemo(
+    () => cycleViews.filter(({ cycle: c }) => c.status === 'active'),
+    [cycleViews]
+  );
+  const pausedCycleViews = useMemo(
+    () => cycleViews.filter(({ cycle: c }) => c.status === 'paused'),
+    [cycleViews]
+  );
+
+  // Today's scheduled protocol rows merged across every active cycle. Each
+  // row carries `cycleId` + `cycleName` so the user can see which protocol
+  // it's from when running multiple concurrent cycles. Skips are matched
+  // by (cycle_id, peptide_id, time_of_day) so a skip on the BPC cycle
+  // doesn't accidentally mute the Reta cycle's row.
   const schedule = useMemo(() => {
-    if (!cycle || !cycleView) return [];
-    try {
-      const protocol = JSON.parse(cycle.protocol_json || '[]') as CycleProtocolItem[];
-      const matching = protocol.filter((row) => isScheduledToday(row, cycleView.day));
+    type Row = CycleProtocolItem & {
+      logged: boolean;
+      skip: DoseSkip | null;
+      window: 'AM' | 'PM' | 'ALL';
+      cycleId: string;
+      cycleName: string;
+    };
+    const out: Row[] = [];
+    for (const { cycle: c, view } of activeCycleViews) {
+      let protocol: CycleProtocolItem[] = [];
+      try {
+        protocol = JSON.parse(c.protocol_json || '[]');
+      } catch {
+        continue;
+      }
+      const matching = protocol.filter((row) => isScheduledToday(row, view.day));
       const skipFor = (pid: string, win: 'AM' | 'PM' | 'ALL') =>
         todaySkips.find(
           (s) =>
             s.peptide_id === pid &&
+            s.cycle_id === c.id &&
             (s.time_of_day === win ||
               (win === 'ALL' && (s.time_of_day === null || s.time_of_day === 'ALL')))
         ) ?? null;
-      const out: (CycleProtocolItem & {
-        logged: boolean;
-        skip: DoseSkip | null;
-        window: 'AM' | 'PM' | 'ALL';
-      })[] = [];
       for (const row of matching) {
         const isTwice =
           (row.freq || '').toLowerCase().includes('twice daily') ||
           (row.freq || '').toLowerCase().includes('2x daily');
         if (isTwice) {
           const amLogged = todayDoses.some(
-            (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() < 12
+            (d) =>
+              d.peptide_id === row.peptide_id &&
+              (d.cycle_id === c.id || d.cycle_id === null) &&
+              new Date(d.taken_at).getHours() < 12
           );
           const pmLogged = todayDoses.some(
-            (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() >= 12
+            (d) =>
+              d.peptide_id === row.peptide_id &&
+              (d.cycle_id === c.id || d.cycle_id === null) &&
+              new Date(d.taken_at).getHours() >= 12
           );
           out.push({
             ...row,
             logged: amLogged,
             skip: skipFor(row.peptide_id, 'AM'),
             window: 'AM',
+            cycleId: c.id,
+            cycleName: c.name,
           });
           out.push({
             ...row,
             logged: pmLogged,
             skip: skipFor(row.peptide_id, 'PM'),
             window: 'PM',
+            cycleId: c.id,
+            cycleName: c.name,
           });
         } else {
-          const logged = todayDoses.some((d) => d.peptide_id === row.peptide_id);
+          const logged = todayDoses.some(
+            (d) => d.peptide_id === row.peptide_id && (d.cycle_id === c.id || d.cycle_id === null)
+          );
           out.push({
             ...row,
             logged,
             skip: skipFor(row.peptide_id, 'ALL'),
             window: 'ALL',
+            cycleId: c.id,
+            cycleName: c.name,
           });
         }
       }
-      return out;
-    } catch {
-      return [];
     }
-  }, [cycle, cycleView, todayDoses, todaySkips]);
+    return out;
+  }, [activeCycleViews, todayDoses, todaySkips]);
 
   const todayIsoDate = useMemo(() => {
     const d = new Date();
@@ -249,8 +292,13 @@ export default function TodayScreen() {
     ).padStart(2, '0')}`;
   }, []);
 
-  const openSkipSheet = (peptideId: string, peptideName: string, window: 'AM' | 'PM' | 'ALL') => {
-    setSkipSheet({ peptideId, peptideName, window });
+  const openSkipSheet = (
+    peptideId: string,
+    peptideName: string,
+    window: 'AM' | 'PM' | 'ALL',
+    cycleId: string | null
+  ) => {
+    setSkipSheet({ peptideId, peptideName, window, cycleId });
     setSkipReason(null);
     setSkipNote('');
   };
@@ -259,7 +307,7 @@ export default function TodayScreen() {
     if (!skipSheet) return;
     await createDoseSkip({
       peptide_id: skipSheet.peptideId,
-      cycle_id: cycle?.id ?? undefined,
+      cycle_id: skipSheet.cycleId ?? undefined,
       scheduled_date: todayIsoDate,
       time_of_day: skipSheet.window,
       reason: skipReason ?? undefined,
@@ -283,17 +331,10 @@ export default function TodayScreen() {
     ]);
   };
 
-  const onResumeCycle = async () => {
-    if (!cycle) return;
-    await resumeCycle(cycle.id);
+  const onResumeCycle = async (id: string) => {
+    await resumeCycle(id);
     haptic.success();
     await refresh();
-  };
-
-  const onDeleteDose = async (id: string) => {
-    await deleteDose(id);
-    setDoseSheet(null);
-    refresh();
   };
 
   const onMarkDepleted = async (id: string) => {
@@ -374,9 +415,12 @@ export default function TodayScreen() {
           <ResearchBanner compact />
         </View>
 
-        {/* Paused cycle banner */}
-        {cycle && cycle.status === 'paused' ? (
+        {/* Paused-cycle banners — one per paused cycle. Each Resume button
+            targets the specific cycle whose banner it lives on, so users
+            with multiple cycles can resume them independently. */}
+        {pausedCycleViews.map(({ cycle: c }) => (
           <View
+            key={c.id}
             style={{
               marginHorizontal: space.xl,
               marginTop: space.md,
@@ -392,11 +436,11 @@ export default function TodayScreen() {
           >
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 12, color: t.warn, fontFamily: font.sansSemi, letterSpacing: 0.5 }}>
-                CYCLE PAUSED
+                {c.name.toUpperCase()} · PAUSED
               </Text>
               <Text style={{ fontSize: 13, color: t.ink2, marginTop: 2 }}>
-                {cycle.paused_at
-                  ? `Paused since ${new Date(cycle.paused_at).toLocaleDateString('en-US', {
+                {c.paused_at
+                  ? `Paused since ${new Date(c.paused_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}. Resume to continue tracking.`
@@ -404,9 +448,9 @@ export default function TodayScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={onResumeCycle}
+              onPress={() => onResumeCycle(c.id)}
               accessibilityRole="button"
-              accessibilityLabel="Resume cycle"
+              accessibilityLabel={`Resume ${c.name}`}
               style={{
                 backgroundColor: t.ink,
                 paddingVertical: 8,
@@ -417,92 +461,97 @@ export default function TodayScreen() {
               <Text style={{ color: t.bg, fontSize: 12, fontFamily: font.sansSemi }}>Resume</Text>
             </Pressable>
           </View>
-        ) : null}
+        ))}
 
-        {/* Cycle card */}
-        {cycle && cycleView ? (
-          <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-            <Pressable
-              onPress={() => router.push(`/cycle/${cycle.id}` as any)}
-              style={{
-                backgroundColor: t.surface,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.lg,
-              }}
-            >
-              <View
+        {/* Cycle cards — one per active cycle. Multiple concurrent cycles
+            (e.g. healing + fat-loss) each get their own card stacked
+            vertically so the user can see progress on each independently. */}
+        {activeCycleViews.length > 0 ? (
+          <View style={{ paddingHorizontal: space.xl, marginTop: space.md, gap: space.sm }}>
+            {activeCycleViews.map(({ cycle: c, view }) => (
+              <Pressable
+                key={c.id}
+                onPress={() => router.push(`/cycle/${c.id}` as any)}
                 style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: space.md,
+                  backgroundColor: t.surface,
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: t.line,
+                  padding: space.lg,
                 }}
               >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontFamily: font.sansSemi,
-                      letterSpacing: 1.2,
-                      color: t.ink3,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Active cycle
-                  </Text>
-                  <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink, marginTop: 2 }}>
-                    {cycle.name}
-                  </Text>
-                </View>
                 <View
                   style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 6,
-                    backgroundColor: t.accentSoft,
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: space.md,
                   }}
                 >
-                  <Text
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontFamily: font.sansSemi,
+                        letterSpacing: 1.2,
+                        color: t.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Active cycle
+                    </Text>
+                    <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink, marginTop: 2 }}>
+                      {c.name}
+                    </Text>
+                  </View>
+                  <View
                     style={{
-                      fontSize: 10,
-                      fontFamily: font.sansSemi,
-                      color: t.accentInk,
-                      letterSpacing: 0.5,
-                      textTransform: 'uppercase',
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 6,
+                      backgroundColor: t.accentSoft,
                     }}
                   >
-                    {cycle.phase}
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontFamily: font.sansSemi,
+                        color: t.accentInk,
+                        letterSpacing: 0.5,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {c.phase}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 2, marginBottom: space.sm }}>
+                  {Array.from({ length: Math.min(view.total, 56) }).map((_, i) => {
+                    const scaledI = Math.floor((i * view.total) / Math.min(view.total, 56));
+                    return (
+                      <View
+                        key={i}
+                        style={{
+                          flex: 1,
+                          height: 16,
+                          borderRadius: 2,
+                          backgroundColor: scaledI < view.day ? t.accent : t.surfaceAlt,
+                          opacity: scaledI < view.day ? 0.55 + i / 100 : 1,
+                        }}
+                      />
+                    );
+                  })}
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: t.ink2, fontSize: 13, fontFamily: font.mono }}>
+                    Day {view.displayDay} / {view.total}
+                  </Text>
+                  <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
+                    {view.pct}% · {view.remaining}d left
                   </Text>
                 </View>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 2, marginBottom: space.sm }}>
-                {Array.from({ length: Math.min(cycleView.total, 56) }).map((_, i) => {
-                  const scaledI = Math.floor((i * cycleView.total) / Math.min(cycleView.total, 56));
-                  return (
-                    <View
-                      key={i}
-                      style={{
-                        flex: 1,
-                        height: 16,
-                        borderRadius: 2,
-                        backgroundColor: scaledI < cycleView.day ? t.accent : t.surfaceAlt,
-                        opacity: scaledI < cycleView.day ? 0.55 + i / 100 : 1,
-                      }}
-                    />
-                  );
-                })}
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: t.ink2, fontSize: 13, fontFamily: font.mono }}>
-                  Day {cycleView.displayDay} / {cycleView.total}
-                </Text>
-                <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.mono }}>
-                  {cycleView.pct}% · {cycleView.remaining}d left
-                </Text>
-              </View>
-            </Pressable>
+              </Pressable>
+            ))}
           </View>
         ) : (
           <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
@@ -567,13 +616,19 @@ export default function TodayScreen() {
                 if (!p) return null;
                 const windowLabel =
                   row.window === 'AM' ? 'Morning' : row.window === 'PM' ? 'Evening' : null;
-                const phase = cycleView
-                  ? currentPhaseFor(row.peptide_id, cycleView.day)
+                // Phase math is computed against the row's source cycle so
+                // the right week-of-phase shows when multiple cycles are
+                // running concurrently.
+                const sourceView = activeCycleViews.find(
+                  ({ cycle: c }) => c.id === row.cycleId
+                );
+                const phase = sourceView
+                  ? currentPhaseFor(row.peptide_id, sourceView.view.day)
                   : null;
                 const isSkipped = !!row.skip;
                 return (
                   <Pressable
-                    key={`${row.peptide_id}-${row.window}-${idx}`}
+                    key={`${row.cycleId}-${row.peptide_id}-${row.window}-${idx}`}
                     onPress={() =>
                       isSkipped && row.skip ? unskipRow(row.skip, p.name) : undefined
                     }
@@ -631,6 +686,7 @@ export default function TodayScreen() {
                         }}
                       >
                         {row.dose_mcg} mcg · {row.freq} · {row.time_of_day}
+                        {activeCycleViews.length > 1 ? ` · ${row.cycleName}` : ''}
                       </Text>
                       {phase ? (
                         <Text
@@ -678,7 +734,7 @@ export default function TodayScreen() {
                     ) : (
                       <View style={{ flexDirection: 'row', gap: 6 }}>
                         <Pressable
-                          onPress={() => openSkipSheet(p.id, p.name, row.window)}
+                          onPress={() => openSkipSheet(p.id, p.name, row.window, row.cycleId)}
                           accessibilityRole="button"
                           accessibilityLabel={`Skip ${p.name}`}
                           style={{
@@ -958,82 +1014,12 @@ export default function TodayScreen() {
         </View>
       </ScrollView>
 
-      {/* Dose bottom sheet */}
-      <Modal
-        visible={!!doseSheet}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDoseSheet(null)}
-      >
-        <Pressable
-          onPress={() => setDoseSheet(null)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: t.surface,
-              paddingTop: space.lg,
-              paddingBottom: insets.bottom + space.lg,
-              paddingHorizontal: space.xl,
-              borderTopLeftRadius: radius.lg,
-              borderTopRightRadius: radius.lg,
-              gap: 8,
-            }}
-          >
-            {doseSheet ? (
-              <>
-                <Text style={{ fontSize: 17, fontFamily: font.sansSemi, color: t.ink }}>
-                  {findPeptide(doseSheet.peptide_id)?.name ?? doseSheet.peptide_id}
-                </Text>
-                <Text style={{ fontSize: 13, color: t.ink3, fontFamily: font.mono, marginBottom: space.md }}>
-                  {doseSheet.amount_mcg} mcg · {doseSheet.route} ·{' '}
-                  {new Date(doseSheet.taken_at).toLocaleString()}
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    setDoseSheet(null);
-                    router.push({
-                      pathname: '/log-dose',
-                      params: { peptideId: doseSheet.peptide_id, prefillDoseMcg: doseSheet.amount_mcg },
-                    } as any);
-                  }}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    backgroundColor: t.ink,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Log another
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onDeleteDose(doseSheet.id)}
-                  style={{
-                    padding: space.md,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.danger,
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: t.danger, fontSize: 14, fontFamily: font.sansSemi }}>
-                    Delete dose (restores vial)
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setDoseSheet(null)}
-                  style={{ padding: space.md, alignItems: 'center' }}
-                >
-                  <Text style={{ color: t.ink3, fontSize: 14 }}>Cancel</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Dose bottom sheet — shared with /dose-history */}
+      <DoseDetailSheet
+        dose={doseSheet}
+        onClose={() => setDoseSheet(null)}
+        onDeleted={() => refresh()}
+      />
 
       {/* Vial bottom sheet */}
       <Modal
