@@ -13,6 +13,7 @@ import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { HeroRing } from '../../components/editorial/HeroRing';
 import { StatPair } from '../../components/editorial/StatPair';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { DoseValue } from '../../components/editorial/DoseUnitChip';
 import { getActiveCycle, listCycles, listStacks, type Cycle, type Stack } from '../../lib/db';
 import { findPeptide } from '../../lib/peptides';
 
@@ -458,15 +459,25 @@ function ActiveCycleHero({ cycle }: { cycle: Cycle }) {
                   >
                     {p?.name ?? row.peptide_id}
                   </Text>
-                  <Text
-                    style={{
-                      fontFamily: ed.typography.dataMd.fontFamily,
-                      fontSize: ed.typography.dataMd.fontSize,
-                      color: ed.colors.ink3,
-                    }}
-                  >
-                    {row.dose_mcg} mcg · {row.freq}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <DoseValue
+                      mcg={row.dose_mcg}
+                      valueStyle={{
+                        fontFamily: ed.typography.dataMd.fontFamily,
+                        fontSize: ed.typography.dataMd.fontSize,
+                        color: ed.colors.ink3,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.dataMd.fontFamily,
+                        fontSize: ed.typography.dataMd.fontSize,
+                        color: ed.colors.ink3,
+                      }}
+                    >
+                      · {row.freq}
+                    </Text>
+                  </View>
                 </View>
                 {i < protocol.length - 1 ? <HairlineRow /> : null}
               </View>

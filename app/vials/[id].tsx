@@ -19,6 +19,7 @@ import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { DoseValue } from '../../components/editorial/DoseUnitChip';
 import {
   deactivateVial,
   deleteVial,
@@ -608,27 +609,15 @@ export default function VialDetailScreen() {
                 <View key={d.id}>
                   <View style={{ paddingVertical: 14, gap: 4 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12 }}>
-                      <Text
-                        style={{
+                      <DoseValue
+                        mcg={d.amount_mcg}
+                        valueStyle={{
                           fontFamily: ed.fraunces('Fraunces_400Regular'),
                           fontSize: 22,
                           letterSpacing: -0.4,
                           color: ed.colors.ink1,
                         }}
-                      >
-                        {d.amount_mcg}
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: ed.typography.labelSm.fontFamily,
-                          fontSize: ed.typography.labelSm.fontSize,
-                          letterSpacing: ed.typography.labelSm.letterSpacing,
-                          color: ed.colors.ink3,
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        mcg
-                      </Text>
+                      />
                       <Text
                         style={{
                           flex: 1,

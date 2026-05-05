@@ -7,6 +7,7 @@ import { EditorialHeadline } from '../../components/editorial/EditorialHeadline'
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { DoseValue } from '../../components/editorial/DoseUnitChip';
 import { createStack, type StackItem } from '../../lib/db';
 import { PEPTIDES, findPeptide } from '../../lib/peptides';
 
@@ -336,16 +337,25 @@ export default function NewStack() {
                     >
                       {p?.name ?? it.peptide_id}
                     </Text>
-                    <Text
-                      style={{
-                        marginTop: 2,
-                        fontFamily: ed.typography.dataMd.fontFamily,
-                        fontSize: ed.typography.dataMd.fontSize,
-                        color: ed.colors.ink3,
-                      }}
-                    >
-                      {it.dose_mcg} mcg · {it.freq}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 4 }}>
+                      <DoseValue
+                        mcg={it.dose_mcg}
+                        valueStyle={{
+                          fontFamily: ed.typography.dataMd.fontFamily,
+                          fontSize: ed.typography.dataMd.fontSize,
+                          color: ed.colors.ink3,
+                        }}
+                      />
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.dataMd.fontFamily,
+                          fontSize: ed.typography.dataMd.fontSize,
+                          color: ed.colors.ink3,
+                        }}
+                      >
+                        · {it.freq}
+                      </Text>
+                    </View>
                   </View>
                   <Pressable onPress={() => removeItem(i)} hitSlop={6}>
                     <Text

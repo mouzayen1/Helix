@@ -202,6 +202,10 @@ export async function initDatabase() {
   // v1.3: dismissed in-app banner keys (JSON string array). Generic so
   // future banners just add new keys without new columns.
   await addColumnIfMissing(d, 'profile', 'dismissed_banners', "TEXT NOT NULL DEFAULT '[]'");
+  // v1.3: global dose-display preference. 'auto' uses mg when mcg ≥ 1000,
+  // otherwise mcg. 'mcg' / 'mg' force a single unit everywhere. Storage
+  // is always mcg in dose_mcg / amount_mcg — this is purely a display flag.
+  await addColumnIfMissing(d, 'profile', 'dose_unit_pref', "TEXT NOT NULL DEFAULT 'auto'");
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
@@ -248,6 +252,8 @@ export type Profile = {
   notif_prefs_json: string | null;
   // v1.3: JSON-encoded string[] of dismissed in-app banner keys.
   dismissed_banners: string;
+  // v1.3: global dose-display preference. See lib/dose-format.ts.
+  dose_unit_pref: 'auto' | 'mcg' | 'mg';
 };
 
 export async function getProfile(): Promise<Profile | null> {

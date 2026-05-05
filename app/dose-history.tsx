@@ -14,6 +14,9 @@ import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../components/editorial/HairlineRow';
 import { useEditorialTheme } from '../lib/design/theme';
+import { DoseValue } from '../components/editorial/DoseUnitChip';
+import { useDoseUnitPref } from '../lib/profile-context';
+import { formatDoseLabel, resolveDoseUnit } from '../lib/dose-format';
 import {
   listActiveCycles,
   listCycles,
@@ -51,6 +54,7 @@ function startOfRange(range: DateRangeKey, activeCycles: Cycle[]): Date | null {
 
 export default function DoseHistoryScreen() {
   const ed = useEditorialTheme();
+  const { pref: doseUnitPref } = useDoseUnitPref();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -131,12 +135,14 @@ export default function DoseHistoryScreen() {
 
   const stats = useMemo(() => {
     const count = filtered.length;
-    const totalMg = filtered.reduce((s, d) => s + d.amount_mcg / 1000, 0);
+    const totalMcg = filtered.reduce((s, d) => s + d.amount_mcg, 0);
+    const totalMg = totalMcg / 1000;
     const cycleIds = new Set(filtered.map((d) => d.cycle_id).filter(Boolean));
     const peptideIds = new Set(filtered.map((d) => d.peptide_id));
     const orphanCount = filtered.filter((d) => !d.cycle_id).length;
     return {
       count,
+      totalMcg,
       totalMg,
       cycleCount: cycleIds.size,
       peptideCount: peptideIds.size,
@@ -148,12 +154,19 @@ export default function DoseHistoryScreen() {
     if (stats.count === 0) return 'No doses match this filter';
     const parts: string[] = [];
     parts.push(`${stats.count} dose${stats.count === 1 ? '' : 's'}`);
-    parts.push(`${stats.totalMg.toFixed(stats.totalMg < 1 ? 3 : 2)} mg`);
+    // Aggregations always benefit from mg display once they cross 1 mg,
+    // even if user prefers mcg per-dose. Force mg here; per-row chips
+    // still respect the global pref.
+    const totalUnit = resolveDoseUnit(stats.totalMcg, doseUnitPref);
+    const totalLabel =
+      totalUnit === 'mg'
+        ? `${stats.totalMg.toFixed(stats.totalMg < 1 ? 3 : 2)} mg`
+        : `${Math.round(stats.totalMcg)} mcg`;
+    parts.push(totalLabel);
     if (selectedPeptides.size === 1) {
       const id = Array.from(selectedPeptides)[0];
       const p = findPeptide(id);
-      if (p)
-        parts[parts.length - 1] = `${stats.totalMg.toFixed(stats.totalMg < 1 ? 3 : 2)} mg of ${p.name}`;
+      if (p) parts[parts.length - 1] = `${totalLabel} of ${p.name}`;
     } else if (stats.peptideCount > 1) {
       parts.push(`${stats.peptideCount} peptides`);
     }
@@ -597,7 +610,7 @@ export default function DoseHistoryScreen() {
                     <Pressable
                       onPress={() => setOpenDose(d)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Open dose: ${p?.name ?? d.peptide_id}, ${d.amount_mcg} mcg, ${when.toLocaleString()}`}
+                      accessibilityLabel={`Open dose: ${p?.name ?? d.peptide_id}, ${formatDoseLabel(d.amount_mcg, doseUnitPref)}, ${when.toLocaleString()}`}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'flex-start',
@@ -626,15 +639,14 @@ export default function DoseHistoryScreen() {
                           >
                             {p?.name ?? d.peptide_id}
                           </Text>
-                          <Text
-                            style={{
+                          <DoseValue
+                            mcg={d.amount_mcg}
+                            valueStyle={{
                               fontFamily: ed.typography.dataMd.fontFamily,
                               fontSize: ed.typography.dataMd.fontSize,
                               color: ed.colors.ink2,
                             }}
-                          >
-                            {d.amount_mcg} mcg
-                          </Text>
+                          />
                         </View>
                         <Text
                           style={{

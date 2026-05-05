@@ -16,6 +16,8 @@ import { PhaseTimeline } from '../../components/editorial/PhaseTimeline';
 import { ScheduleItem } from '../../components/editorial/ScheduleItem';
 import { StatPair } from '../../components/editorial/StatPair';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { DoseInputUnitChip } from '../../components/editorial/DoseUnitChip';
+import { formatDose, resolveDoseUnit, type DoseUnit } from '../../lib/dose-format';
 import {
   attachVialToCycle,
   detachVial,
@@ -98,6 +100,10 @@ export default function CycleDetail() {
   const [phase, setPhase] = useState<Cycle['phase']>('active');
   const [status, setStatus] = useState<Cycle['status']>('active');
   const [items, setItems] = useState<ProtocolItem[]>([]);
+  // Per-peptide input-mode override (mcg vs mg) for the edit stepper.
+  // Defaults to mg when current mcg ≥ 1000. Local to this screen; never
+  // touches the global dose_unit_pref.
+  const [doseInputMode, setDoseInputMode] = useState<Record<string, DoseUnit>>({});
   const [startsOn, setStartsOn] = useState<string>('');
   const [durationWeeks, setDurationWeeks] = useState<number>(4);
   const [acceptConflicts, setAcceptConflicts] = useState<boolean>(false);
@@ -840,7 +846,8 @@ export default function CycleDetail() {
                 <ScheduleItem
                   time={time}
                   title={p?.name ?? row.peptide_id}
-                  detail={`${row.dose_mcg} mcg · ${row.freq}`}
+                  detail={row.freq}
+                  doseMcg={row.dose_mcg}
                   status="upcoming"
                 />
                 {i < items.length - 1 ? <HairlineRow /> : null}
@@ -890,20 +897,44 @@ export default function CycleDetail() {
                   </Text>
                 </Pressable>
               </View>
-              <Stepper
-                value={row.dose_mcg}
-                unit="mcg"
-                onMinus={() =>
-                  updateItem(i, {
-                    dose_mcg: Math.max(1, row.dose_mcg - doseStepFor(row.dose_mcg)),
-                  })
-                }
-                onPlus={() =>
-                  updateItem(i, {
-                    dose_mcg: row.dose_mcg + doseStepFor(row.dose_mcg),
-                  })
-                }
-              />
+              {(() => {
+                const inputMode =
+                  doseInputMode[row.peptide_id] ?? resolveDoseUnit(row.dose_mcg, 'auto');
+                const formatted = formatDose(row.dose_mcg, inputMode);
+                return (
+                  <View>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'flex-end',
+                        marginTop: 6,
+                      }}
+                    >
+                      <DoseInputUnitChip
+                        mode={inputMode}
+                        onChange={(next) =>
+                          setDoseInputMode((prev) => ({ ...prev, [row.peptide_id]: next }))
+                        }
+                      />
+                    </View>
+                    <Stepper
+                      value={row.dose_mcg}
+                      display={formatted.value}
+                      unit={formatted.unit}
+                      onMinus={() =>
+                        updateItem(i, {
+                          dose_mcg: Math.max(1, row.dose_mcg - doseStepFor(row.dose_mcg)),
+                        })
+                      }
+                      onPlus={() =>
+                        updateItem(i, {
+                          dose_mcg: row.dose_mcg + doseStepFor(row.dose_mcg),
+                        })
+                      }
+                    />
+                  </View>
+                );
+              })()}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {FREQUENCIES.map((f) => (
                   <Chip

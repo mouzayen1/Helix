@@ -7,6 +7,7 @@ import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { DoseValue } from '../../components/editorial/DoseUnitChip';
 import { deleteStack, getStack, type Stack, type StackItem } from '../../lib/db';
 import { findPeptide } from '../../lib/peptides';
 
@@ -129,18 +130,29 @@ export default function StackDetail() {
                   >
                     {p?.name ?? it.peptide_id}
                   </Text>
-                  <Text
-                    style={{
-                      marginTop: 4,
-                      fontFamily: ed.typography.labelSm.fontFamily,
-                      fontSize: ed.typography.labelSm.fontSize,
-                      letterSpacing: ed.typography.labelSm.letterSpacing,
-                      color: ed.colors.ink3,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {it.dose_mcg} {it.unit} · {it.freq} · {it.time}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}>
+                    <DoseValue
+                      mcg={it.dose_mcg}
+                      valueStyle={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    />
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      · {it.freq} · {it.time}
+                    </Text>
+                  </View>
                 </View>
                 <Text
                   style={{

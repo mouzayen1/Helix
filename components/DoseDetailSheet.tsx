@@ -18,6 +18,8 @@ import { EditorialSheet, SheetHeader } from './editorial/EditorialSheet';
 import { useEditorialTheme } from '../lib/design/theme';
 import { deleteDose, type Dose } from '../lib/db';
 import { findPeptide } from '../lib/peptides';
+import { useDoseUnitPref } from '../lib/profile-context';
+import { formatDoseLabel } from '../lib/dose-format';
 
 type Props = {
   dose: Dose | null;
@@ -29,6 +31,7 @@ type Props = {
 export function DoseDetailSheet({ dose, onClose, onDeleted }: Props) {
   const ed = useEditorialTheme();
   const router = useRouter();
+  const { pref: doseUnitPref } = useDoseUnitPref();
 
   const handleDelete = async () => {
     if (!dose) return;
@@ -45,7 +48,7 @@ export function DoseDetailSheet({ dose, onClose, onDeleted }: Props) {
         <>
           <SheetHeader
             title={peptide?.name ?? dose.peptide_id}
-            detail={`${dose.amount_mcg} mcg · ${dose.route}${dose.site ? ` · ${dose.site}` : ''} · ${new Date(
+            detail={`${formatDoseLabel(dose.amount_mcg, doseUnitPref)} · ${dose.route}${dose.site ? ` · ${dose.site}` : ''} · ${new Date(
               dose.taken_at
             ).toLocaleString()}`}
           />

@@ -36,7 +36,8 @@ import {
 import { isItemScheduledOnDay, resolvePhase } from '../../lib/cycle-helpers';
 import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
-import { useProfile } from '../../lib/profile-context';
+import { useDoseUnitPref, useProfile } from '../../lib/profile-context';
+import { formatDoseLabel } from '../../lib/dose-format';
 
 type CycleProtocolItem = {
   peptide_id: string;
@@ -87,6 +88,7 @@ export default function TodayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useProfile();
+  const { pref: doseUnitPref } = useDoseUnitPref();
 
   const [cycle, setCycle] = useState<Cycle | null>(null);
   const [vials, setVials] = useState<Vial[]>([]);
@@ -483,8 +485,8 @@ export default function TodayScreen() {
                   : 'next';
                 const time = timeLabelForWindow(row.time_of_day, row.window);
                 const detail = row.skip
-                  ? `${row.resolvedDose} mcg · ${row.skip.reason ?? 'skipped'}`
-                  : `${row.resolvedDose} mcg · ${row.resolvedFreq}`;
+                  ? (row.skip.reason ?? 'skipped')
+                  : row.resolvedFreq;
                 return (
                   <View key={`${row.peptide_id}-${row.window}-${idx}`}>
                     <Pressable
@@ -496,6 +498,7 @@ export default function TodayScreen() {
                         time={time}
                         title={p.name}
                         detail={detail}
+                        doseMcg={row.resolvedDose}
                         caption={row.phaseCaption}
                         status={
                           // Override label for the skip case — ScheduleItem's
@@ -535,7 +538,8 @@ export default function TodayScreen() {
                       <ScheduleItem
                         time={time}
                         title={p?.name ?? d.peptide_id}
-                        detail={`${d.amount_mcg} mcg · ${d.route}${d.site ? ` · ${d.site}` : ''}`}
+                        detail={`${d.route}${d.site ? ` · ${d.site}` : ''}`}
+                        doseMcg={d.amount_mcg}
                         status="completed"
                       />
                     </Pressable>
@@ -656,7 +660,7 @@ export default function TodayScreen() {
           <>
             <SheetHeader
               title={findPeptide(doseSheet.peptide_id)?.name ?? doseSheet.peptide_id}
-              detail={`${doseSheet.amount_mcg} mcg · ${doseSheet.route} · ${new Date(
+              detail={`${formatDoseLabel(doseSheet.amount_mcg, doseUnitPref)} · ${doseSheet.route} · ${new Date(
                 doseSheet.taken_at
               ).toLocaleString()}`}
             />

@@ -14,6 +14,13 @@ import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../components/editorial/HairlineRow';
 import { DosingDisclaimer } from '../components/Primitives';
 import { useEditorialTheme } from '../lib/design/theme';
+import { DoseInputUnitChip } from '../components/editorial/DoseUnitChip';
+import {
+  formatDose,
+  parseDoseInput,
+  resolveDoseUnit,
+  type DoseUnit,
+} from '../lib/dose-format';
 import {
   attachVialToCycle,
   getActiveCycle,
@@ -62,6 +69,9 @@ export default function LogDoseModal() {
   const [peptideId, setPeptideId] = useState<string>(initialId || '');
   const [amountMcg, setAmountMcg] = useState(100);
   const [amountText, setAmountText] = useState('100');
+  // Local input mode for the dose field. Defaults to mg when current
+  // mcg ≥ 1000, else mcg. Independent from the global dose_unit_pref.
+  const [doseInputMode, setDoseInputModeState] = useState<DoseUnit>('mcg');
   const [route, setRoute] = useState<Route>('SubQ');
   const [site, setSite] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -120,11 +130,16 @@ export default function LogDoseModal() {
 
   useEffect(() => {
     if (!peptideId) return;
+    const apply = (mcg: number) => {
+      const mode = resolveDoseUnit(mcg, 'auto');
+      setAmountMcg(mcg);
+      setDoseInputModeState(mode);
+      setAmountText(formatDose(mcg, mode).value);
+    };
     if (prefillDoseMcg) {
       const n = parseFloat(prefillDoseMcg);
       if (!isNaN(n) && n > 0) {
-        setAmountMcg(n);
-        setAmountText(String(n));
+        apply(n);
         return;
       }
     }
@@ -136,8 +151,7 @@ export default function LogDoseModal() {
         }[];
         const match = protocol.find((row) => row.peptide_id === peptideId);
         if (match) {
-          setAmountMcg(match.dose_mcg);
-          setAmountText(String(match.dose_mcg));
+          apply(match.dose_mcg);
           return;
         }
       } catch {}
@@ -145,8 +159,7 @@ export default function LogDoseModal() {
     const p = findPeptide(peptideId);
     if (p) {
       const fallback = p.defaultDoseMcg ?? parseDoseRange(p.dose).mid;
-      setAmountMcg(fallback);
-      setAmountText(String(fallback));
+      apply(fallback);
     }
   }, [peptideId, activeCycle, prefillDoseMcg]);
 
@@ -169,13 +182,18 @@ export default function LogDoseModal() {
   }, [peptide]);
 
   const commitDose = () => {
-    const n = parseFloat(amountText);
-    if (isNaN(n) || n <= 0 || n > 500000) {
-      setAmountText(String(amountMcg));
+    const parsed = parseDoseInput(amountText, doseInputMode);
+    if (parsed === null || parsed <= 0 || parsed > 500000) {
+      setAmountText(formatDose(amountMcg, doseInputMode).value);
     } else {
-      setAmountMcg(n);
-      setAmountText(String(n));
+      setAmountMcg(parsed);
+      setAmountText(formatDose(parsed, doseInputMode).value);
     }
+  };
+
+  const onDoseInputModeChange = (next: DoseUnit) => {
+    setDoseInputModeState(next);
+    setAmountText(formatDose(amountMcg, next).value);
   };
 
   const actuallySave = async () => {
@@ -539,7 +557,16 @@ export default function LogDoseModal() {
 
         {/* Dose */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
-          <EyebrowLabel withRule>Dose</EyebrowLabel>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <EyebrowLabel withRule>Dose</EyebrowLabel>
+            <DoseInputUnitChip mode={doseInputMode} onChange={onDoseInputModeChange} />
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 16 }}>
             <TextInput
               value={amountText}
@@ -569,18 +596,19 @@ export default function LogDoseModal() {
                 textTransform: 'uppercase',
               }}
             >
-              mcg
+              {doseInputMode}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {presets.map((preset) => {
               const active = preset === amountMcg;
+              const presetFmt = formatDose(preset, doseInputMode);
               return (
                 <Pressable
                   key={preset}
                   onPress={() => {
                     setAmountMcg(preset);
-                    setAmountText(String(preset));
+                    setAmountText(presetFmt.value);
                   }}
                   style={{
                     paddingVertical: 8,
@@ -599,7 +627,7 @@ export default function LogDoseModal() {
                       textTransform: 'uppercase',
                     }}
                   >
-                    {preset} mcg
+                    {presetFmt.value} {presetFmt.unit}
                   </Text>
                 </Pressable>
               );

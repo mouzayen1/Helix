@@ -4,6 +4,7 @@
 // rows render at low opacity so the eye flows past them to "next".
 import { Pressable, Text, View } from 'react-native';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { DoseValue } from './DoseUnitChip';
 
 export type ScheduleStatus = 'completed' | 'next' | 'upcoming' | 'overdue';
 
@@ -11,13 +12,20 @@ export function ScheduleItem({
   time,
   title,
   detail,
+  doseMcg,
   caption,
   status,
   onPress,
 }: {
   time: string;
   title: string;
+  /** Trailing detail after the dose chip ("· daily", "· skipped",
+   *  "· IM · L thigh"). Don't include the dose value here — pass it
+   *  via doseMcg so the global unit chip can render inline. */
   detail?: string;
+  /** When provided, renders a tappable dose value + unit chip before the
+   *  detail string. Tapping the chip cycles the global dose-unit pref. */
+  doseMcg?: number;
   /** Optional eyebrow above the title — used for phase labels like
    *  "MAINTENANCE · WK 5 / 18" on phased cycle peptides. Mono uppercase,
    *  brass-tinted on the active row, ink3 on completed rows. */
@@ -97,19 +105,34 @@ export function ScheduleItem({
         >
           {title}
         </Text>
-        {detail ? (
-          <Text
-            style={{
-              fontFamily: theme.typography.bodySm.fontFamily,
-              fontSize: theme.typography.bodySm.fontSize,
-              lineHeight: theme.typography.bodySm.lineHeight,
-              color: theme.colors.ink3,
-              marginTop: 2,
-            }}
-            numberOfLines={1}
-          >
-            {detail}
-          </Text>
+        {detail || typeof doseMcg === 'number' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 4 }}>
+            {typeof doseMcg === 'number' ? (
+              <DoseValue
+                mcg={doseMcg}
+                valueStyle={{
+                  fontFamily: theme.typography.bodySm.fontFamily,
+                  fontSize: theme.typography.bodySm.fontSize,
+                  lineHeight: theme.typography.bodySm.lineHeight,
+                  color: theme.colors.ink3,
+                }}
+              />
+            ) : null}
+            {detail ? (
+              <Text
+                style={{
+                  fontFamily: theme.typography.bodySm.fontFamily,
+                  fontSize: theme.typography.bodySm.fontSize,
+                  lineHeight: theme.typography.bodySm.lineHeight,
+                  color: theme.colors.ink3,
+                  flexShrink: 1,
+                }}
+                numberOfLines={1}
+              >
+                {typeof doseMcg === 'number' ? ` · ${detail}` : detail}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </View>
       <Text

@@ -117,6 +117,14 @@ export default function Settings() {
             onChange={(v) => update({ unit_volume: v })}
           />
         </SettingRow>
+        <HairlineRow />
+        <SettingRow label="Dose display">
+          <Segmented
+            value={(profile?.dose_unit_pref ?? 'auto') as 'auto' | 'mcg' | 'mg'}
+            options={['auto', 'mcg', 'mg']}
+            onChange={(v) => update({ dose_unit_pref: v })}
+          />
+        </SettingRow>
         <HairlineRow strong />
       </View>
 

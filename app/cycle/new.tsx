@@ -28,7 +28,15 @@ import {
   type CycleProtocolItemPhase,
   type Vial,
 } from '../../lib/db';
-import { useProfile } from '../../lib/profile-context';
+import { useDoseUnitPref, useProfile } from '../../lib/profile-context';
+import { DoseInputUnitChip, DoseValue } from '../../components/editorial/DoseUnitChip';
+import {
+  formatDose,
+  formatDoseLabel,
+  parseDoseInput,
+  resolveDoseUnit,
+  type DoseUnit,
+} from '../../lib/dose-format';
 
 type Phase = 'loading' | 'active' | 'taper' | 'washout';
 
@@ -770,6 +778,11 @@ export default function NewCycle() {
   const [acceptConflicts, setAcceptConflicts] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [doseText, setDoseText] = useState<Record<string, string>>({});
+  // Per-peptide input-mode override. Defaults to mg when current mcg ≥ 1000,
+  // mcg otherwise — matches the global auto threshold so GLP-1 templates
+  // open with mg-friendly entry. Local to this wizard; never touches the
+  // global dose_unit_pref.
+  const [doseInputMode, setDoseInputMode] = useState<Record<string, DoseUnit>>({});
   // v1.2 — template search query, matching vials surfaced at step 4,
   // and the set of vial ids the user opted to attach to this cycle.
   const [templateQuery, setTemplateQuery] = useState<string>('');
@@ -780,6 +793,7 @@ export default function NewCycle() {
   // record; bannerDismissedLocal is an optimistic flip while the DB
   // write is in flight (and after first phase edit auto-dismisses).
   const { profile } = useProfile();
+  const { pref: doseUnitPref } = useDoseUnitPref();
   const [bannerDismissedLocal, setBannerDismissedLocal] = useState<boolean>(false);
   const isTitrationBannerDismissed =
     bannerDismissedLocal ||
@@ -1144,11 +1158,18 @@ export default function NewCycle() {
     );
   };
 
+  const inputModeFor = (peptide_id: string, mcg: number): DoseUnit =>
+    doseInputMode[peptide_id] ?? resolveDoseUnit(mcg, 'auto');
+
+  const formatDoseForInput = (mcg: number, mode: DoseUnit): string =>
+    formatDose(mcg, mode).value;
+
   const setDoseFromInput = (idx: number, peptide_id: string, raw: string): void => {
     const cleaned = raw.replace(/[^0-9.]/g, '');
     setDoseText((prev) => ({ ...prev, [peptide_id]: cleaned }));
-    const n = parseFloat(cleaned);
-    updateItem(idx, { dose_mcg: isNaN(n) ? 0 : n });
+    const mode = inputModeFor(peptide_id, items[idx]?.dose_mcg ?? 0);
+    const parsed = parseDoseInput(cleaned, mode);
+    updateItem(idx, { dose_mcg: parsed ?? 0 });
   };
 
   const stepDoseBy = (
@@ -1159,7 +1180,14 @@ export default function NewCycle() {
   ): void => {
     const newDose = Math.max(0, current + delta);
     updateItem(idx, { dose_mcg: newDose });
-    setDoseText((prev) => ({ ...prev, [peptide_id]: String(newDose) }));
+    const mode = inputModeFor(peptide_id, newDose);
+    setDoseText((prev) => ({ ...prev, [peptide_id]: formatDoseForInput(newDose, mode) }));
+  };
+
+  const setDoseInputModeFor = (idx: number, peptide_id: string, next: DoseUnit) => {
+    setDoseInputMode((prev) => ({ ...prev, [peptide_id]: next }));
+    const cur = items[idx]?.dose_mcg ?? 0;
+    setDoseText((prev) => ({ ...prev, [peptide_id]: formatDoseForInput(cur, next) }));
   };
 
   // ───────────────────────────────────────────────── render helpers
@@ -1593,7 +1621,9 @@ export default function NewCycle() {
       (c) => c.co_reconstitute === true && !itemIds.has(c.peptide_id)
     );
     const stepBy = doseStepFor(it.dose_mcg);
-    const displayValue = doseText[it.peptide_id] ?? String(it.dose_mcg);
+    const inputMode = inputModeFor(it.peptide_id, it.dose_mcg);
+    const displayValue =
+      doseText[it.peptide_id] ?? formatDoseForInput(it.dose_mcg, inputMode);
     return (
       <View
         style={{
@@ -1637,18 +1667,30 @@ export default function NewCycle() {
           </Pressable>
         </View>
 
-        <Text
+        <View
           style={{
             marginTop: 14,
-            fontFamily: ed.typography.labelSm.fontFamily,
-            fontSize: ed.typography.labelSm.fontSize,
-            letterSpacing: ed.typography.labelSm.letterSpacing,
-            color: ed.colors.ink3,
-            textTransform: 'uppercase',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          Dose · mcg
-        </Text>
+          <Text
+            style={{
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
+            }}
+          >
+            Dose
+          </Text>
+          <DoseInputUnitChip
+            mode={inputMode}
+            onChange={(next) => setDoseInputModeFor(idx, it.peptide_id, next)}
+          />
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
           <Pressable
             onPress={() => stepDoseBy(idx, it.peptide_id, it.dose_mcg, -stepBy)}
@@ -1849,7 +1891,11 @@ export default function NewCycle() {
                       color: ed.colors.ink1,
                     }}
                   >
-                    {ph.dose_mcg ?? it.dose_mcg} mcg
+                    {(() => {
+                      const cur = ph.dose_mcg ?? it.dose_mcg;
+                      const f = formatDose(cur, inputMode);
+                      return `${f.value} ${f.unit}`;
+                    })()}
                   </Text>
                   <Pressable
                     onPress={() => {
@@ -2478,7 +2524,7 @@ export default function NewCycle() {
                       color: ed.colors.ink3,
                     }}
                   >
-                    {it.dose_mcg} mcg · {it.freq} · {it.time_of_day}
+                    {formatDoseLabel(it.dose_mcg, doseUnitPref)} · {it.freq} · {it.time_of_day}
                   </Text>
                 </View>
                 {idx < items.length - 1 ? <HairlineRow /> : null}

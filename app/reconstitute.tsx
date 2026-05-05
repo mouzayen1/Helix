@@ -16,6 +16,8 @@ import { DosingDisclaimer } from '../components/Primitives';
 import { SyringeDiagram } from '../components/SyringeDiagram';
 import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
 import { useEditorialTheme } from '../lib/design/theme';
+import { useDoseUnitPref } from '../lib/profile-context';
+import { formatDoseLabel } from '../lib/dose-format';
 import { createVial, getActiveVial, type Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
@@ -51,6 +53,7 @@ export default function ReconstituteModal() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { pref: doseUnitPref } = useDoseUnitPref();
   const { peptideId: initialId } = useLocalSearchParams<{ peptideId?: string }>();
 
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
@@ -706,7 +709,7 @@ export default function ReconstituteModal() {
               {
                 value: calc.unitsPerDose.toFixed(1),
                 unit: 'u',
-                label: `Per ${targetDoseMcg} mcg`,
+                label: `Per ${formatDoseLabel(targetDoseMcg, doseUnitPref)}`,
               },
               {
                 value: Math.floor(calc.totalDoses),
@@ -764,7 +767,7 @@ export default function ReconstituteModal() {
                 color: ed.colors.ink3,
               }}
             >
-              = {calc.volMlPerDose.toFixed(3)} mL · {targetDoseMcg} mcg per dose
+              = {calc.volMlPerDose.toFixed(3)} mL · {formatDoseLabel(targetDoseMcg, doseUnitPref)} per dose
             </Text>
           </View>
           {/* Calibrated syringe — auto-picks the smallest U-100 barrel
