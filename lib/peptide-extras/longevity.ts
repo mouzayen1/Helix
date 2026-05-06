@@ -31,6 +31,16 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Active malignancy (telomerase modulation theoretical concern)',
     ],
+    overview: {
+      whatItDoes:
+        'Epitalon is a four-amino-acid peptide developed by Russian researcher Vladimir Khavinson, designed to mimic a natural compound called epithalamin found in the pineal gland. Its primary research interest is telomerase activation — telomeres are the protective caps on your chromosomes that shorten with age, and Epitalon has shown ability to lengthen them in laboratory studies. Russian clinical studies in elderly populations report improvements in sleep, melatonin rhythm, and possibly lifespan. Western research is much more limited. Typically used in short pulsed protocols (10–20 days, once or twice per year) rather than continuous daily use.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   ss31: {
@@ -96,6 +106,18 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Severe cardiovascular disease (the flushing reaction can be intense)',
     ],
+    overview: {
+      whatItDoes:
+        "NAD+ isn't a peptide — it's a coenzyme your cells use for energy production and DNA repair. Levels naturally drop with age (estimates put 60-year-olds at half the levels of 20-year-olds), and many longevity researchers consider this drop central to many aspects of aging. NAD+ injections aim to restore those levels directly, with reports of improved energy, cognition, and metabolic function. Strong preclinical data; emerging human clinical research. Note that injections are uncomfortable for many people — slow infusion is often preferred.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). NAD+ is more sensitive to heat and light than most peptides.',
+        afterMixing:
+          'Refrigerate. Use within 14 days — NAD+ degrades faster post-reconstitution than most peptides.',
+        handling:
+          'Keep away from light. The solution should be clear and slightly yellow — discard if the color deepens significantly.',
+      },
+    },
   },
 
   foxo: {
@@ -120,6 +142,16 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Active malignancy without oncologist oversight',
     ],
+    overview: {
+      whatItDoes:
+        'FOXO4-DRI is an experimental "senolytic" peptide — designed to selectively kill senescent cells. Senescent cells are old cells that have stopped dividing but refuse to die; they accumulate with age and produce inflammatory signals that contribute to many age-related conditions. FOXO4-DRI selectively triggers the death of these "zombie" cells while sparing healthy ones, at least in laboratory and animal studies. Most research is preclinical; human data is essentially nonexistent. Considered one of the most exciting longevity research compounds, but also one with the least real-world safety data.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   humanin: {
@@ -143,5 +175,15 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
       'No human use protocol — research context only',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'Humanin is a small peptide encoded by your mitochondrial DNA — like MOTS-c, it\'s part of a small family of "mitochondrial peptides" that researchers think coordinate energy metabolism and stress response across cells. Humanin has shown protective effects against neurodegenerative diseases, metabolic dysfunction, and various forms of cellular stress in animal studies. Some longevity researchers describe it as a "longevity gene" peptide. Most evidence is preclinical; human data is very limited.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 };

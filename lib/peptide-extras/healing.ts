@@ -199,5 +199,15 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Active malignancy',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        "Pentadeca Arginate is a modified version of BPC-157 — the same 15-amino-acid sequence, but with an arginate salt form rather than the standard acetate form. The change is subtle but meaningful: arginate may improve stability, absorption, and potentially extend the peptide's half-life, which has historically been one of BPC-157's limitations. Researchers and users exploring it often pair it with or substitute it for BPC-157, looking for similar tissue-repair effects with potentially better real-world performance. Evidence is very limited — most data is inferred from BPC-157 research rather than studied directly.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen, 1 year refrigerated.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: "Keep away from light. Don't shake — swirl gently to dissolve.",
+      },
+    },
   },
 };
