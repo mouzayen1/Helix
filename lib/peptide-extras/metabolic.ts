@@ -324,6 +324,16 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Anxiety disorders or psychiatric history (monoamine stimulation can worsen)',
     ],
+    overview: {
+      whatItDoes:
+        "Tesofensine isn't a peptide — it's a small-molecule drug (technically a triple monoamine reuptake inhibitor) that increases brain levels of serotonin, dopamine, and norepinephrine. The result is significant appetite suppression and increased energy expenditure. Originally developed for Alzheimer's and Parkinson's, it failed for those uses but turned out to produce substantial weight loss in trials — about 10% body weight over 6 months at higher doses, which is comparable to Semaglutide. Currently approved for obesity in some countries (notably Mexico under the brand Nupode); not FDA-approved in the US. Functions more like a stimulant than a metabolic hormone, which means a different side-effect profile than GLP-1s.",
+      storage: {
+        beforeMixing:
+          'Most often supplied as oral capsules or tablets — store at room temperature, away from light and humidity.',
+        afterMixing:
+          'If supplied as a powder: store sealed in a cool dry place.',
+      },
+    },
   },
 
   amq: {

@@ -316,6 +316,16 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       'Active malignancy',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        "GHRP-2 is a synthetic ghrelin mimetic similar to GHRP-6 — it tells your pituitary to release growth hormone and stimulates appetite, though typically with less hunger and less cortisol elevation than GHRP-6. Among the GHRP family, GHRP-2 produces the strongest GH pulse but isn't as \"clean\" as Ipamorelin, which selectively triggers GH without affecting other hormones. Often paired with a GHRH peptide like CJC-1295 (no DAC) for synergistic effect. Mostly preclinical research with limited human data.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   ghrp6: {

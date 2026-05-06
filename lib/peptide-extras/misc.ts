@@ -30,6 +30,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Known hypersensitivity to bremelanotide',
     ],
+    overview: {
+      whatItDoes:
+        'PT-141 is a synthetic peptide that activates melanocortin receptors in the brain — specifically the ones involved in sexual arousal pathways. Unlike Viagra and similar drugs, which work on blood flow, PT-141 works on the central nervous system signal for arousal itself. FDA-approved for low sexual desire in premenopausal women under the brand Vyleesi. Used off-label by both men and women for arousal and erectile concerns, especially when blood-flow drugs haven\'t worked. Effects typically begin 2–6 hours after injection and can last several hours.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   mt2: {
@@ -63,6 +73,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Uncontrolled hypertension or cardiovascular disease',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'Melanotan II is a synthetic peptide that activates the same melanocortin receptors as PT-141, but with broader activity — it triggers melanin production in skin (the actual "tanning" effect, independent of UV exposure), affects sexual arousal, and can suppress appetite. Originally researched as a sunless tanning aid; has become popular for cosmetic skin darkening and as a "tan accelerator." Not FDA-approved for any use. The combination of pigment-changing effects with the same nausea and cardiovascular profile as PT-141 makes the side-effect profile heavier than most peptides.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   kiss10: {
@@ -88,6 +108,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Pregnancy (unless under specific fertility protocol)',
       'No standardized non-clinical protocol',
     ],
+    overview: {
+      whatItDoes:
+        'Kisspeptin-10 is the active fragment of kisspeptin, a natural peptide your hypothalamus produces to control reproductive hormone signaling. It triggers your body to release LH and FSH, which then stimulate your gonads to produce testosterone (males) or estrogen and follicle development (females). Researchers explore it for restoring hormonal function — particularly in cases where the natural signal has been suppressed (e.g., after long-term hormonal therapy, or in certain reproductive disorders). Increasingly studied clinically; less speculative than many peptides on this list. Has been used in human reproductive medicine research.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   oxy: {
@@ -114,6 +144,17 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Breastfeeding (oxytocin readily transfers)',
       'Active psychiatric crisis without clinical supervision',
     ],
+    overview: {
+      whatItDoes:
+        'Oxytocin is a natural hormone your hypothalamus produces, often called "the bonding hormone" because of its role in childbirth, breastfeeding, and social attachment. Synthetic oxytocin is FDA-approved for inducing labor and controlling postpartum bleeding (under the brand Pitocin). Outside those clinical uses, researchers and users explore it for social anxiety, bonding, autism-spectrum support, and as an aid for couples therapy contexts. Effects on mood and social behavior are subtle and variable — not everyone responds the same way, and high-quality human research outside of childbirth applications is limited. Most often used as a nasal spray for the cognitive/social applications.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling:
+          'Nasal spray preparations: refrigerate after opening, use within 30 days. Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   dsip: {
@@ -139,6 +180,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Severe untreated sleep-disordered breathing (any sedating peptide warrants caution)',
     ],
+    overview: {
+      whatItDoes:
+        'DSIP is a small peptide isolated from rabbit brain in the 1970s, named for its ability to induce delta-wave (deep) sleep in early animal studies. The story since then has been more complicated — subsequent research has produced mixed results, and the exact mechanism remains unclear. Despite this, it\'s used by researchers and biohackers for sleep quality, stress modulation, and recovery from sleep deprivation. Most evidence is preclinical and dated; modern clinical trials are limited. The peptide is real and well-characterized; the practical effect varies considerably between users.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   igflr3: {
@@ -179,6 +230,18 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Diabetic retinopathy (IGF-1 can worsen proliferative retinopathy)',
     ],
+    overview: {
+      whatItDoes:
+        "IGF-1 LR3 is a modified form of insulin-like growth factor 1 — your body's natural growth signal that mediates many of growth hormone's anabolic effects. The \"LR3\" modification (Long Arg3) extends the half-life from minutes to about 20–30 hours and reduces binding to inhibitory carrier proteins, making it more active in tissue. Researchers and athletes use it for muscle growth, recovery, and tissue repair; effects can be substantial but so can the risks. Among peptides, IGF-1 LR3 has one of the more aggressive risk profiles — it directly drives cellular growth in many tissues, which is the source of both its benefits and its concerns.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing:
+          'After mixing with acetic acid solution (typical solvent for IGF-1 LR3, not standard bacteriostatic water): refrigerate. Use within 30 days.',
+        handling:
+          'Keep away from light. Swirl gently to dissolve. Note that IGF-1 LR3 typically requires acetic acid as the diluent rather than bacteriostatic water — verify the correct solvent before reconstituting.',
+      },
+    },
   },
 
   igfdes: {
@@ -207,6 +270,18 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Hypoglycemia-prone individuals',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'IGF-DES is another modified form of IGF-1 — specifically, it has the first three amino acids removed. The result is a shorter half-life (about 20–30 minutes) but much higher receptor affinity at the local injection site, making it act primarily where it\'s injected rather than systemically. Researchers and athletes use it for site-specific tissue effects, often injecting near a muscle group they want to target. Compared to IGF-1 LR3, it\'s shorter-acting and more localized, which some users prefer for the reduced systemic exposure. Most evidence is preclinical with limited human data.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing:
+          'After mixing with acetic acid solution: refrigerate. Use within 30 days.',
+        handling:
+          'Keep away from light. Swirl gently to dissolve. Like IGF-1 LR3, IGF-DES typically requires acetic acid rather than bacteriostatic water — verify before reconstituting.',
+      },
+    },
   },
 
   pegmgf: {

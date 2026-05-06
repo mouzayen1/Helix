@@ -132,6 +132,16 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Active malignancy',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'Thymosin Beta-4 full-length is the complete 43-amino-acid native protein, distinct from TB-500 (the synthetic acetylated version most users mean when they say "TB-500"). The full-length version is what your body actually produces — found in essentially every cell type, with concentrations highest in platelets and white blood cells. It coordinates cell migration, blood vessel formation, and tissue repair. Most peptide research and product use focuses on TB-500 (the synthetic) rather than the native full-length, but some researchers prefer the native sequence for its broader biological activity. Evidence is largely preclinical with limited human clinical data; most inferences come from TB-500 research.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve — never shake.',
+      },
+    },
   },
 
   ghkcu: {

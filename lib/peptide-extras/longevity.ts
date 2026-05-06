@@ -68,6 +68,16 @@ export const LONGEVITY_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Severe renal impairment (clearance not fully studied)',
     ],
+    overview: {
+      whatItDoes:
+        "SS-31 (also called Elamipretide or Bendavia) is a small peptide that targets cardiolipin, a fat molecule found exclusively in the inner membrane of mitochondria. By stabilizing cardiolipin, SS-31 helps mitochondria — your cells' energy factories — function more efficiently and resist age-related dysfunction. Researchers focus on it for heart failure, mitochondrial diseases, age-related muscle loss, and cellular aging in general. Has progressed through clinical trials (mixed results in heart failure trials; ongoing research in primary mitochondrial diseases). One of the more clinically advanced \"longevity\" peptides.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   nad: {
