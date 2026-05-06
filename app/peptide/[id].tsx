@@ -19,6 +19,7 @@ import { isSaved, savePeptide, unsavePeptide } from '../../lib/db';
 import {
   DISCLAIMER_BEGINNER,
   DISCLAIMER_CITATION_FOOTER,
+  DISCLAIMER_SHORT,
 } from '../../lib/disclaimers';
 import { getPeptideExtras } from '../../lib/peptide-extras';
 import { findPeptide, PEPTIDES } from '../../lib/peptides';
@@ -311,52 +312,253 @@ export default function PeptideDetailScreen() {
       {/* OVERVIEW */}
       {tab === 'overview' ? (
         <View style={{ paddingHorizontal: 24, marginTop: 24, gap: 28 }}>
-          {p.sequence ? (
-            <View>
-              <EyebrowLabel withRule>Sequence</EyebrowLabel>
-              <Text
-                style={{
-                  marginTop: 12,
-                  fontFamily: ed.typography.dataMd.fontFamily,
-                  fontSize: 13,
-                  lineHeight: 20,
-                  color: ed.colors.ink2,
-                }}
-              >
-                {p.sequence}
-              </Text>
-            </View>
-          ) : null}
-          <View>
-            <EyebrowLabel withRule>Research summary</EyebrowLabel>
-            <Text
-              style={{
-                marginTop: 14,
-                fontFamily: ed.fraunces('Fraunces_400Regular'),
-                fontSize: 17,
-                lineHeight: 26,
-                color: ed.colors.ink2,
-              }}
-            >
-              {p.summary || 'Research summary is being prepared for this entry.'}
-            </Text>
-          </View>
-          {extras?.benefits ? (
-            <View>
-              <EyebrowLabel withRule>What this peptide is for</EyebrowLabel>
-              <Text
-                style={{
-                  marginTop: 14,
-                  fontFamily: ed.typography.bodyMd.fontFamily,
-                  fontSize: 15,
-                  lineHeight: 23,
-                  color: ed.colors.ink2,
-                }}
-              >
-                {extras.benefits}
-              </Text>
-            </View>
-          ) : null}
+          {/* MIGRATED LAYOUT — when extras.overview.whatItDoes exists,
+              Overview becomes the friendly orientation layer. Side
+              effects + contraindications move here from Research. */}
+          {extras?.overview?.whatItDoes ? (
+            <>
+              <View>
+                <EyebrowLabel withRule>What it does</EyebrowLabel>
+                <Text
+                  style={{
+                    marginTop: 14,
+                    fontFamily: ed.fraunces('Fraunces_400Regular'),
+                    fontSize: 17,
+                    lineHeight: 26,
+                    color: ed.colors.ink2,
+                  }}
+                >
+                  {extras.overview.whatItDoes}
+                </Text>
+              </View>
+              {extras.sideEffects?.length ? (
+                <View>
+                  <EyebrowLabel withRule>Side effects</EyebrowLabel>
+                  <View
+                    style={{
+                      marginTop: 14,
+                      borderTopWidth: 1,
+                      borderBottomWidth: 1,
+                      borderColor: ed.colors.stateModerate,
+                      paddingVertical: 14,
+                      gap: 8,
+                    }}
+                  >
+                    {extras.sideEffects.map((s) => (
+                      <Text
+                        key={s}
+                        style={{
+                          fontFamily: ed.typography.bodyMd.fontFamily,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        · {s}
+                      </Text>
+                    ))}
+                  </View>
+                  <Text
+                    style={{
+                      marginTop: 8,
+                      fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                      fontSize: 13,
+                      lineHeight: 19,
+                      color: ed.colors.ink3,
+                    }}
+                  >
+                    Not a complete list. Reactions vary person to person.
+                  </Text>
+                </View>
+              ) : null}
+              {extras.contraindications?.length ? (
+                <View>
+                  <EyebrowLabel withRule>Contraindications</EyebrowLabel>
+                  <View
+                    style={{
+                      marginTop: 14,
+                      borderTopWidth: 1,
+                      borderBottomWidth: 1,
+                      borderColor: ed.colors.stateWarn,
+                      paddingVertical: 14,
+                      gap: 8,
+                    }}
+                  >
+                    {extras.contraindications.map((c) => (
+                      <Text
+                        key={c}
+                        style={{
+                          fontFamily: ed.typography.bodyMd.fontFamily,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        ✕ {c}
+                      </Text>
+                    ))}
+                  </View>
+                  {/* Attorney-reviewed single-source disclaimer string.
+                      Italic ink3, hairline-separated, NOT an eyebrow —
+                      reads as fine-print attached to the section above,
+                      not a separate categorical block. */}
+                  <View
+                    style={{
+                      marginTop: 12,
+                      paddingTop: 12,
+                      borderTopWidth: 1,
+                      borderTopColor: ed.colors.line,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                        fontSize: 13,
+                        lineHeight: 19,
+                        color: ed.colors.ink3,
+                      }}
+                    >
+                      {DISCLAIMER_SHORT}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+              {extras.overview.storage ? (
+                <View>
+                  <EyebrowLabel withRule>Storage</EyebrowLabel>
+                  <View style={{ marginTop: 14, gap: 16 }}>
+                    <View>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.brand,
+                          textTransform: 'uppercase',
+                          marginBottom: 6,
+                        }}
+                      >
+                        Before mixing
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.bodyMd.fontFamily,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        {extras.overview.storage.beforeMixing}
+                      </Text>
+                    </View>
+                    <View>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          letterSpacing: ed.typography.labelSm.letterSpacing,
+                          color: ed.colors.brand,
+                          textTransform: 'uppercase',
+                          marginBottom: 6,
+                        }}
+                      >
+                        After mixing
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.bodyMd.fontFamily,
+                          fontSize: 14,
+                          lineHeight: 21,
+                          color: ed.colors.ink2,
+                        }}
+                      >
+                        {extras.overview.storage.afterMixing}
+                      </Text>
+                    </View>
+                    {extras.overview.storage.handling ? (
+                      <View>
+                        <Text
+                          style={{
+                            fontFamily: ed.typography.labelSm.fontFamily,
+                            fontSize: ed.typography.labelSm.fontSize,
+                            letterSpacing: ed.typography.labelSm.letterSpacing,
+                            color: ed.colors.brand,
+                            textTransform: 'uppercase',
+                            marginBottom: 6,
+                          }}
+                        >
+                          Handling
+                        </Text>
+                        <Text
+                          style={{
+                            fontFamily: ed.typography.bodyMd.fontFamily,
+                            fontSize: 14,
+                            lineHeight: 21,
+                            color: ed.colors.ink2,
+                          }}
+                        >
+                          {extras.overview.storage.handling}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            /* LEGACY LAYOUT — peptides without authored overview content
+               keep the v1.3 Overview structure (sequence + research
+               summary + benefits). Side effects + contraindications
+               stay on Research for these peptides. */
+            <>
+              {p.sequence ? (
+                <View>
+                  <EyebrowLabel withRule>Sequence</EyebrowLabel>
+                  <Text
+                    style={{
+                      marginTop: 12,
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: 13,
+                      lineHeight: 20,
+                      color: ed.colors.ink2,
+                    }}
+                  >
+                    {p.sequence}
+                  </Text>
+                </View>
+              ) : null}
+              <View>
+                <EyebrowLabel withRule>Research summary</EyebrowLabel>
+                <Text
+                  style={{
+                    marginTop: 14,
+                    fontFamily: ed.fraunces('Fraunces_400Regular'),
+                    fontSize: 17,
+                    lineHeight: 26,
+                    color: ed.colors.ink2,
+                  }}
+                >
+                  {p.summary || 'Research summary is being prepared for this entry.'}
+                </Text>
+              </View>
+              {extras?.benefits ? (
+                <View>
+                  <EyebrowLabel withRule>What this peptide is for</EyebrowLabel>
+                  <Text
+                    style={{
+                      marginTop: 14,
+                      fontFamily: ed.typography.bodyMd.fontFamily,
+                      fontSize: 15,
+                      lineHeight: 23,
+                      color: ed.colors.ink2,
+                    }}
+                  >
+                    {extras.benefits}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
           {stackPartnerLinks.length > 0 ? (
             <View>
               <EyebrowLabel withRule>Common stack partners</EyebrowLabel>
@@ -628,6 +830,41 @@ export default function PeptideDetailScreen() {
       {/* RESEARCH */}
       {tab === 'research' ? (
         <View style={{ paddingHorizontal: 24, marginTop: 24, gap: 28 }}>
+          {/* When migrated, sequence + p.summary move here from Overview
+              so the technical content has a home. Legacy peptides keep
+              these on Overview and skip this block. */}
+          {extras?.overview?.whatItDoes && p.sequence ? (
+            <View>
+              <EyebrowLabel withRule>Sequence</EyebrowLabel>
+              <Text
+                style={{
+                  marginTop: 12,
+                  fontFamily: ed.typography.dataMd.fontFamily,
+                  fontSize: 13,
+                  lineHeight: 20,
+                  color: ed.colors.ink2,
+                }}
+              >
+                {p.sequence}
+              </Text>
+            </View>
+          ) : null}
+          {extras?.overview?.whatItDoes && p.summary ? (
+            <View>
+              <EyebrowLabel withRule>Research summary</EyebrowLabel>
+              <Text
+                style={{
+                  marginTop: 14,
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 17,
+                  lineHeight: 26,
+                  color: ed.colors.ink2,
+                }}
+              >
+                {p.summary}
+              </Text>
+            </View>
+          ) : null}
           {mechParagraphs.length > 0 ? (
             <View>
               <EyebrowLabel withRule>Mechanism</EyebrowLabel>
@@ -823,7 +1060,11 @@ export default function PeptideDetailScreen() {
             </View>
           ) : null}
 
-          {extras && (extras.sideEffects?.length || extras.contraindications?.length) ? (
+          {/* Side effects + contraindications move to Overview when the
+              peptide is migrated. Legacy peptides keep them here. */}
+          {!extras?.overview?.whatItDoes &&
+          extras &&
+          (extras.sideEffects?.length || extras.contraindications?.length) ? (
             <View>
               <EyebrowLabel withRule>Side effects & cautions</EyebrowLabel>
               {extras.sideEffects?.length ? (

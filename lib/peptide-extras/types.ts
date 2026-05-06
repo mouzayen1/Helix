@@ -29,6 +29,31 @@ export type CycleTemplate = {
   phases?: CyclePhase[];
 };
 
+export type PeptideOverviewStorage = {
+  /** "Refrigerate at 36-46°F (2-8°C). Stable up to 2 years frozen, 1 year refrigerated." */
+  beforeMixing: string;
+  /** "Refrigerate. Use within 30 days." */
+  afterMixing: string;
+  /** Optional handling notes — light/shake/swirl. */
+  handling?: string;
+};
+
+/**
+ * v1.4 plain-language overview block for the Peptide Detail screen.
+ *
+ * Presence of `whatItDoes` is the per-peptide migration flag: when it
+ * exists, the Overview tab renders WHAT IT DOES + SIDE EFFECTS +
+ * CONTRAINDICATIONS + STORAGE, and the Research tab strips
+ * sideEffects/contraindications (they now live on Overview). When it's
+ * absent, both tabs render exactly as v1.3 — every peptide is
+ * internally consistent, no half-migrated states.
+ */
+export type PeptideOverview = {
+  /** 80-120 word friendly explanation. Honest about evidence quality. */
+  whatItDoes: string;
+  storage: PeptideOverviewStorage;
+};
+
 export type PeptideExtras = {
   benefits: string;
   beginnerProtocol: string;
@@ -46,6 +71,8 @@ export type PeptideExtras = {
   sideEffects?: string[];
   /** Hard-no situations: pregnancy, family history, active malignancy, etc. */
   contraindications?: string[];
+  /** Plain-language Overview tab content. See PeptideOverview docs. */
+  overview?: PeptideOverview;
 };
 
 export type PeptideExtrasMap = Record<string, PeptideExtras>;
