@@ -25,6 +25,17 @@ export const IMMUNE_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Known autoimmune flare during dosing — limited data on bidirectional effects',
     ],
+    overview: {
+      whatItDoes:
+        "KPV is a tiny three-amino-acid fragment of alpha-MSH (a hormone involved in immune regulation). It's powerfully anti-inflammatory, especially in the gut. Most research focuses on inflammatory bowel conditions (colitis, Crohn's-related inflammation) where it appears to calm overactive immune signaling without the broad immune suppression of steroids. Often used orally for gut issues, though it can also be injected. Most evidence is preclinical with limited but growing human data.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling:
+          'Oral preparations (capsules): store at room temperature, away from light and humidity.',
+      },
+    },
   },
 
   ta1: {
@@ -50,6 +61,16 @@ export const IMMUNE_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Known hypersensitivity to thymic peptides',
     ],
+    overview: {
+      whatItDoes:
+        "Thymosin Alpha-1 is a peptide your thymus naturally produces to coordinate immune function. As you age, thymus function declines and so do your levels of this peptide. Synthetic Thymosin Alpha-1 (sold as Zadaxin in some countries) helps the immune system recognize threats more effectively — it's been used clinically for hepatitis B and C, and is being researched for chronic infections, cancer adjunct therapy, and autoimmune conditions. One of the most-studied immune peptides with substantial human clinical data.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   ll37: {
@@ -75,5 +96,15 @@ export const IMMUNE_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'No standardized human use protocol',
     ],
+    overview: {
+      whatItDoes:
+        'LL-37 is a natural antimicrobial peptide — your immune system makes it to fight bacteria, viruses, and fungi. Synthetic versions are being researched for chronic infections, biofilm-related issues (e.g., chronic Lyme, persistent UTIs), and wound healing. Beyond its direct antimicrobial activity, it also modulates inflammation in complex ways. Most evidence is preclinical; human data is limited but growing in chronic-infection contexts.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 };

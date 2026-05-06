@@ -46,6 +46,18 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Active or prior pancreatitis',
       'Pregnancy (label: stop ≥2 months before planned conception)',
     ],
+    overview: {
+      whatItDoes:
+        'Semaglutide mimics a natural gut hormone called GLP-1 that signals fullness to your brain and slows how fast your stomach empties. Net effect: you feel full sooner, stay full longer, and your appetite drops noticeably. It also helps your body release insulin in response to meals, which is why it was originally approved for type 2 diabetes (sold as Ozempic) before being approved for obesity (sold as Wegovy). Among peptides, this is one of the most thoroughly studied — large-scale human trials show 10–15% body weight loss over 6–12 months in obesity studies.',
+      storage: {
+        beforeMixing:
+          "Refrigerate at 36–46°F (2–8°C). Do not freeze. Do not use if it's been frozen.",
+        afterMixing:
+          'Refrigerate. Use within 28 days (per FDA labeling for prescription Semaglutide).',
+        handling:
+          'Keep away from light. The solution should be clear and colorless — discard if cloudy or discolored.',
+      },
+    },
   },
 
   tirz: {
@@ -83,6 +95,18 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Active or prior pancreatitis',
       'Pregnancy',
     ],
+    overview: {
+      whatItDoes:
+        'Tirzepatide is a "dual agonist" — it activates two natural gut hormones at once: GLP-1 (the same one Semaglutide mimics) and GIP. Hitting both signals simultaneously creates a stronger appetite-suppression and blood-sugar effect than GLP-1 alone. You feel full sooner, stay full longer, and your insulin response improves. Originally approved for type 2 diabetes (sold as Mounjaro), then for obesity (sold as Zepbound). Among peptides, this is one of the most thoroughly studied — large human trials show 15–22% body weight loss over 18 months, meaningfully more than Semaglutide.',
+      storage: {
+        beforeMixing:
+          "Refrigerate at 36–46°F (2–8°C). Do not freeze. Do not use if it's been frozen.",
+        afterMixing:
+          'Refrigerate. Use within 28 days (per FDA labeling).',
+        handling:
+          'Keep away from light. The solution should be clear and colorless — discard if cloudy.',
+      },
+    },
   },
 
   reta: {
@@ -117,6 +141,18 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Active or prior pancreatitis',
       'Pregnancy',
     ],
+    overview: {
+      whatItDoes:
+        'Retatrutide is a "triple agonist" — it activates three natural gut hormones at once: GLP-1, GIP, and glucagon. Adding glucagon to the mix is the new variable: it increases the rate at which your body burns stored fat for energy, on top of the appetite suppression you get from the other two. Phase 2 human trials showed roughly 24% body weight loss over 11 months — the highest reduction of any obesity drug studied so far. Currently in Phase 3 trials with Eli Lilly; not yet FDA-approved. Most users accessing it now are doing so for research purposes ahead of approval.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. Less storage data is published for Reta than for older GLP-1s — observe for cloudiness or discoloration.',
+        handling:
+          "Keep away from light. Don't shake; swirl gently to dissolve.",
+      },
+    },
   },
 
   lira: {
@@ -152,6 +188,17 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Active or prior pancreatitis',
       'Pregnancy',
     ],
+    overview: {
+      whatItDoes:
+        "Liraglutide is the older sibling of Semaglutide — same GLP-1 mimicking mechanism, but a shorter-acting version that requires daily injections instead of weekly. Originally approved for type 2 diabetes (Victoza) and later for obesity (Saxenda). Because the half-life is shorter (~13 hours vs Semaglutide's ~7 days), the effects are smoother day-to-day but require more frequent dosing. Effective in human trials but typically produces less weight loss than Semaglutide or Tirzepatide — usually 5–10% over 6–12 months.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze.',
+        afterMixing:
+          'Refrigerate. Use within 30 days (per FDA labeling for prescription forms).',
+        handling: 'Keep away from light. The solution should be clear — discard if cloudy.',
+      },
+    },
   },
 
   cagri: {
@@ -186,6 +233,16 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Pregnancy',
       'Active pancreatitis',
     ],
+    overview: {
+      whatItDoes:
+        "Cagrilintide is a synthetic version of amylin, a hormone your pancreas releases alongside insulin to signal fullness and slow stomach emptying. It works through a different pathway than GLP-1, which is why it's often paired with Semaglutide (the combination is called CagriSema). On its own, it provides modest weight loss; combined with Semaglutide, the weight loss is meaningfully larger than either alone. Phase 2 human trials are promising; Phase 3 in progress. Not yet FDA-approved as a standalone product.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   aod: {
@@ -218,6 +275,16 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     contraindications: [
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'AOD-9604 is a small piece of human growth hormone designed specifically for fat loss. It signals your body to break down stored fat for energy without triggering the muscle-growth, blood-sugar, or IGF-1 effects of full growth hormone. Originally developed as an anti-obesity drug in human trials, results were modest (about 2–3% body fat loss over 12 weeks) — not enough to win FDA approval as obesity treatment. Most current research and use is for targeted fat loss in stubborn areas, often paired with other compounds.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen, 1 year refrigerated.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: "Keep away from light. Don't shake — swirl gently to dissolve.",
+      },
+    },
   },
 
   tesofensine: {
@@ -280,6 +347,16 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     contraindications: [
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        '5-Amino-1MQ is a small molecule (technically not a peptide, despite often being grouped with them) that blocks an enzyme called NNMT. NNMT activity is elevated in obese fat tissue, where it interferes with fat-burning and energy metabolism. By blocking NNMT, 5-Amino-1MQ allows fat cells to burn energy more efficiently — essentially "unlocking" stuck fat metabolism. Most evidence is preclinical (mouse studies show significant fat loss without dietary changes). Human data is very limited but growing among researchers and athletes.',
+      storage: {
+        beforeMixing:
+          'Most often supplied as oral capsules — store at room temperature, away from light and humidity.',
+        afterMixing:
+          'If supplied as injectable powder: refrigerate before mixing at 36–46°F (2–8°C). After mixing with bacteriostatic water, refrigerate and use within 30 days.',
+      },
+    },
   },
 
   motsc: {
@@ -305,5 +382,15 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     contraindications: [
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'MOTS-c is a "mitochondrial peptide" — encoded inside your mitochondria (your cells\' energy factories) rather than your nuclear DNA, which is unusual. It signals your mitochondria to burn energy more efficiently, improves how your muscles use glucose, and seems to mimic some of the metabolic benefits of exercise. Research connects it to improved insulin sensitivity, fat loss, and possibly slowed aging. Most evidence is preclinical with promising animal studies; early human trials are underway. Used by researchers interested in metabolic health and longevity.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 };

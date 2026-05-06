@@ -39,6 +39,17 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Active malignancy (pre-clinical angiogenic activity is a theoretical concern)',
       'Pregnancy and breastfeeding (no human safety data)',
     ],
+    overview: {
+      whatItDoes:
+        'BPC-157 is a small protein fragment originally found in human stomach acid, where it helps protect and repair the gut lining. Researchers synthesized it as a standalone compound to study its healing effects on tendons, ligaments, joints, and the digestive tract. In animal studies, it shows strong tissue-repair activity — speeding recovery from tears, ulcers, and inflammation. Most evidence is preclinical (animal models); human clinical trials are limited but anecdotal reports from athletes and researchers are extensive.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Freeze for long-term storage — stable up to 2 years frozen, 1 year refrigerated.',
+        afterMixing: 'Keep refrigerated. Use within 30 days.',
+        handling:
+          "Keep away from light. Don't shake the vial — swirl gently to dissolve. Avoid temperature swings.",
+      },
+    },
   },
 
   tb500: {
@@ -81,6 +92,17 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Pregnancy and breastfeeding',
       'Athletes subject to WADA testing',
     ],
+    overview: {
+      whatItDoes:
+        "TB-500 is a synthetic version of a fragment from Thymosin Beta-4, a protein your body makes naturally to help cells move where they're needed for healing. Think of it as your body's repair-crew dispatcher — it tells damaged-area cells to multiply and migrate to injuries. Research focuses on muscle recovery, tendon healing, and reducing inflammation. Most studies are in animals (especially horses, where it's used widely in racing). Human data is limited but increasingly explored for soft-tissue injuries.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Freeze for long-term storage — stable up to 2 years frozen, 6 months refrigerated.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. Some users freeze pre-drawn syringes for longer storage; potency may degrade.',
+        handling: 'Keep away from light. Swirl gently — never shake.',
+      },
+    },
   },
 
   tb4_full: {
@@ -137,6 +159,17 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Wilson disease or copper-overload conditions',
       'Pregnancy and breastfeeding (no human safety data for SubQ use)',
     ],
+    overview: {
+      whatItDoes:
+        'GHK-Cu is a tripeptide naturally found in your blood that binds to copper to form a small healing complex. It signals your body to repair tissue, produce collagen, and reduce inflammation. Levels naturally drop with age — roughly 60–70% lower at 60 than at 20 — which researchers think contributes to slower healing as we get older. Most often used topically for skin (it\'s well-established in skincare research) but also injected for systemic healing, hair regrowth, and tissue repair. Strong skin/topical evidence; injected use has more limited human data.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Protect from light — copper peptides are particularly light-sensitive.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. The solution typically has a blue or green tint — this is the copper, not contamination.',
+        handling: 'Topical preparations: follow product-specific storage instructions.',
+      },
+    },
   },
 
   pda: {

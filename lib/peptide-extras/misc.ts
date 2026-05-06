@@ -231,5 +231,16 @@ export const MISC_EXTRAS: PeptideExtrasMap = {
       'Active malignancy',
       'Pregnancy and breastfeeding',
     ],
+    overview: {
+      whatItDoes:
+        'MGF (Mechano Growth Factor) is a variant of IGF-1 your muscles release when stressed — it signals satellite cells to multiply and repair muscle damage. The "PEG" prefix means it\'s been attached to a polyethylene glycol molecule, which extends the half-life from minutes to days, making it practical to use. Researchers focus on muscle recovery, repair from injury, and athletic performance. Most evidence is preclinical; human data is limited.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing:
+          'Refrigerate. Use within 14 days — PEG-MGF is less stable than many peptides post-reconstitution.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 };
