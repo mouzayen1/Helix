@@ -7,9 +7,9 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
-import { HairlineRow } from '../components/editorial/HairlineRow';
 import { useEditorialTheme } from '../lib/design/theme';
 import { INJECTION_SITES, siteRecency, siteSuggestion, type SiteSuggestion } from '../lib/db';
+import { SiteDetailSheet } from '../components/SiteDetailSheet';
 
 const HUMAN_BODY_IMAGE = require('../assets/images/injection-human.png');
 const BODY_MAP_ASPECT_RATIO = 1023 / 1537;
@@ -40,6 +40,9 @@ export default function InjectionSitesModal() {
   const insets = useSafeAreaInsets();
   const [recency, setRecency] = useState<SiteSuggestion[]>([]);
   const [suggestion, setSuggestion] = useState<SiteSuggestion | null>(null);
+  // When non-null, opens the detail sheet AND highlights that zone on
+  // the body figure with a brass ring. The ring fades on dismiss.
+  const [openSite, setOpenSite] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -142,9 +145,11 @@ export default function InjectionSitesModal() {
               const pos = SITE_POSITIONS[r.site as keyof typeof SITE_POSITIONS];
               if (!pos) return null;
               const suggested = r.site === suggestion?.site;
+              const isOpen = openSite === r.site;
               const zs = zoneStateFor(r.days_since, suggested);
               const color = colorFor(zs);
               const dotSize = suggested ? 28 : 20;
+              const haloSize = dotSize + 14;
               return (
                 <View
                   key={r.site}
@@ -157,25 +162,49 @@ export default function InjectionSitesModal() {
                     height: dotSize,
                     marginLeft: -dotSize / 2,
                     marginTop: -dotSize / 2,
-                    borderRadius: dotSize / 2,
-                    backgroundColor: suggested ? color : 'transparent',
-                    borderWidth: 1.5,
-                    borderColor: color,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  {r.total_uses > 0 ? (
-                    <Text
+                  {/* Brass halo while the site's detail sheet is open —
+                      visual confirmation of which zone the sheet refers
+                      to, since the body figure stays visible above it. */}
+                  {isOpen ? (
+                    <View
                       style={{
-                        color: suggested ? ed.colors.bg : color,
-                        fontFamily: ed.typography.dataMd.fontFamily,
-                        fontSize: 10,
+                        position: 'absolute',
+                        width: haloSize,
+                        height: haloSize,
+                        borderRadius: haloSize / 2,
+                        borderWidth: 1.5,
+                        borderColor: ed.colors.brand,
                       }}
-                    >
-                      {r.total_uses}
-                    </Text>
+                    />
                   ) : null}
+                  <View
+                    style={{
+                      width: dotSize,
+                      height: dotSize,
+                      borderRadius: dotSize / 2,
+                      backgroundColor: suggested ? color : 'transparent',
+                      borderWidth: 1.5,
+                      borderColor: color,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {r.total_uses > 0 ? (
+                      <Text
+                        style={{
+                          color: suggested ? ed.colors.bg : color,
+                          fontFamily: ed.typography.dataMd.fontFamily,
+                          fontSize: 10,
+                        }}
+                      >
+                        {r.total_uses}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
@@ -233,14 +262,19 @@ export default function InjectionSitesModal() {
               color: ed.colors.ink3,
             }}
           >
-            Tap a zone to log a dose there.
+            Tap a zone to log a dose. Tap the chevron for that zone&apos;s history.
           </Text>
           <View style={{ marginTop: 4 }}>
             {recency.map((r, idx) => {
               const zs = zoneStateFor(r.days_since, r.site === suggestion?.site);
               const color = colorFor(zs);
               return (
-                <View key={r.site}>
+                <View
+                  key={r.site}
+                  style={{ flexDirection: 'row', alignItems: 'center' }}
+                >
+                  {/* Primary tap target — short-press routes to Log Dose
+                      pre-filled with this site. Same behavior as before. */}
                   <Pressable
                     onPress={() =>
                       router.push({ pathname: '/log-dose', params: { site: r.site } } as any)
@@ -248,6 +282,7 @@ export default function InjectionSitesModal() {
                     accessibilityRole="button"
                     accessibilityLabel={`Log dose at ${r.site}`}
                     style={{
+                      flex: 1,
                       flexDirection: 'row',
                       alignItems: 'center',
                       paddingVertical: 16,
@@ -294,13 +329,58 @@ export default function InjectionSitesModal() {
                       {r.total_uses}×
                     </Text>
                   </Pressable>
-                  {idx < recency.length - 1 ? <HairlineRow /> : null}
+                  {/* Secondary affordance — chevron opens the detail sheet
+                      with this site's logged-dose history. Visible cue
+                      so the gesture is discoverable; no long-press
+                      hidden interactions. */}
+                  <Pressable
+                    onPress={() => setOpenSite(r.site)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View dose history at ${r.site}`}
+                    style={{
+                      paddingVertical: 16,
+                      paddingLeft: 8,
+                      paddingRight: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_300Light'),
+                        fontSize: 22,
+                        color: ed.colors.ink3,
+                      }}
+                    >
+                      ›
+                    </Text>
+                  </Pressable>
+                  {idx < recency.length - 1 ? (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 1,
+                        backgroundColor: ed.colors.line,
+                      }}
+                    />
+                  ) : null}
                 </View>
               );
             })}
           </View>
         </View>
       </ScrollView>
+
+      <SiteDetailSheet
+        site={openSite}
+        onClose={() => setOpenSite(null)}
+        onLogDose={(site) => {
+          setOpenSite(null);
+          router.push({ pathname: '/log-dose', params: { site } } as any);
+        }}
+      />
     </View>
   );
 }
