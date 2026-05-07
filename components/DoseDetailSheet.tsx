@@ -5,14 +5,17 @@
 //
 // Behavior:
 //   - "Log another" closes and routes to /log-dose with peptide + amount
-//     pre-filled.
-//   - "Delete dose" removes the row and restores remaining_mg if the
-//     dose was tied to a vial.
+//     pre-filled (creates a new dose entry).
+//   - "Edit this dose" closes and routes to /log-dose?editId=<id>, where
+//     the form loads the existing dose and saves through updateDose().
+//   - "Delete dose" prompts a destructive Alert.alert confirm; on
+//     confirm, removes the row and restores remaining_mg if the dose
+//     was tied to a vial.
 //   - Backdrop tap or "Cancel" dismisses without changes.
 //
 // Caller tracks which Dose (or null) is currently shown.
 import { useRouter } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { EditorialButton } from './editorial/EditorialButton';
 import { EditorialSheet, SheetHeader } from './editorial/EditorialSheet';
 import { useEditorialTheme } from '../lib/design/theme';
@@ -33,11 +36,29 @@ export function DoseDetailSheet({ dose, onClose, onDeleted }: Props) {
   const router = useRouter();
   const { pref: doseUnitPref } = useDoseUnitPref();
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!dose) return;
-    await deleteDose(dose.id);
-    onClose();
-    onDeleted?.();
+    // Two-tap destructive pattern. Native Alert renders the second
+    // button with destructive styling (red on iOS, prominent on
+    // Android) so accidental taps on Delete-then-OK are unlikely.
+    // The body line names the data side-effect ("vial's remaining
+    // volume will be restored") so users aren't guessing.
+    Alert.alert(
+      'Delete this dose?',
+      "This action can't be undone. The vial's remaining volume will be restored.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteDose(dose.id);
+            onClose();
+            onDeleted?.();
+          },
+        },
+      ],
+    );
   };
 
   const peptide = dose ? findPeptide(dose.peptide_id) : null;
@@ -85,10 +106,23 @@ export function DoseDetailSheet({ dose, onClose, onDeleted }: Props) {
                 } as any);
               }}
             >
-              Log another
+              Log another dose
+            </EditorialButton>
+            <EditorialButton
+              variant="secondary"
+              fullWidth
+              onPress={() => {
+                onClose();
+                router.push({
+                  pathname: '/log-dose',
+                  params: { editId: dose.id },
+                } as any);
+              }}
+            >
+              Edit this dose
             </EditorialButton>
             <EditorialButton variant="secondary" fullWidth onPress={handleDelete}>
-              Delete dose (restores vial)
+              Delete dose
             </EditorialButton>
             <EditorialButton variant="secondary" fullWidth onPress={onClose}>
               Cancel

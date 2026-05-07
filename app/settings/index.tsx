@@ -156,6 +156,8 @@ export default function Settings() {
       {/* Data */}
       <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
         <EyebrowLabel withRule>Data</EyebrowLabel>
+        <NavRow label="Dose history" onPress={() => router.push('/dose-history' as any)} />
+        <HairlineRow />
         <NavRow label="Export data" onPress={() => router.push('/settings/export')} />
         <HairlineRow />
         <NavRow label="About Helix" onPress={() => router.push('/settings/about')} />

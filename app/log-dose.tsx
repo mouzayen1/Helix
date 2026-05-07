@@ -3,6 +3,15 @@
 // is the editorial modal pattern throughout: hairline-divided sections,
 // large serif dose input, sharp-corner chips, mono uppercase labels,
 // EditorialButton primary save.
+//
+// v1.4: when ?editId=<id> is present, the form loads the existing dose
+// instead of starting fresh. Header eyebrow shows "EDITING DOSE", the
+// save button reads "Save changes", the duplicate-recent guard is
+// skipped (you're editing, not logging anew), the post-save vial-attach
+// prompt is skipped (the vial relationship is already set), and the
+// save action calls updateDose() — which transactionally cascades the
+// vial's remaining_mg adjustment when amount_mcg changes. Dismissing
+// with unsaved edits prompts a "Discard changes?" confirm.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -25,13 +34,16 @@ import {
   attachVialToCycle,
   getActiveCycle,
   getActiveCycleForPeptide,
+  getDoseById,
   getVialsForPeptide,
   INJECTION_SITES,
   listActiveVials,
   listDoses,
   logDose,
   siteSuggestion,
+  updateDose,
   type Cycle,
+  type Dose,
   type Vial,
 } from '../lib/db';
 import { haptic } from '../lib/haptics';
@@ -59,11 +71,18 @@ export default function LogDoseModal() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { peptideId: initialId, prefillDoseMcg, site: initialSite } = useLocalSearchParams<{
+  const {
+    peptideId: initialId,
+    prefillDoseMcg,
+    site: initialSite,
+    editId,
+  } = useLocalSearchParams<{
     peptideId?: string;
     prefillDoseMcg?: string;
     site?: string;
+    editId?: string;
   }>();
+  const isEditing = !!editId;
 
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
   const [peptideId, setPeptideId] = useState<string>(initialId || '');
@@ -81,6 +100,19 @@ export default function LogDoseModal() {
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [saving, setSaving] = useState(false);
   const [takenAtDate, setTakenAtDate] = useState<Date>(new Date());
+  // Snapshot taken right after the edit-mode load completes; used to
+  // detect dirty state for the "Discard changes?" confirm. Not used
+  // in create mode.
+  const [editLoaded, setEditLoaded] = useState<boolean>(false);
+  const [snapshot, setSnapshot] = useState<{
+    peptideId: string;
+    amountMcg: number;
+    route: Route;
+    site: string | null;
+    note: string;
+    takenAtMs: number;
+    vialId: string | null;
+  } | null>(null);
 
   const peptide = peptideId ? findPeptide(peptideId) : null;
 
@@ -94,6 +126,9 @@ export default function LogDoseModal() {
         ]);
         setVials(vs);
         setActiveCycle(c);
+        // Edit mode owns peptide / site / vial via the load effect
+        // below — don't let this defaults logic stomp on it.
+        if (isEditing) return;
         if (!peptideId) {
           if (vs.length) {
             setPeptideId(vs[0].peptide_id);
@@ -104,8 +139,63 @@ export default function LogDoseModal() {
         }
         if (!site) setSite(initialSite ?? sug.site);
       })();
-    }, [initialSite, peptideId, site])
+    }, [initialSite, isEditing, peptideId, site])
   );
+
+  // Edit mode: load the existing dose by id, prefill every field from
+  // it, snapshot the values for dirty-state comparison. Runs once when
+  // the screen mounts with an editId param — subsequent re-renders
+  // don't re-load. Vial pre-selection waits for the active vials list
+  // to populate (a separate effect) so we set vial in a follow-up
+  // step rather than inside this one.
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    (async () => {
+      const d: Dose | null = await getDoseById(editId);
+      if (cancelled || !d) {
+        if (!cancelled) {
+          Alert.alert('Dose not found', 'This dose may have been deleted.', [
+            { text: 'OK', onPress: () => router.back() },
+          ]);
+        }
+        return;
+      }
+      const mode = resolveDoseUnit(d.amount_mcg, 'auto');
+      setPeptideId(d.peptide_id);
+      setAmountMcg(d.amount_mcg);
+      setDoseInputModeState(mode);
+      setAmountText(formatDose(d.amount_mcg, mode).value);
+      setRoute((ROUTES as readonly string[]).includes(d.route) ? (d.route as Route) : 'SubQ');
+      setSite(d.site ?? null);
+      setNote(d.note ?? '');
+      setTakenAtDate(new Date(d.taken_at));
+      setSnapshot({
+        peptideId: d.peptide_id,
+        amountMcg: d.amount_mcg,
+        route: ((ROUTES as readonly string[]).includes(d.route) ? d.route : 'SubQ') as Route,
+        site: d.site ?? null,
+        note: d.note ?? '',
+        takenAtMs: new Date(d.taken_at).getTime(),
+        vialId: d.vial_id ?? null,
+      });
+      setEditLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, router]);
+
+  // Once both the snapshot and the active vials list are populated,
+  // prefer the dose's original vial (if still active) so the screen
+  // shows the correct relationship. If it's been depleted/deactivated
+  // since, leave the auto-pick — the dose's vial_id on disk is still
+  // intact and updateDose() doesn't touch it.
+  useEffect(() => {
+    if (!isEditing || !snapshot?.vialId || vials.length === 0) return;
+    const match = vials.find((v) => v.id === snapshot.vialId);
+    if (match && match.id !== vial?.id) setVial(match);
+  }, [isEditing, snapshot, vial?.id, vials]);
 
   useEffect(() => {
     if (!peptideId) return;
@@ -130,6 +220,10 @@ export default function LogDoseModal() {
 
   useEffect(() => {
     if (!peptideId) return;
+    // In edit mode the dose's stored amount is canonical — the load
+    // effect already set it. Don't let cycle / catalog / prefillDoseMcg
+    // defaults overwrite it.
+    if (isEditing) return;
     const apply = (mcg: number) => {
       const mode = resolveDoseUnit(mcg, 'auto');
       setAmountMcg(mcg);
@@ -161,7 +255,7 @@ export default function LogDoseModal() {
       const fallback = p.defaultDoseMcg ?? parseDoseRange(p.dose).mid;
       apply(fallback);
     }
-  }, [peptideId, activeCycle, prefillDoseMcg]);
+  }, [peptideId, activeCycle, isEditing, prefillDoseMcg]);
 
   const volumeUnits = useMemo(() => {
     if (!vial) return null;
@@ -196,9 +290,52 @@ export default function LogDoseModal() {
     setAmountText(formatDose(amountMcg, next).value);
   };
 
+  const isDirty = useMemo(() => {
+    if (!snapshot) return false;
+    return (
+      snapshot.peptideId !== peptideId ||
+      snapshot.amountMcg !== amountMcg ||
+      snapshot.route !== route ||
+      snapshot.site !== site ||
+      snapshot.note !== note ||
+      snapshot.takenAtMs !== takenAtDate.getTime()
+    );
+  }, [snapshot, peptideId, amountMcg, route, site, note, takenAtDate]);
+
+  const tryDismiss = () => {
+    if (isEditing && isDirty) {
+      Alert.alert(
+        'Discard changes?',
+        "Your edits to this dose haven't been saved.",
+        [
+          { text: 'Keep editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+        ],
+      );
+      return;
+    }
+    router.back();
+  };
+
   const actuallySave = async () => {
     setSaving(true);
     try {
+      if (isEditing && editId) {
+        // Edit path: updateDose() applies the patch + cascades the
+        // vial's remaining_mg in a single transaction. We never touch
+        // vial_id from this screen, so the original vial relationship
+        // is preserved.
+        await updateDose(editId, {
+          amount_mcg: amountMcg,
+          route,
+          site: site ?? null,
+          note: note.trim() ? note.trim() : null,
+          taken_at: takenAtDate.toISOString(),
+        });
+        haptic.success();
+        router.back();
+        return;
+      }
       await logDose({
         peptide_id: peptideId,
         vial_id: vial?.id ?? null,
@@ -242,12 +379,20 @@ export default function LogDoseModal() {
       setSaving(false);
       haptic.error();
       const msg = err instanceof Error && err.message ? err.message : 'Please try again.';
-      Alert.alert('Could not log dose', msg, [{ text: 'OK' }]);
+      Alert.alert(isEditing ? 'Could not save changes' : 'Could not log dose', msg, [
+        { text: 'OK' },
+      ]);
     }
   };
 
   const save = async () => {
     if (!peptideId || saving) return;
+    // Edit mode skips the duplicate-recent guard — you're modifying an
+    // existing entry, not creating a near-duplicate.
+    if (isEditing) {
+      await actuallySave();
+      return;
+    }
     try {
       const recent = await listDoses({ limit: 20 });
       const target = takenAtDate.getTime();
@@ -294,7 +439,7 @@ export default function LogDoseModal() {
           paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Close">
+        <Pressable onPress={tryDismiss} hitSlop={10} accessibilityLabel="Close">
           <Text
             style={{
               fontFamily: ed.fraunces('Fraunces_300Light'),
@@ -311,17 +456,22 @@ export default function LogDoseModal() {
             fontFamily: ed.typography.label.fontFamily,
             fontSize: ed.typography.label.fontSize,
             letterSpacing: ed.typography.label.letterSpacing,
-            color: ed.colors.ink3,
+            color: isEditing ? ed.colors.brand : ed.colors.ink3,
             textTransform: 'uppercase',
           }}
         >
-          Log dose
+          {isEditing ? 'Editing dose' : 'Log dose'}
         </Text>
         <Pressable
           onPress={save}
-          disabled={saving || vialInsufficient || !peptideId}
+          disabled={
+            saving ||
+            vialInsufficient ||
+            !peptideId ||
+            (isEditing && (!editLoaded || !isDirty))
+          }
           hitSlop={10}
-          accessibilityLabel="Save dose"
+          accessibilityLabel={isEditing ? 'Save changes' : 'Save dose'}
         >
           <Text
             style={{
@@ -329,13 +479,16 @@ export default function LogDoseModal() {
               fontSize: ed.typography.label.fontSize,
               letterSpacing: ed.typography.label.letterSpacing,
               color:
-                saving || vialInsufficient || !peptideId
+                saving ||
+                vialInsufficient ||
+                !peptideId ||
+                (isEditing && (!editLoaded || !isDirty))
                   ? ed.colors.ink3
                   : ed.colors.brand,
               textTransform: 'uppercase',
             }}
           >
-            {saving ? 'Saving' : 'Save'}
+            {saving ? (isEditing ? 'Saving' : 'Saving') : isEditing ? 'Save changes' : 'Save'}
           </Text>
         </Pressable>
       </View>
@@ -952,9 +1105,20 @@ export default function LogDoseModal() {
           <EditorialButton
             fullWidth
             onPress={save}
-            disabled={saving || vialInsufficient || !peptideId}
+            disabled={
+              saving ||
+              vialInsufficient ||
+              !peptideId ||
+              (isEditing && (!editLoaded || !isDirty))
+            }
           >
-            {saving ? 'Logging…' : 'Log dose'}
+            {saving
+              ? isEditing
+                ? 'Saving…'
+                : 'Logging…'
+              : isEditing
+              ? 'Save changes'
+              : 'Log dose'}
           </EditorialButton>
         </View>
       </ScrollView>

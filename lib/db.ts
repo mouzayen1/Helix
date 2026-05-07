@@ -578,6 +578,10 @@ export async function updateVial(
   });
 }
 
+export async function getDoseById(id: string): Promise<Dose | null> {
+  return db().getFirstAsync<Dose>('SELECT * FROM doses WHERE id = ?', id);
+}
+
 export async function updateDose(
   id: string,
   patch: {
