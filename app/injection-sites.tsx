@@ -9,6 +9,7 @@ import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { useEditorialTheme } from '../lib/design/theme';
 import { INJECTION_SITES, siteRecency, siteSuggestion, type SiteSuggestion } from '../lib/db';
+import { formatRelativeAge } from '../lib/relative-time';
 import { SiteDetailSheet } from '../components/SiteDetailSheet';
 
 const HUMAN_BODY_IMAGE = require('../assets/images/injection-human.png');
@@ -241,9 +242,9 @@ export default function InjectionSitesModal() {
                   color: ed.colors.ink3,
                 }}
               >
-                {suggestion.days_since >= 999
-                  ? 'Never used'
-                  : `Last used ${suggestion.days_since}d ago`}
+                {suggestion.last_used
+                  ? `Last used ${formatRelativeAge(suggestion.last_used)}`
+                  : 'Never used'}
                 {' · '}
                 {suggestion.total_uses} total uses
               </Text>
@@ -315,7 +316,7 @@ export default function InjectionSitesModal() {
                         color: ed.colors.ink3,
                       }}
                     >
-                      {r.days_since >= 999 ? '—' : `${r.days_since}d ago`}
+                      {formatRelativeAge(r.last_used)}
                     </Text>
                     <Text
                       style={{

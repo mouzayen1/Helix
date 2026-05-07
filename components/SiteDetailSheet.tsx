@@ -19,6 +19,7 @@ import { listDosesAtSite, type Dose } from '../lib/db';
 import { findPeptide } from '../lib/peptides';
 import { useDoseUnitPref } from '../lib/profile-context';
 import { formatDoseLabel } from '../lib/dose-format';
+import { formatRelativeAge } from '../lib/relative-time';
 
 type Threshold = 7 | 14 | 28 | 'all';
 
@@ -185,26 +186,46 @@ export function SiteDetailSheet({
                           >
                             {peptide?.name ?? d.peptide_id}
                           </Text>
-                          <Text
+                          {/* Right-side data cluster — dose · age tightly
+                              grouped so the eye reads them as one unit
+                              and the flex space sits between the name
+                              and the cluster, not between the two
+                              mono values. */}
+                          <View
                             style={{
-                              fontFamily: ed.typography.dataMd.fontFamily,
-                              fontSize: ed.typography.dataMd.fontSize,
-                              color: ed.colors.ink2,
+                              flexDirection: 'row',
+                              alignItems: 'baseline',
+                              gap: 6,
                             }}
                           >
-                            {formatDoseLabel(d.amount_mcg, doseUnitPref)}
-                          </Text>
-                          <Text
-                            style={{
-                              minWidth: 64,
-                              textAlign: 'right',
-                              fontFamily: ed.typography.dataMd.fontFamily,
-                              fontSize: ed.typography.dataMd.fontSize,
-                              color: ed.colors.ink3,
-                            }}
-                          >
-                            {relativeAge(d.taken_at)}
-                          </Text>
+                            <Text
+                              style={{
+                                fontFamily: ed.typography.dataMd.fontFamily,
+                                fontSize: ed.typography.dataMd.fontSize,
+                                color: ed.colors.ink2,
+                              }}
+                            >
+                              {formatDoseLabel(d.amount_mcg, doseUnitPref)}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: ed.typography.dataMd.fontFamily,
+                                fontSize: ed.typography.dataMd.fontSize,
+                                color: ed.colors.ink4,
+                              }}
+                            >
+                              ·
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: ed.typography.dataMd.fontFamily,
+                                fontSize: ed.typography.dataMd.fontSize,
+                                color: ed.colors.ink3,
+                              }}
+                            >
+                              {formatRelativeAge(d.taken_at)}
+                            </Text>
+                          </View>
                         </View>
                       );
                     })}
@@ -304,14 +325,3 @@ function dayLabel(taken_at: string): string {
   return d.toLocaleDateString('en-US', fmt).replace(',', ' ·');
 }
 
-function relativeAge(taken_at: string): string {
-  const ms = Date.now() - new Date(taken_at).getTime();
-  const days = Math.floor(ms / 86_400_000);
-  if (days === 0) {
-    const hours = Math.floor(ms / 3_600_000);
-    if (hours === 0) return 'just now';
-    return `${hours}h ago`;
-  }
-  if (days === 1) return 'yesterday';
-  return `${days}d ago`;
-}

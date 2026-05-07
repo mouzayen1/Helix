@@ -1168,7 +1168,15 @@ export const INJECTION_SITES = [
   'L.Thigh', 'R.Thigh',
 ] as const;
 
-export type SiteSuggestion = { site: string; days_since: number; total_uses: number };
+export type SiteSuggestion = {
+  site: string;
+  days_since: number;
+  total_uses: number;
+  /** ISO timestamp of the most recent dose at this site, or null if never
+   *  used. Lets callers render sub-day relative times (e.g. "18h ago")
+   *  instead of the floored "0d ago" that days_since alone produces. */
+  last_used: string | null;
+};
 
 export async function siteSuggestion(): Promise<SiteSuggestion> {
   const d = db();
@@ -1183,7 +1191,12 @@ export async function siteSuggestion(): Promise<SiteSuggestion> {
     const days_since = h
       ? Math.floor((now - new Date(h.last_used).getTime()) / 864e5)
       : 999;
-    return { site, days_since, total_uses: h?.uses ?? 0 };
+    return {
+      site,
+      days_since,
+      total_uses: h?.uses ?? 0,
+      last_used: h?.last_used ?? null,
+    };
   });
   scored.sort((a, b) => b.days_since - a.days_since || a.total_uses - b.total_uses);
   return scored[0];
@@ -1202,6 +1215,7 @@ export async function siteRecency(): Promise<SiteSuggestion[]> {
       site,
       days_since: h ? Math.floor((now - new Date(h.last_used).getTime()) / 864e5) : 999,
       total_uses: h?.uses ?? 0,
+      last_used: h?.last_used ?? null,
     };
   });
 }
