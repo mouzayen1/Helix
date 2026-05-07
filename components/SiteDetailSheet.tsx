@@ -10,7 +10,12 @@
 // ≤28 / all). Default is ≤14 days — covers a typical injection cycle
 // without overwhelming. Empty state pivots the user toward action:
 // either widen the window or log a fresh dose at this site.
-import { useEffect, useMemo, useState } from 'react';
+//
+// v1.4: each dose row is tappable and opens DoseDetailSheet stacked
+// over this sheet. Backdrop tap or Cancel returns to the site sheet
+// (still open underneath); Edit / Log Another route via router.push,
+// which navigates away from the screen entirely.
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { EditorialButton } from './editorial/EditorialButton';
 import { EditorialSheet } from './editorial/EditorialSheet';
@@ -20,6 +25,7 @@ import { findPeptide } from '../lib/peptides';
 import { useDoseUnitPref } from '../lib/profile-context';
 import { formatDoseLabel } from '../lib/dose-format';
 import { formatRelativeAge } from '../lib/relative-time';
+import { DoseDetailSheet } from './DoseDetailSheet';
 
 type Threshold = 7 | 14 | 28 | 'all';
 
@@ -40,6 +46,18 @@ export function SiteDetailSheet({
   const { pref: doseUnitPref } = useDoseUnitPref();
   const [doses, setDoses] = useState<Dose[]>([]);
   const [threshold, setThreshold] = useState<Threshold>(14);
+  // When non-null, DoseDetailSheet renders on top of this site sheet.
+  // Backdrop / Cancel clears it (returns to the site sheet); Edit /
+  // Log Another navigate the screen away (router.push from inside
+  // DoseDetailSheet); Delete clears it AND triggers a refetch so the
+  // list reflects the deletion.
+  const [selectedDose, setSelectedDose] = useState<Dose | null>(null);
+
+  const refetch = useCallback(async () => {
+    if (!site) return;
+    const fresh = await listDosesAtSite(site, 100);
+    setDoses(fresh);
+  }, [site]);
 
   // Pull a generous window once when the sheet opens; the threshold
   // filter then trims that locally without re-querying.
@@ -64,6 +82,7 @@ export function SiteDetailSheet({
   const grouped = useMemo(() => groupByDay(filtered), [filtered]);
 
   return (
+    <>
     <EditorialSheet visible={!!site} onClose={onClose}>
       {site ? (
         <View>
@@ -163,8 +182,11 @@ export function SiteDetailSheet({
                     {g.doses.map((d, i) => {
                       const peptide = findPeptide(d.peptide_id);
                       return (
-                        <View
+                        <Pressable
                           key={d.id}
+                          onPress={() => setSelectedDose(d)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open dose details for ${peptide?.name ?? d.peptide_id}`}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'baseline',
@@ -226,7 +248,20 @@ export function SiteDetailSheet({
                               {formatRelativeAge(d.taken_at)}
                             </Text>
                           </View>
-                        </View>
+                          {/* Chevron — same affordance pattern as the
+                              parent injection-sites row + dose-history
+                              list. Opens DoseDetailSheet stacked. */}
+                          <Text
+                            style={{
+                              fontFamily: ed.fraunces('Fraunces_300Light'),
+                              fontSize: 20,
+                              color: ed.colors.ink3,
+                              marginLeft: 4,
+                            }}
+                          >
+                            ›
+                          </Text>
+                        </Pressable>
                       );
                     })}
                   </View>
@@ -249,6 +284,23 @@ export function SiteDetailSheet({
         </View>
       ) : null}
     </EditorialSheet>
+    {/* Stacked DoseDetailSheet — sibling Modal so the two render in
+        independent native overlays (avoids the nested-Modal flicker
+        on Android). Dismissing it returns here (the site sheet stays
+        mounted). Editing / "Log another" router.push from inside
+        DoseDetailSheet take the user to /log-dose; on return they'll
+        land back on /injection-sites with the parent sheet still
+        open. Deletion clears the selection AND refetches the dose
+        list so the deleted row disappears from view. */}
+    <DoseDetailSheet
+      dose={selectedDose}
+      onClose={() => setSelectedDose(null)}
+      onDeleted={() => {
+        setSelectedDose(null);
+        void refetch();
+      }}
+    />
+    </>
   );
 }
 

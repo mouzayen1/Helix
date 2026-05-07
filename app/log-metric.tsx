@@ -4,7 +4,7 @@
 // serif value entry, hairline-framed note.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateTimeField, isSameLocalDay } from '../components/DateTimeField';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
@@ -74,7 +74,10 @@ export default function LogMetricModal() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <View
         style={{
           flexDirection: 'row',
@@ -223,6 +226,6 @@ export default function LogMetricModal() {
           />
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }

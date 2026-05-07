@@ -4,7 +4,7 @@
 // sleep-hours stepper, hairline-bordered tags, hairline-framed body.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateTimeField } from '../components/DateTimeField';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
@@ -154,7 +154,10 @@ export default function JournalEntryModal() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <View
         style={{
           flexDirection: 'row',
@@ -420,7 +423,7 @@ export default function JournalEntryModal() {
           />
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

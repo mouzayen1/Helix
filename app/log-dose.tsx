@@ -14,7 +14,7 @@
 // with unsaved edits prompts a "Discard changes?" confirm.
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateTimeField } from '../components/DateTimeField';
 import { EditorialButton } from '../components/editorial/EditorialButton';
@@ -427,7 +427,15 @@ export default function LogDoseModal() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      // iOS uses 'padding' to lift the form above the keyboard. Android
+      // works best with 'height' so the ScrollView contracts and keeps
+      // its scrollable region above the keyboard. The Note field is the
+      // tallest, last-position input — without this, typing in it is
+      // blind because the keyboard lands directly on top.
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       {/* Header */}
       <View
         style={{
@@ -1122,7 +1130,7 @@ export default function LogDoseModal() {
           </EditorialButton>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
