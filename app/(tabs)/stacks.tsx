@@ -14,7 +14,7 @@ import { HeroRing } from '../../components/editorial/HeroRing';
 import { StatPair } from '../../components/editorial/StatPair';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { DoseValue } from '../../components/editorial/DoseUnitChip';
-import { getActiveCycle, listCycles, listStacks, type Cycle, type Stack } from '../../lib/db';
+import { getActiveCycle, listCycles, listDoses, listStacks, type Cycle, type Stack } from '../../lib/db';
 import { findPeptide } from '../../lib/peptides';
 
 const TEMPLATES = [
@@ -52,18 +52,25 @@ export default function StacksScreen() {
   const [active, setActive] = useState<Cycle | null>(null);
   const [past, setPast] = useState<Cycle[]>([]);
   const [stacks, setStacks] = useState<Stack[]>([]);
+  // Last-30-days dose count drives the Recent Activity NavRow caption.
+  // Recomputed on focus so the number always matches what dose-history
+  // shows when the user taps through.
+  const [doses30d, setDoses30d] = useState<number>(0);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [a, cs, ss] = await Promise.all([
+        const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+        const [a, cs, ss, recent] = await Promise.all([
           getActiveCycle(),
           listCycles(),
           listStacks(),
+          listDoses({ from: since }),
         ]);
         setActive(a);
         setPast(cs.filter((c) => c.status !== 'active'));
         setStacks(ss);
+        setDoses30d(recent.length);
       })();
     }, [])
   );
@@ -95,6 +102,49 @@ export default function StacksScreen() {
             Vials
           </EditorialButton>
         </View>
+      </View>
+
+      {/* Recent activity — entry point to the full dose history. Lives
+          here (not in Settings) because dose history is primary
+          historical data, conceptually adjacent to active cycles and
+          past cycles already on this tab. */}
+      <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+        <EyebrowLabel withRule>Recent activity</EyebrowLabel>
+        <Pressable
+          onPress={() => router.push('/dose-history' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Open dose history"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 18,
+            gap: 12,
+          }}
+        >
+          <Text
+            style={{
+              flex: 1,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 17,
+              letterSpacing: -0.2,
+              color: ed.colors.ink1,
+            }}
+          >
+            {doses30d === 0
+              ? 'No doses logged yet'
+              : `${doses30d} dose${doses30d === 1 ? '' : 's'} · last 30 days`}
+          </Text>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 22,
+              color: ed.colors.ink3,
+            }}
+          >
+            ›
+          </Text>
+        </Pressable>
+        <HairlineRow strong />
       </View>
 
       {/* Active cycle */}

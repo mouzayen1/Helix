@@ -16,6 +16,7 @@ export function ScheduleItem({
   caption,
   status,
   onPress,
+  onLongPress,
 }: {
   time: string;
   title: string;
@@ -32,6 +33,11 @@ export function ScheduleItem({
   caption?: string;
   status: ScheduleStatus;
   onPress?: () => void;
+  /** Optional long-press handler — Today uses this to open the skip
+   *  sheet when the user holds an upcoming row. Pass alongside
+   *  `onPress` to make the row both short-press and long-press
+   *  reactive without an outer wrapper. */
+  onLongPress?: () => void;
 }) {
   const theme = useEditorialTheme();
   const completed = status === 'completed';
@@ -55,6 +61,8 @@ export function ScheduleItem({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={`${title} at ${time}, ${statusLabel[status].toLowerCase()}`}
       style={{
@@ -146,6 +154,24 @@ export function ScheduleItem({
       >
         {statusLabel[status]}
       </Text>
+      {/* Visible chevron so users learn the row is tappable. Brass on
+          actionable rows (next/upcoming/overdue → opens Log Dose with
+          schedule prefill); muted ink4 on completed rows so it still
+          reads as tappable (opens DoseDetailSheet) without competing
+          with active items. */}
+      {onPress ? (
+        <Text
+          style={{
+            marginLeft: 8,
+            fontFamily: theme.fraunces('Fraunces_300Light'),
+            fontSize: 22,
+            lineHeight: 22,
+            color: completed ? theme.colors.ink4 : theme.colors.brand,
+          }}
+        >
+          ›
+        </Text>
+      ) : null}
     </Pressable>
   );
 }

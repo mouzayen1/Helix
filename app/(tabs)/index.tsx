@@ -489,29 +489,19 @@ export default function TodayScreen() {
                   : row.resolvedFreq;
                 return (
                   <View key={`${row.peptide_id}-${row.window}-${idx}`}>
-                    <Pressable
+                    <ScheduleItem
+                      time={time}
+                      title={p.name}
+                      detail={detail}
+                      doseMcg={row.resolvedDose}
+                      caption={row.phaseCaption}
+                      // Status keyword stays as-is; ScheduleItem renders
+                      // "OVERDUE" for skipped rows but the dim row + skip
+                      // detail line carry the meaning.
+                      status={status}
                       onPress={() => onScheduleRowPress(row)}
                       onLongPress={() => onScheduleRowLongPress(row)}
-                      delayLongPress={350}
-                    >
-                      <ScheduleItem
-                        time={time}
-                        title={p.name}
-                        detail={detail}
-                        doseMcg={row.resolvedDose}
-                        caption={row.phaseCaption}
-                        status={
-                          // Override label for the skip case — ScheduleItem's
-                          // 'overdue' renders the "OVERDUE" word; we want
-                          // "SKIPPED" instead. Re-route through 'completed'
-                          // visual style with a custom keyword would mean a
-                          // wider primitive change, so we keep 'overdue' for
-                          // the warn tint and accept the label difference for
-                          // now. Real skip→logged distinction is the dim row.
-                          status
-                        }
-                      />
-                    </Pressable>
+                    />
                     {idx < schedule.length - 1 ? <HairlineRow /> : null}
                   </View>
                 );
@@ -534,15 +524,14 @@ export default function TodayScreen() {
                   .toUpperCase();
                 return (
                   <View key={d.id}>
-                    <Pressable onPress={() => setDoseSheet(d)}>
-                      <ScheduleItem
-                        time={time}
-                        title={p?.name ?? d.peptide_id}
-                        detail={`${d.route}${d.site ? ` · ${d.site}` : ''}`}
-                        doseMcg={d.amount_mcg}
-                        status="completed"
-                      />
-                    </Pressable>
+                    <ScheduleItem
+                      time={time}
+                      title={p?.name ?? d.peptide_id}
+                      detail={`${d.route}${d.site ? ` · ${d.site}` : ''}`}
+                      doseMcg={d.amount_mcg}
+                      status="completed"
+                      onPress={() => setDoseSheet(d)}
+                    />
                     {idx < todayDoses.length - 1 ? <HairlineRow /> : null}
                   </View>
                 );
