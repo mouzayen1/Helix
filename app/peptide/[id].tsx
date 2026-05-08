@@ -22,7 +22,7 @@ import {
   DISCLAIMER_SHORT,
 } from '../../lib/disclaimers';
 import { getPeptideExtras } from '../../lib/peptide-extras';
-import { findPeptide, PEPTIDES } from '../../lib/peptides';
+import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../../lib/peptides';
 
 type TabId = 'overview' | 'dosing' | 'research' | 'notes';
 
@@ -1230,15 +1230,21 @@ export default function PeptideDetailScreen() {
         >
           Log a dose
         </EditorialButton>
-        <EditorialButton
-          variant="secondary"
-          fullWidth
-          onPress={() =>
-            router.push({ pathname: '/reconstitute', params: { peptideId: p.id } } as any)
-          }
-        >
-          Reconstitute
-        </EditorialButton>
+        {/* Reconstitute is an injection-only workflow. Hide the
+            button for oral / intranasal / topical peptides so users
+            don't tap into a screen calibrated for vial math that
+            doesn't apply to capsules / nasal sprays / droppers. */}
+        {isInjectionRoute(derivePrimaryRoute(p.route)) ? (
+          <EditorialButton
+            variant="secondary"
+            fullWidth
+            onPress={() =>
+              router.push({ pathname: '/reconstitute', params: { peptideId: p.id } } as any)
+            }
+          >
+            Reconstitute
+          </EditorialButton>
+        ) : null}
       </View>
     </ScrollView>
   );

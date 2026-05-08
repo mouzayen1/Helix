@@ -26,7 +26,7 @@ import {
 import { createVial, getActiveVial, type Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
-import { findPeptide, PEPTIDES } from '../lib/peptides';
+import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../lib/peptides';
 
 // Default vial-strength chip row. Peptides with `commonVialSizes` in the
 // catalog override this — GHK-Cu shows 10/50/100/200, NAD+ shows
@@ -61,8 +61,23 @@ export default function ReconstituteModal() {
   const { pref: doseUnitPref } = useDoseUnitPref();
   const { peptideId: initialId } = useLocalSearchParams<{ peptideId?: string }>();
 
+  // Reconstitution is an injection-only workflow (mg + BAC water →
+  // mg/mL concentration math). Non-injectable peptides — Selank
+  // intranasal, MK-677 oral, GHK-Cu when used topically — ship in
+  // capsules / pre-made nasal sprays / droppers and don't fit this
+  // screen. Filter the picker to injectable peptides only and
+  // silently redirect deep-links that arrive with a non-injectable
+  // peptideId.
+  const injectablePeptides = useMemo(
+    () => PEPTIDES.filter((p) => isInjectionRoute(derivePrimaryRoute(p.route))),
+    [],
+  );
+  const initialInjectable =
+    initialId && injectablePeptides.some((p) => p.id === initialId)
+      ? initialId
+      : injectablePeptides[0]?.id ?? PEPTIDES[0].id;
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
-  const [peptideId, setPeptideId] = useState<string>(initialId || PEPTIDES[0].id);
+  const [peptideId, setPeptideId] = useState<string>(initialInjectable);
   const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
   const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
   const [strengthMg, setStrengthMg] = useState(5);
@@ -138,15 +153,16 @@ export default function ReconstituteModal() {
   }, []);
 
   // Sorted peptide list for the picker — needed (no vial) first, then
-  // needed (with vial), then everything else.
+  // needed (with vial), then everything else. Restricted to
+  // injectable peptides (see comment above injectablePeptides).
   const sortedPeptides = useMemo(() => {
     const bucket = (id: string) => {
       if (needyPeptides.has(id)) return 0;
       if (activeCycleByPeptide.has(id)) return 1;
       return 2;
     };
-    return [...PEPTIDES].sort((a, b) => bucket(a.id) - bucket(b.id));
-  }, [activeCycleByPeptide, needyPeptides]);
+    return [...injectablePeptides].sort((a, b) => bucket(a.id) - bucket(b.id));
+  }, [activeCycleByPeptide, injectablePeptides, needyPeptides]);
 
   // Reverse mode: BAC water is computed from (target dose, target units,
   // vial strength) and synced into bacMl so save() / result block / soft
@@ -478,6 +494,22 @@ export default function ReconstituteModal() {
                 })}
               </ScrollView>
             </View>
+          ) : null}
+          {/* Research range — passive dose-range reminder pulled from
+              the catalog. Same string Log Dose surfaces. Helps users
+              think about target dose before they pick a vial strength
+              and BAC volume. */}
+          {peptide.dose ? (
+            <Text
+              style={{
+                marginTop: 12,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              Research range: {peptide.dose}
+            </Text>
           ) : null}
         </View>
 
