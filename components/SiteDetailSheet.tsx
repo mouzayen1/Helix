@@ -16,6 +16,7 @@
 // (still open underneath); Edit / Log Another route via router.push,
 // which navigates away from the screen entirely.
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { EditorialButton } from './editorial/EditorialButton';
 import { EditorialSheet } from './editorial/EditorialSheet';
@@ -72,6 +73,19 @@ export function SiteDetailSheet({
       cancelled = true;
     };
   }, [site]);
+
+  // When the user taps "Edit this dose" or "Log another" inside the
+  // stacked DoseDetailSheet, they navigate to /log-dose. On return,
+  // the parent /injection-sites screen regains focus — refresh the
+  // sheet's dose list so any edits / new logs appear here without
+  // requiring the user to dismiss + re-open. Cheap (one query, ≤100
+  // rows). Effect no-ops when the sheet is closed.
+  useFocusEffect(
+    useCallback(() => {
+      if (!site) return;
+      void refetch();
+    }, [site, refetch]),
+  );
 
   const filtered = useMemo(() => {
     if (threshold === 'all') return doses;
