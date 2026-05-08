@@ -1185,9 +1185,16 @@ export type SiteSuggestion = {
 export async function siteSuggestion(): Promise<SiteSuggestion> {
   const d = db();
   const now = Date.now();
+  // Filter the history to injection routes only — non-injection doses
+  // (Intranasal Selank, Oral MK-677, Topical GHK-Cu, etc.) shouldn't
+  // count toward the rotation map. Older rows without a route fall
+  // through as injectable for backward compatibility.
   const history = await d.getAllAsync<{ site: string; last_used: string; uses: number }>(
-    `SELECT site, MAX(used_at) AS last_used, COUNT(*) AS uses
-     FROM injection_sites_log GROUP BY site`
+    `SELECT s.site, MAX(s.used_at) AS last_used, COUNT(*) AS uses
+       FROM injection_sites_log s
+       LEFT JOIN doses d ON d.id = s.dose_id
+      WHERE d.route IS NULL OR d.route IN ('SubQ', 'IM')
+      GROUP BY s.site`
   );
   const map = new Map(history.map((h) => [h.site, h]));
   const scored: SiteSuggestion[] = INJECTION_SITES.map((site) => {
@@ -1208,9 +1215,13 @@ export async function siteSuggestion(): Promise<SiteSuggestion> {
 
 export async function siteRecency(): Promise<SiteSuggestion[]> {
   const now = Date.now();
+  // Same injection-route filter as siteSuggestion — see comment there.
   const history = await db().getAllAsync<{ site: string; last_used: string; uses: number }>(
-    `SELECT site, MAX(used_at) AS last_used, COUNT(*) AS uses
-     FROM injection_sites_log GROUP BY site`
+    `SELECT s.site, MAX(s.used_at) AS last_used, COUNT(*) AS uses
+       FROM injection_sites_log s
+       LEFT JOIN doses d ON d.id = s.dose_id
+      WHERE d.route IS NULL OR d.route IN ('SubQ', 'IM')
+      GROUP BY s.site`
   );
   const map = new Map(history.map((h) => [h.site, h]));
   return INJECTION_SITES.map((site) => {
@@ -1230,10 +1241,15 @@ export async function siteRecency(): Promise<SiteSuggestion[]> {
 // — the bottom sheet has no virtualization so we don't want to hand it
 // 500 rows.
 export async function listDosesAtSite(site: string, limit = 10): Promise<Dose[]> {
+  // Filter to injection routes — the site sheet is the rotation map's
+  // detail view, so it only surfaces doses where a body site is
+  // meaningful. NULL route falls through for backward-compat with
+  // pre-route-tracking rows.
   return db().getAllAsync<Dose>(
     `SELECT d.* FROM doses d
        INNER JOIN injection_sites_log s ON s.dose_id = d.id
       WHERE s.site = ?
+        AND (d.route IS NULL OR d.route IN ('SubQ', 'IM'))
       ORDER BY d.taken_at DESC
       LIMIT ?`,
     site,

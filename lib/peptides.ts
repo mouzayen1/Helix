@@ -1081,3 +1081,45 @@ export function peptideClassTopLevel(cls: string): string {
 export function findPeptide(id: string): Peptide | undefined {
   return PEPTIDES.find((p) => p.id === id);
 }
+
+/**
+ * Canonical route values used by Log Dose, dose history filters, and
+ * the site-rotation queries. Mirrors the ROUTES tuple in
+ * app/log-dose.tsx — kept in sync intentionally.
+ */
+export type DoseRoute = 'SubQ' | 'IM' | 'Oral' | 'Topical' | 'Intranasal';
+
+/** Routes where an injection site (L.Deltoid, R.Thigh, etc.) is meaningful. */
+export const INJECTION_ROUTES: ReadonlyArray<DoseRoute> = ['SubQ', 'IM'];
+
+export function isInjectionRoute(route: string | null | undefined): boolean {
+  return route === 'SubQ' || route === 'IM';
+}
+
+/**
+ * Parse a catalog peptide.route string into the canonical primary
+ * route. The catalog field is freeform editorial copy ("Intranasal
+ * (primary) · SubQ (occasional)", "SubQ or IM", "Oral (capsule)") so
+ * we look at the first recognizable token. Falls back to 'SubQ' if
+ * nothing matches — that's the catalog majority and the safest
+ * default for an unknown new entry.
+ *
+ * Examples:
+ *   "Intranasal (primary) · SubQ (occasional)" → 'Intranasal'
+ *   "SubQ or IM"                               → 'SubQ'
+ *   "Oral (capsule)"                           → 'Oral'
+ *   "IM · IV infusion"                         → 'IM'
+ *   "Oral · Transdermal"                       → 'Oral'
+ */
+export function derivePrimaryRoute(routeStr: string | null | undefined): DoseRoute {
+  if (!routeStr) return 'SubQ';
+  // Take the first segment before any "·" or " or " separator —
+  // catalog convention is "PRIMARY · secondary · …" or "A or B".
+  const first = routeStr.split(/[·]|\s+or\s+/)[0]?.trim() ?? '';
+  if (/^Intranasal/i.test(first)) return 'Intranasal';
+  if (/^Oral|Sublingual/i.test(first)) return 'Oral';
+  if (/^Topical|Transdermal/i.test(first)) return 'Topical';
+  if (/^Intramuscular|^IM\b/i.test(first)) return 'IM';
+  if (/^Subcutaneous|^SubQ\b|^SC\b/i.test(first)) return 'SubQ';
+  return 'SubQ';
+}

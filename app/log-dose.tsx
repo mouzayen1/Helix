@@ -47,7 +47,7 @@ import {
   type Vial,
 } from '../lib/db';
 import { haptic } from '../lib/haptics';
-import { findPeptide, PEPTIDES } from '../lib/peptides';
+import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../lib/peptides';
 
 const ROUTES = ['SubQ', 'IM', 'Oral', 'Topical', 'Intranasal'] as const;
 type Route = (typeof ROUTES)[number];
@@ -137,10 +137,40 @@ export default function LogDoseModal() {
             setPeptideId(PEPTIDES[0].id);
           }
         }
-        if (!site) setSite(initialSite ?? sug.site);
+        // Auto-suggest a body site only when the active peptide's
+        // primary route is injectable. Non-injection peptides
+        // (Selank intranasal, MK-677 oral, etc.) should leave site
+        // null instead of inheriting the rotation suggestion.
+        if (!site) {
+          const pid = peptideId || (vs.length ? vs[0].peptide_id : PEPTIDES[0]?.id);
+          const p = pid ? findPeptide(pid) : null;
+          if (p && isInjectionRoute(derivePrimaryRoute(p.route))) {
+            setSite(initialSite ?? sug.site);
+          }
+        }
       })();
     }, [initialSite, isEditing, peptideId, site])
   );
+
+  // Default route from the catalog whenever peptide changes (non-edit
+  // mode). Selank → Intranasal, MK-677 → Oral, BPC-157 → SubQ. Also
+  // clears any inherited site when the new route isn't injectable so
+  // we don't carry a stale L.Abdomen into a non-injection log.
+  useEffect(() => {
+    if (!peptideId || isEditing) return;
+    const p = findPeptide(peptideId);
+    if (!p) return;
+    const next = derivePrimaryRoute(p.route);
+    setRoute(next);
+    if (!isInjectionRoute(next)) setSite(null);
+  }, [peptideId, isEditing]);
+
+  // When the user manually flips the route to a non-injection option
+  // mid-form, drop the site so it doesn't ride along into the log.
+  const onRouteChange = (r: Route) => {
+    setRoute(r);
+    if (!isInjectionRoute(r)) setSite(null);
+  };
 
   // Edit mode: load the existing dose by id, prefill every field from
   // it, snapshot the values for dirty-state comparison. Runs once when
@@ -807,7 +837,11 @@ export default function LogDoseModal() {
             </Text>
           ) : null}
 
-          {volumeUnits ? (
+          {/* Volume / units conversion is meaningful only for
+              injectable doses drawn from a reconstituted vial. Hidden
+              for Oral / Topical / Intranasal — those aren't drawn in
+              insulin-syringe units. */}
+          {volumeUnits && isInjectionRoute(route) ? (
             <Text
               style={{
                 marginTop: 6,
@@ -961,7 +995,12 @@ export default function LogDoseModal() {
           </View>
         ) : null}
 
-        {/* Injection site */}
+        {/* Injection site — only rendered for injection routes
+            (SubQ / IM). Non-injection doses (Intranasal, Oral,
+            Topical) don't have a body site, so the picker is hidden
+            entirely rather than shown with confusing placeholder
+            options. */}
+        {isInjectionRoute(route) ? (
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
           <View
             style={{
@@ -1036,6 +1075,7 @@ export default function LogDoseModal() {
             </Text>
           </Pressable>
         </View>
+        ) : null}
 
         {/* Route */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
@@ -1046,7 +1086,7 @@ export default function LogDoseModal() {
               return (
                 <Pressable
                   key={r}
-                  onPress={() => setRoute(r)}
+                  onPress={() => onRouteChange(r)}
                   style={{
                     paddingVertical: 8,
                     paddingHorizontal: 14,
