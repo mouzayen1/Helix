@@ -854,7 +854,17 @@ export default function LogDoseModal() {
             </Text>
           ) : null}
 
-          {vial ? (
+          {/* Vial summary / "Reconstitute a new vial →" prompt is
+              injection-only. Showing "No active vial for MK-677.
+              Reconstitute a new vial →" for an oral compound is
+              misleading — MK-677 ships as capsules, Selank as
+              pre-made nasal sprays, etc. The Reconstitute screen
+              itself is calibrated for injectables (mg + BAC water →
+              mg/mL) so routing users there for a capsule peptide
+              just produces nonsense math. Container tracking for
+              non-injection forms is a v1.1+ feature. */}
+          {isInjectionRoute(route) ? (
+          vial ? (
             <View
               style={{
                 marginTop: 14,
@@ -928,11 +938,12 @@ export default function LogDoseModal() {
                 </Text>
               </Pressable>
             </View>
-          )}
+          )
+          ) : null}
         </View>
 
         {/* Vial picker — only shown when multiple */}
-        {peptideVials.length > 1 ? (
+        {peptideVials.length > 1 && isInjectionRoute(route) ? (
           <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
             <EyebrowLabel withRule>{`Vial · ${peptideVials.length} active`}</EyebrowLabel>
             <ScrollView
