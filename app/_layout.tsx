@@ -44,6 +44,8 @@ import { scheduleAllSafe } from '../lib/notifications';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
+import { hydrateSession, subscribeAuth, type AuthState } from '../lib/auth/session';
+import { isAuthConfigured } from '../lib/supabase';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -52,21 +54,75 @@ function RootGate() {
   const { profile, loaded } = useProfile();
   const router = useRouter();
   const segments = useSegments();
+  // Auth-gate state. When isAuthConfigured() is false (env vars not
+  // baked into the build), authReady fast-forwards to true with an
+  // implicit "signed-out" state so the legacy onboarding flow can
+  // still run. When env vars ARE set, hydrateSession() reads the
+  // persisted Supabase session, then drives this state.
+  const [authState, setAuthState] = useState<AuthState>({ status: 'loading' });
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!isAuthConfigured()) {
+      // No Supabase configured — legacy local-only flow. Don't enforce
+      // an auth gate; downstream onboarding gate handles routing.
+      setAuthState({ status: 'signed-out' });
+      setAuthReady(true);
+      return;
+    }
+    let cancelled = false;
+    hydrateSession().then((state) => {
+      if (!cancelled) {
+        setAuthState(state);
+        setAuthReady(true);
+      }
+    });
+    const unsubscribe = subscribeAuth(setAuthState);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !loaded) return;
+    const authConfigured = isAuthConfigured();
+    const inAuth = segments[0] === '(auth)';
     const inOnboarding = segments[0] === '(onboarding)' || segments[0] === 'welcome';
+
+    // 1. Auth gate — only enforced when Supabase is configured. Routes
+    //    signed-out users to the sign-up screen; routes signed-in users
+    //    out of the auth group once they've authenticated.
+    if (authConfigured) {
+      if (authState.status === 'signed-out' && !inAuth) {
+        router.replace('/(auth)/sign-up' as never);
+        return;
+      }
+      if (authState.status === 'signed-in' && inAuth) {
+        // Just authed — fall through to the onboarding/tabs decision below.
+      }
+      if (authState.status !== 'signed-in') return;
+    }
+
+    // 2. Legacy onboarding gate. Once signed in (or when auth isn't
+    //    configured), users still need to complete the existing
+    //    onboarding flow before reaching tabs. The accept-terms screen
+    //    in the (auth) group writes the same acceptance fields to the
+    //    Supabase profile; the local profile mirrors via the eventual
+    //    sync layer. Until then, both flows coexist.
     const fullyOnboarded =
       profile?.onboarding_done === 1 &&
       !!profile.age_gate_accepted_at &&
       !!profile.disclaimer_accepted_at &&
       !!profile.terms_accepted_at;
-    if (!fullyOnboarded && !inOnboarding) {
+    if (!fullyOnboarded && !inOnboarding && !inAuth) {
       router.replace('/welcome');
-    } else if (fullyOnboarded && inOnboarding) {
+    } else if (fullyOnboarded && (inOnboarding || inAuth)) {
       router.replace('/(tabs)');
     }
   }, [
+    authReady,
+    authState.status,
     loaded,
     profile?.age_gate_accepted_at,
     profile?.disclaimer_accepted_at,
@@ -86,6 +142,7 @@ function RootGate() {
           animation: 'slide_from_right',
         }}
       >
+        <Stack.Screen name="(auth)" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
         <Stack.Screen name="(onboarding)" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
