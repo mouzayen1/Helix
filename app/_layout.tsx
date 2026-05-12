@@ -46,6 +46,8 @@ import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
 import { hydrateSession, subscribeAuth, type AuthState } from '../lib/auth/session';
 import { isAuthConfigured } from '../lib/supabase';
+import { getMyFounderStatus, markFounderBannerSeen } from '../lib/auth/founder';
+import { FounderCelebrationModal } from '../components/FounderCelebrationModal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -61,6 +63,15 @@ function RootGate() {
   // persisted Supabase session, then drives this state.
   const [authState, setAuthState] = useState<AuthState>({ status: 'loading' });
   const [authReady, setAuthReady] = useState(false);
+  // Founder celebration banner — fires once per founder when their slot
+  // is granted. Polled when the auth state transitions to signed-in;
+  // dismissal stamps founder_banner_seen_at on the profile row so the
+  // modal never re-fires (even across reinstalls).
+  const [founderBanner, setFounderBanner] = useState<{
+    visible: boolean;
+    number: number;
+    userId: string | null;
+  }>({ visible: false, number: 0, userId: null });
 
   useEffect(() => {
     if (!isAuthConfigured()) {
@@ -132,6 +143,35 @@ function RootGate() {
     router,
   ]);
 
+  // Founder celebration polling — only fires once per founder. Re-queries
+  // every time the user transitions to signed-in; if they're a founder
+  // and haven't yet seen the banner, the modal renders. Dismissal
+  // server-stamps founder_banner_seen_at so it never re-fires.
+  useEffect(() => {
+    if (authState.status !== 'signed-in') return;
+    let cancelled = false;
+    getMyFounderStatus().then((s) => {
+      if (cancelled || !s) return;
+      if (s.isFounder && s.founderNumber != null && !s.bannerSeenAt) {
+        setFounderBanner({
+          visible: true,
+          number: s.founderNumber,
+          userId: authState.session.user.id,
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authState]);
+
+  const dismissFounderBanner = useCallback(() => {
+    setFounderBanner((s) => ({ ...s, visible: false }));
+    if (founderBanner.userId) {
+      void markFounderBannerSeen(founderBanner.userId).catch(() => {});
+    }
+  }, [founderBanner.userId]);
+
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -174,6 +214,11 @@ function RootGate() {
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
       </Stack>
+      <FounderCelebrationModal
+        visible={founderBanner.visible}
+        founderNumber={founderBanner.number}
+        onDismiss={dismissFounderBanner}
+      />
     </>
   );
 }

@@ -13,6 +13,7 @@ import { useEditorialTheme } from '../../lib/design/theme';
 import { useProfile } from '../../lib/profile-context';
 import { getAuthState, signOut, subscribeAuth, type AuthState } from '../../lib/auth/session';
 import { signOutGoogle } from '../../lib/auth/google';
+import { getMyFounderStatus } from '../../lib/auth/founder';
 import { isAuthConfigured } from '../../lib/supabase';
 
 export default function Settings() {
@@ -27,6 +28,24 @@ export default function Settings() {
   const [authState, setAuthState] = useState<AuthState>(getAuthState());
   useEffect(() => subscribeAuth(setAuthState), []);
   const session = authState.status === 'signed-in' ? authState.session : null;
+  // Founder status mirror — re-fetched whenever the session changes.
+  // Drives the "FOUNDER #N" badge below the display name. Errors are
+  // non-fatal; badge simply doesn't render if the read fails.
+  const [founderNumber, setFounderNumber] = useState<number | null>(null);
+  useEffect(() => {
+    if (!session) {
+      setFounderNumber(null);
+      return;
+    }
+    let cancelled = false;
+    getMyFounderStatus().then((s) => {
+      if (cancelled) return;
+      setFounderNumber(s?.isFounder ? (s.founderNumber ?? null) : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const setBiometricLock = async (enabled: boolean) => {
     if (!enabled) {
@@ -127,6 +146,41 @@ export default function Settings() {
               >
                 {session.user.email}
               </Text>
+            ) : null}
+            {/* Permanent founder badge — brass mono caps, slot number,
+                "lifetime free access" subtitle. Only renders for the
+                first 100 signups. */}
+            {founderNumber !== null ? (
+              <View
+                style={{
+                  marginTop: 14,
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: ed.colors.brandLine,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: ed.typography.label.fontFamily,
+                    fontSize: ed.typography.label.fontSize,
+                    letterSpacing: ed.typography.label.letterSpacing,
+                    color: ed.colors.brand,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  ✦ Founder · #{founderNumber}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 4,
+                    fontFamily: ed.typography.dataMd.fontFamily,
+                    fontSize: ed.typography.dataMd.fontSize,
+                    color: ed.colors.ink3,
+                  }}
+                >
+                  Lifetime free access to all premium features
+                </Text>
+              </View>
             ) : null}
           </View>
           <HairlineRow />
