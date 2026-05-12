@@ -259,6 +259,22 @@ export async function initDatabase() {
   // is always mcg in dose_mcg / amount_mcg — this is purely a display flag.
   await addColumnIfMissing(d, 'profile', 'dose_unit_pref', "TEXT NOT NULL DEFAULT 'auto'");
 
+  // v1.4 — auth scoping. Every user-owned table gains a nullable user_id
+  // column populated from requireUserId() on writes and filtered via
+  // WHERE user_id = ? on reads. NULL on existing rows means "pre-auth
+  // legacy data" — handled by the Phase C attribution prompt
+  // (lib/db.ts:attributeLocalDataToUser).
+  for (const t of [
+    'saved_peptides', 'vials', 'cycles', 'stacks', 'doses',
+    'journal_entries', 'metrics', 'injection_sites_log', 'dose_skips',
+  ]) {
+    await addColumnIfMissing(d, t, 'user_id', 'TEXT');
+  }
+  // One-time data-attribution flag — set when the user accepts the
+  // "Keep your data?" prompt OR explicitly wipes. Prevents the prompt
+  // from re-firing on subsequent launches.
+  await addColumnIfMissing(d, 'profile', 'local_data_attributed_at', 'TEXT');
+
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
     await d.runAsync(
@@ -306,6 +322,9 @@ export type Profile = {
   dismissed_banners: string;
   // v1.3: global dose-display preference. See lib/dose-format.ts.
   dose_unit_pref: 'auto' | 'mcg' | 'mg';
+  // v1.4: stamp set when the Phase C attribution prompt is resolved
+  // (user accepts or wipes). Prevents the prompt from re-firing.
+  local_data_attributed_at: string | null;
 };
 
 export async function getProfile(): Promise<Profile | null> {
@@ -339,29 +358,42 @@ export async function dismissBanner(key: string): Promise<void> {
 }
 
 // ---- Saved peptides --------------------------------------------------------
+// PK on saved_peptides is still peptide_id (not composite), which means
+// two users on the same device can't independently save overlapping
+// peptides without one shadowing the other. Single-user-per-device is
+// the operating assumption; the data attribution prompt forces users
+// to choose at sign-in time.
 
 export async function isSaved(peptide_id: string): Promise<boolean> {
+  const uid = requireUserId();
   const row = await db().getFirstAsync<{ peptide_id: string }>(
-    'SELECT peptide_id FROM saved_peptides WHERE peptide_id = ?',
-    peptide_id
+    'SELECT peptide_id FROM saved_peptides WHERE peptide_id = ? AND user_id = ?',
+    peptide_id, uid
   );
   return !!row;
 }
 
 export async function savePeptide(peptide_id: string) {
+  const uid = requireUserId();
   await db().runAsync(
-    'INSERT OR IGNORE INTO saved_peptides (peptide_id) VALUES (?)',
-    peptide_id
+    'INSERT OR REPLACE INTO saved_peptides (peptide_id, user_id) VALUES (?, ?)',
+    peptide_id, uid
   );
 }
 
 export async function unsavePeptide(peptide_id: string) {
-  await db().runAsync('DELETE FROM saved_peptides WHERE peptide_id = ?', peptide_id);
+  const uid = requireUserId();
+  await db().runAsync(
+    'DELETE FROM saved_peptides WHERE peptide_id = ? AND user_id = ?',
+    peptide_id, uid
+  );
 }
 
 export async function listSavedPeptides(): Promise<string[]> {
+  const uid = requireUserId();
   const rows = await db().getAllAsync<{ peptide_id: string }>(
-    'SELECT peptide_id FROM saved_peptides ORDER BY saved_at DESC'
+    'SELECT peptide_id FROM saved_peptides WHERE user_id = ? ORDER BY saved_at DESC',
+    uid
   );
   return rows.map((r) => r.peptide_id);
 }
@@ -408,103 +440,119 @@ export async function createVial(input: {
   expires_in_days?: number;
   notes?: string;
 }): Promise<string> {
+  const uid = requireUserId();
   const id = genId('vial');
   const concentration = input.strength_mg / input.bac_water_ml;
   const now = new Date();
   const expires = new Date(now.getTime() + (input.expires_in_days ?? 30) * 864e5);
-  // Deactivate any previous active vial for this peptide
+  // Deactivate any previous active vial for this peptide (within this user only).
   await db().runAsync(
-    'UPDATE vials SET is_active = 0 WHERE peptide_id = ? AND is_active = 1',
-    input.peptide_id
+    'UPDATE vials SET is_active = 0 WHERE peptide_id = ? AND is_active = 1 AND user_id = ?',
+    input.peptide_id, uid
   );
   await db().runAsync(
     `INSERT INTO vials
-      (id, peptide_id, strength_mg, bac_water_ml, concentration, remaining_mg,
+      (id, user_id, peptide_id, strength_mg, bac_water_ml, concentration, remaining_mg,
        reconstituted_at, expires_at, notes, is_active)
-     VALUES (?,?,?,?,?,?,?,?,?,1)`,
-    id, input.peptide_id, input.strength_mg, input.bac_water_ml, concentration,
+     VALUES (?,?,?,?,?,?,?,?,?,?,1)`,
+    id, uid, input.peptide_id, input.strength_mg, input.bac_water_ml, concentration,
     input.strength_mg, now.toISOString(), expires.toISOString(), input.notes ?? null
   );
   return id;
 }
 
 export async function getActiveVial(peptide_id: string): Promise<Vial | null> {
+  const uid = requireUserId();
   return db().getFirstAsync<Vial>(
-    `SELECT * FROM vials WHERE peptide_id = ? AND is_active = 1
+    `SELECT * FROM vials WHERE peptide_id = ? AND is_active = 1 AND user_id = ?
      ORDER BY reconstituted_at DESC LIMIT 1`,
-    peptide_id
+    peptide_id, uid
   );
 }
 
 export async function listActiveVials(): Promise<Vial[]> {
+  const uid = requireUserId();
   return db().getAllAsync<Vial>(
-    `SELECT * FROM vials WHERE is_active = 1 ORDER BY reconstituted_at DESC`
+    `SELECT * FROM vials WHERE is_active = 1 AND user_id = ? ORDER BY reconstituted_at DESC`,
+    uid
   );
 }
 
 export async function getVial(id: string): Promise<Vial | null> {
-  return db().getFirstAsync<Vial>('SELECT * FROM vials WHERE id = ?', id);
+  const uid = requireUserId();
+  return db().getFirstAsync<Vial>(
+    'SELECT * FROM vials WHERE id = ? AND user_id = ?',
+    id, uid
+  );
 }
 
 export async function deactivateVial(id: string) {
+  const uid = requireUserId();
   // v1.1: stamp depleted_at when is_active flips 1->0, iff not already set.
   await db().runAsync(
     `UPDATE vials
         SET is_active = 0,
             depleted_at = COALESCE(depleted_at, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-      WHERE id = ?`,
-    id
+      WHERE id = ? AND user_id = ?`,
+    id, uid
   );
 }
 
 export async function deleteVial(id: string) {
+  const uid = requireUserId();
   // Clear the vial_id foreign key on any doses that referenced it,
   // then delete the vial row.
   const d = db();
   await d.withTransactionAsync(async () => {
-    await d.runAsync('UPDATE doses SET vial_id = NULL WHERE vial_id = ?', id);
-    await d.runAsync('DELETE FROM vials WHERE id = ?', id);
+    await d.runAsync(
+      'UPDATE doses SET vial_id = NULL WHERE vial_id = ? AND user_id = ?',
+      id, uid
+    );
+    await d.runAsync('DELETE FROM vials WHERE id = ? AND user_id = ?', id, uid);
   });
 }
 
 // v1.1: restore a depleted vial back to active. Clears depleted_at.
 export async function restoreVial(id: string) {
+  const uid = requireUserId();
   await db().runAsync(
-    'UPDATE vials SET is_active = 1, depleted_at = NULL WHERE id = ?',
-    id
+    'UPDATE vials SET is_active = 1, depleted_at = NULL WHERE id = ? AND user_id = ?',
+    id, uid
   );
 }
 
 // v1.1: vial history (is_active=0) newest first, with optional filter.
 export async function getVialHistory(opts: { limit?: number; peptideId?: string } = {}): Promise<Vial[]> {
+  const uid = requireUserId();
   const { limit = 100, peptideId } = opts;
   if (peptideId) {
     return db().getAllAsync<Vial>(
-      `SELECT * FROM vials WHERE is_active = 0 AND peptide_id = ?
+      `SELECT * FROM vials WHERE is_active = 0 AND peptide_id = ? AND user_id = ?
        ORDER BY depleted_at DESC, reconstituted_at DESC LIMIT ?`,
-      peptideId, limit
+      peptideId, uid, limit
     );
   }
   return db().getAllAsync<Vial>(
-    `SELECT * FROM vials WHERE is_active = 0
+    `SELECT * FROM vials WHERE is_active = 0 AND user_id = ?
      ORDER BY depleted_at DESC, reconstituted_at DESC LIMIT ?`,
-    limit
+    uid, limit
   );
 }
 
 // v1.1: all vials for a peptide (active-only flag optional).
 export async function getVialsForPeptide(peptideId: string, activeOnly = false): Promise<Vial[]> {
+  const uid = requireUserId();
   if (activeOnly) {
     return db().getAllAsync<Vial>(
-      `SELECT * FROM vials WHERE peptide_id = ? AND is_active = 1
+      `SELECT * FROM vials WHERE peptide_id = ? AND is_active = 1 AND user_id = ?
        ORDER BY reconstituted_at DESC`,
-      peptideId
+      peptideId, uid
     );
   }
   return db().getAllAsync<Vial>(
-    `SELECT * FROM vials WHERE peptide_id = ?
+    `SELECT * FROM vials WHERE peptide_id = ? AND user_id = ?
      ORDER BY is_active DESC, reconstituted_at DESC`,
-    peptideId
+    peptideId, uid
   );
 }
 
@@ -532,6 +580,7 @@ export const getVialById = getVial;
 export async function matchingVialsForCycle(
   cycle: Pick<Cycle, 'id' | 'protocol_json'>
 ): Promise<Vial[]> {
+  const uid = requireUserId();
   let peptideIds: string[] = [];
   try {
     const protocol = JSON.parse(cycle.protocol_json || '[]') as { peptide_id: string }[];
@@ -545,9 +594,11 @@ export async function matchingVialsForCycle(
   return db().getAllAsync<Vial>(
     `SELECT * FROM vials
        WHERE peptide_id IN (${placeholders})
+         AND user_id = ?
          AND (is_active = 1 OR (depleted_at IS NOT NULL AND depleted_at >= ?))
        ORDER BY is_active DESC, reconstituted_at DESC`,
     ...peptideIds,
+    uid,
     cutoff
   );
 }
@@ -555,9 +606,10 @@ export async function matchingVialsForCycle(
 // Vials currently attached to this cycle. Used by cycle detail's "Vials"
 // section.
 export async function getVialsForCycle(cycle_id: string): Promise<Vial[]> {
+  const uid = requireUserId();
   return db().getAllAsync<Vial>(
-    `SELECT * FROM vials WHERE cycle_id = ? ORDER BY reconstituted_at DESC`,
-    cycle_id
+    `SELECT * FROM vials WHERE cycle_id = ? AND user_id = ? ORDER BY reconstituted_at DESC`,
+    cycle_id, uid
   );
 }
 
@@ -565,20 +617,29 @@ export async function getVialsForCycle(cycle_id: string): Promise<Vial[]> {
 // to another cycle, that link is overwritten. The UI should prompt before
 // reaching this function in that case so the user understands the move.
 export async function attachVialToCycle(vial_id: string, cycle_id: string) {
-  await db().runAsync('UPDATE vials SET cycle_id = ? WHERE id = ?', cycle_id, vial_id);
+  const uid = requireUserId();
+  await db().runAsync(
+    'UPDATE vials SET cycle_id = ? WHERE id = ? AND user_id = ?',
+    cycle_id, vial_id, uid
+  );
 }
 
 // Returns vial back to free inventory. Doses logged from this vial keep
 // their existing cycle_id — detaching the vial doesn't rewrite history.
 export async function detachVial(vial_id: string) {
-  await db().runAsync('UPDATE vials SET cycle_id = NULL WHERE id = ?', vial_id);
+  const uid = requireUserId();
+  await db().runAsync(
+    'UPDATE vials SET cycle_id = NULL WHERE id = ? AND user_id = ?',
+    vial_id, uid
+  );
 }
 
 // v1.1: all doses drawn from a specific vial (timeline on vial detail).
 export async function getDosesForVial(vialId: string): Promise<Dose[]> {
+  const uid = requireUserId();
   return db().getAllAsync<Dose>(
-    'SELECT * FROM doses WHERE vial_id = ? ORDER BY taken_at DESC',
-    vialId
+    'SELECT * FROM doses WHERE vial_id = ? AND user_id = ? ORDER BY taken_at DESC',
+    vialId, uid
   );
 }
 
@@ -596,9 +657,13 @@ export async function updateVial(
     cost_usd?: number | null;
   }
 ) {
+  const uid = requireUserId();
   const d = db();
   await d.withTransactionAsync(async () => {
-    const current = await d.getFirstAsync<Vial>('SELECT * FROM vials WHERE id = ?', id);
+    const current = await d.getFirstAsync<Vial>(
+      'SELECT * FROM vials WHERE id = ? AND user_id = ?',
+      id, uid
+    );
     if (!current) return;
 
     const newStrength = patch.strength_mg ?? current.strength_mg;
@@ -609,8 +674,8 @@ export async function updateVial(
     let newRemaining = current.remaining_mg;
     if (patch.strength_mg !== undefined && patch.strength_mg !== current.strength_mg) {
       const sum = await d.getFirstAsync<{ drawn_mg: number | null }>(
-        'SELECT COALESCE(SUM(amount_mcg), 0) / 1000.0 AS drawn_mg FROM doses WHERE vial_id = ?',
-        id
+        'SELECT COALESCE(SUM(amount_mcg), 0) / 1000.0 AS drawn_mg FROM doses WHERE vial_id = ? AND user_id = ?',
+        id, uid
       );
       const drawn = sum?.drawn_mg ?? 0;
       newRemaining = Math.max(0, newStrength - drawn);
@@ -625,13 +690,17 @@ export async function updateVial(
     if (patch.expires_at !== undefined) { sets.push('expires_at = ?'); vals.push(patch.expires_at); }
     if (patch.notes !== undefined) { sets.push('notes = ?'); vals.push(patch.notes); }
     if (patch.cost_usd !== undefined) { sets.push('cost_usd = ?'); vals.push(patch.cost_usd); }
-    vals.push(id);
-    await d.runAsync(`UPDATE vials SET ${sets.join(', ')} WHERE id = ?`, ...vals);
+    vals.push(id, uid);
+    await d.runAsync(`UPDATE vials SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, ...vals);
   });
 }
 
 export async function getDoseById(id: string): Promise<Dose | null> {
-  return db().getFirstAsync<Dose>('SELECT * FROM doses WHERE id = ?', id);
+  const uid = requireUserId();
+  return db().getFirstAsync<Dose>(
+    'SELECT * FROM doses WHERE id = ? AND user_id = ?',
+    id, uid
+  );
 }
 
 export async function updateDose(
@@ -644,6 +713,7 @@ export async function updateDose(
     taken_at?: string;
   }
 ) {
+  const uid = requireUserId();
   const sets: string[] = [];
   const values: (string | number | null)[] = [];
   if (patch.amount_mcg !== undefined) { sets.push('amount_mcg = ?'); values.push(patch.amount_mcg); }
@@ -655,33 +725,43 @@ export async function updateDose(
 
   const d = db();
   await d.withTransactionAsync(async () => {
-    const current = await d.getFirstAsync<Dose>('SELECT * FROM doses WHERE id = ?', id);
+    const current = await d.getFirstAsync<Dose>(
+      'SELECT * FROM doses WHERE id = ? AND user_id = ?',
+      id, uid
+    );
     if (!current) return;
 
-    const params = [...values, id];
-    await d.runAsync(`UPDATE doses SET ${sets.join(', ')} WHERE id = ?`, ...params);
+    const params = [...values, id, uid];
+    await d.runAsync(
+      `UPDATE doses SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
+      ...params
+    );
 
     if (patch.amount_mcg !== undefined && current.vial_id) {
       const deltaMg = (patch.amount_mcg - current.amount_mcg) / 1000;
       await d.runAsync(
-        'UPDATE vials SET remaining_mg = MAX(0, remaining_mg - ?) WHERE id = ?',
+        'UPDATE vials SET remaining_mg = MAX(0, remaining_mg - ?) WHERE id = ? AND user_id = ?',
         deltaMg,
-        current.vial_id
+        current.vial_id,
+        uid
       );
     }
 
     if (patch.site !== undefined || patch.taken_at !== undefined) {
-      await d.runAsync('DELETE FROM injection_sites_log WHERE dose_id = ?', id);
+      await d.runAsync(
+        'DELETE FROM injection_sites_log WHERE dose_id = ? AND user_id = ?',
+        id, uid
+      );
       if (patch.site) {
         const dose = await d.getFirstAsync<{ taken_at: string }>(
-          'SELECT taken_at FROM doses WHERE id = ?',
-          id
+          'SELECT taken_at FROM doses WHERE id = ? AND user_id = ?',
+          id, uid
         );
         if (dose) {
           const sid = `site_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
           await d.runAsync(
-            'INSERT INTO injection_sites_log (id, site, used_at, dose_id) VALUES (?,?,?,?)',
-            sid, patch.site, dose.taken_at, id
+            'INSERT INTO injection_sites_log (id, user_id, site, used_at, dose_id) VALUES (?,?,?,?,?)',
+            sid, uid, patch.site, dose.taken_at, id
           );
         }
       }
@@ -715,6 +795,7 @@ export async function logDose(input: {
   taken_at?: string;
   note?: string;
 }): Promise<string> {
+  const uid = requireUserId();
   const id = genId('dose');
   const taken_at = input.taken_at ?? new Date().toISOString();
   const amount_mg = input.amount_mcg / 1000;
@@ -726,10 +807,10 @@ export async function logDose(input: {
   if (vial_id === null) {
     const auto = await d.getFirstAsync<{ id: string }>(
       `SELECT id FROM vials
-        WHERE peptide_id = ? AND is_active = 1
+        WHERE peptide_id = ? AND is_active = 1 AND user_id = ?
         ORDER BY (expires_at IS NULL) ASC, expires_at ASC, reconstituted_at ASC
         LIMIT 1`,
-      input.peptide_id
+      input.peptide_id, uid
     );
     if (auto) vial_id = auto.id;
   }
@@ -746,10 +827,10 @@ export async function logDose(input: {
 
   await d.withTransactionAsync(async () => {
     await d.runAsync(
-      `INSERT INTO doses (id, peptide_id, vial_id, cycle_id, amount_mcg, volume_units,
+      `INSERT INTO doses (id, user_id, peptide_id, vial_id, cycle_id, amount_mcg, volume_units,
                           route, site, taken_at, note)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      id, input.peptide_id, vial_id, cycle_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      id, uid, input.peptide_id, vial_id, cycle_id,
       input.amount_mcg, input.volume_units ?? null, input.route,
       input.site ?? null, taken_at, input.note ?? null
     );
@@ -760,15 +841,15 @@ export async function logDose(input: {
            SET remaining_mg      = MAX(0, remaining_mg - ?),
                total_doses_drawn = total_doses_drawn + 1,
                first_used_at     = COALESCE(first_used_at, ?)
-         WHERE id = ?`,
-        amount_mg, taken_at, vial_id
+         WHERE id = ? AND user_id = ?`,
+        amount_mg, taken_at, vial_id, uid
       );
     }
     if (input.site) {
       const sid = genId('site');
       await d.runAsync(
-        `INSERT INTO injection_sites_log (id, site, used_at, dose_id) VALUES (?,?,?,?)`,
-        sid, input.site, taken_at, id
+        `INSERT INTO injection_sites_log (id, user_id, site, used_at, dose_id) VALUES (?,?,?,?,?)`,
+        sid, uid, input.site, taken_at, id
       );
     }
   });
@@ -776,14 +857,13 @@ export async function logDose(input: {
 }
 
 export async function listDoses(opts: { limit?: number; from?: string; to?: string } = {}): Promise<Dose[]> {
+  const uid = requireUserId();
   const { limit = 50, from, to } = opts;
-  let sql = 'SELECT * FROM doses';
-  const args: unknown[] = [];
-  const where: string[] = [];
+  const args: unknown[] = [uid];
+  const where: string[] = ['user_id = ?'];
   if (from) { where.push('taken_at >= ?'); args.push(from); }
   if (to) { where.push('taken_at <= ?'); args.push(to); }
-  if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' ORDER BY taken_at DESC LIMIT ?';
+  const sql = `SELECT * FROM doses WHERE ${where.join(' AND ')} ORDER BY taken_at DESC LIMIT ?`;
   args.push(limit);
   return db().getAllAsync<Dose>(sql, ...args as (string | number)[]);
 }
@@ -792,28 +872,37 @@ export async function getLastDoseForCyclePeptide(
   cycle_id: string,
   peptide_id: string
 ): Promise<Dose | null> {
+  const uid = requireUserId();
   return db().getFirstAsync<Dose>(
     `SELECT * FROM doses
-      WHERE cycle_id = ? AND peptide_id = ?
+      WHERE cycle_id = ? AND peptide_id = ? AND user_id = ?
       ORDER BY taken_at DESC LIMIT 1`,
     cycle_id,
-    peptide_id
+    peptide_id,
+    uid
   );
 }
 
 export async function deleteDose(id: string) {
-  const dose = await db().getFirstAsync<Dose>('SELECT * FROM doses WHERE id = ?', id);
+  const uid = requireUserId();
+  const dose = await db().getFirstAsync<Dose>(
+    'SELECT * FROM doses WHERE id = ? AND user_id = ?',
+    id, uid
+  );
   if (!dose) return;
   const d = db();
   await d.withTransactionAsync(async () => {
     if (dose.vial_id) {
       await d.runAsync(
-        'UPDATE vials SET remaining_mg = remaining_mg + ? WHERE id = ?',
-        dose.amount_mcg / 1000, dose.vial_id
+        'UPDATE vials SET remaining_mg = remaining_mg + ? WHERE id = ? AND user_id = ?',
+        dose.amount_mcg / 1000, dose.vial_id, uid
       );
     }
-    await d.runAsync('DELETE FROM injection_sites_log WHERE dose_id = ?', id);
-    await d.runAsync('DELETE FROM doses WHERE id = ?', id);
+    await d.runAsync(
+      'DELETE FROM injection_sites_log WHERE dose_id = ? AND user_id = ?',
+      id, uid
+    );
+    await d.runAsync('DELETE FROM doses WHERE id = ? AND user_id = ?', id, uid);
   });
 }
 
@@ -859,11 +948,12 @@ export async function createCycle(input: {
   protocol: CycleProtocolItem[];
   notes?: string;
 }): Promise<string> {
+  const uid = requireUserId();
   const id = genId('cycle');
   await db().runAsync(
-    `INSERT INTO cycles (id, name, starts_on, ends_on, phase, status, stack_id, protocol_json, notes)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    id, input.name, input.starts_on, input.ends_on,
+    `INSERT INTO cycles (id, user_id, name, starts_on, ends_on, phase, status, stack_id, protocol_json, notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    id, uid, input.name, input.starts_on, input.ends_on,
     input.phase ?? 'active', 'active', input.stack_id ?? null,
     JSON.stringify(input.protocol), input.notes ?? null
   );
@@ -871,8 +961,10 @@ export async function createCycle(input: {
 }
 
 export async function getActiveCycle(): Promise<Cycle | null> {
+  const uid = requireUserId();
   return db().getFirstAsync<Cycle>(
-    `SELECT * FROM cycles WHERE status = 'active' ORDER BY starts_on DESC LIMIT 1`
+    `SELECT * FROM cycles WHERE status = 'active' AND user_id = ? ORDER BY starts_on DESC LIMIT 1`,
+    uid
   );
 }
 
@@ -882,8 +974,10 @@ export async function getActiveCycle(): Promise<Cycle | null> {
 // the protocols across the result; getActiveCycle stays for callers that
 // genuinely need a single representative cycle.
 export async function listActiveCycles(): Promise<Cycle[]> {
+  const uid = requireUserId();
   return db().getAllAsync<Cycle>(
-    `SELECT * FROM cycles WHERE status IN ('active', 'paused') ORDER BY starts_on DESC`
+    `SELECT * FROM cycles WHERE status IN ('active', 'paused') AND user_id = ? ORDER BY starts_on DESC`,
+    uid
   );
 }
 
@@ -907,37 +1001,53 @@ export async function getActiveCycleForPeptide(peptideId: string): Promise<Cycle
 }
 
 export async function listCycles(): Promise<Cycle[]> {
-  return db().getAllAsync<Cycle>('SELECT * FROM cycles ORDER BY starts_on DESC');
+  const uid = requireUserId();
+  return db().getAllAsync<Cycle>(
+    'SELECT * FROM cycles WHERE user_id = ? ORDER BY starts_on DESC',
+    uid
+  );
 }
 
 export async function endCycle(id: string) {
+  const uid = requireUserId();
   const d = db();
   await d.withTransactionAsync(async () => {
-    await d.runAsync(`UPDATE cycles SET status = 'complete' WHERE id = ?`, id);
+    await d.runAsync(
+      `UPDATE cycles SET status = 'complete' WHERE id = ? AND user_id = ?`,
+      id, uid
+    );
     // v1.2: when a cycle ends, attached vials return to free inventory so
     // a follow-up cycle can claim them. Doses keep their per-row cycle_id
     // so the historical accounting stays intact.
-    await d.runAsync(`UPDATE vials SET cycle_id = NULL WHERE cycle_id = ?`, id);
+    await d.runAsync(
+      `UPDATE vials SET cycle_id = NULL WHERE cycle_id = ? AND user_id = ?`,
+      id, uid
+    );
   });
 }
 
 // v1.1: pause an active cycle. Today stops scheduling from it until resumed.
 export async function pauseCycle(id: string) {
+  const uid = requireUserId();
   await db().runAsync(
     `UPDATE cycles
         SET status = 'paused',
             paused_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE id = ?`,
-    id
+      WHERE id = ? AND user_id = ?`,
+    id, uid
   );
 }
 
 // v1.1: resume a paused cycle. Shifts ends_on forward by the paused span
 // and accumulates paused_total_days. Clears paused_at.
 export async function resumeCycle(id: string) {
+  const uid = requireUserId();
   const d = db();
   await d.withTransactionAsync(async () => {
-    const row = await d.getFirstAsync<Cycle>('SELECT * FROM cycles WHERE id = ?', id);
+    const row = await d.getFirstAsync<Cycle>(
+      'SELECT * FROM cycles WHERE id = ? AND user_id = ?',
+      id, uid
+    );
     if (!row || !row.paused_at) return;
     const pausedMs = Date.now() - new Date(row.paused_at).getTime();
     const pausedDays = Math.max(0, Math.round(pausedMs / 864e5));
@@ -950,8 +1060,8 @@ export async function resumeCycle(id: string) {
               paused_at = NULL,
               paused_total_days = paused_total_days + ?,
               ends_on = ?
-        WHERE id = ?`,
-      pausedDays, newEnds, id
+        WHERE id = ? AND user_id = ?`,
+      pausedDays, newEnds, id, uid
     );
   });
 }
@@ -965,12 +1075,14 @@ export async function createDoseSkip(input: {
   reason?: string | null;
   note?: string | null;
 }): Promise<string> {
+  const uid = requireUserId();
   const id = genId('skip');
   await db().runAsync(
     `INSERT INTO dose_skips
-       (id, peptide_id, cycle_id, scheduled_date, time_of_day, reason, note, created_at)
-     VALUES (?,?,?,?,?,?,?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
+       (id, user_id, peptide_id, cycle_id, scheduled_date, time_of_day, reason, note, created_at)
+     VALUES (?,?,?,?,?,?,?,?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`,
     id,
+    uid,
     input.peptide_id,
     input.cycle_id ?? null,
     input.scheduled_date,
@@ -984,19 +1096,19 @@ export async function createDoseSkip(input: {
 export async function listDoseSkips(
   opts: { from?: string; to?: string; cycle_id?: string } = {}
 ): Promise<DoseSkip[]> {
-  const where: string[] = [];
-  const args: (string | number)[] = [];
+  const uid = requireUserId();
+  const where: string[] = ['user_id = ?'];
+  const args: (string | number)[] = [uid];
   if (opts.from) { where.push('scheduled_date >= ?'); args.push(opts.from); }
   if (opts.to) { where.push('scheduled_date <= ?'); args.push(opts.to); }
   if (opts.cycle_id) { where.push('cycle_id = ?'); args.push(opts.cycle_id); }
-  const sql = `SELECT * FROM dose_skips${
-    where.length ? ' WHERE ' + where.join(' AND ') : ''
-  } ORDER BY scheduled_date DESC`;
+  const sql = `SELECT * FROM dose_skips WHERE ${where.join(' AND ')} ORDER BY scheduled_date DESC`;
   return db().getAllAsync<DoseSkip>(sql, ...args);
 }
 
 export async function deleteDoseSkip(id: string) {
-  await db().runAsync('DELETE FROM dose_skips WHERE id = ?', id);
+  const uid = requireUserId();
+  await db().runAsync('DELETE FROM dose_skips WHERE id = ? AND user_id = ?', id, uid);
 }
 
 export async function updateCycle(
@@ -1024,8 +1136,12 @@ export async function updateCycle(
   }
   if (patch.notes !== undefined) { sets.push('notes = ?'); values.push(patch.notes); }
   if (sets.length === 0) return;
-  values.push(id);
-  await db().runAsync(`UPDATE cycles SET ${sets.join(', ')} WHERE id = ?`, ...values);
+  const uid = requireUserId();
+  values.push(id, uid);
+  await db().runAsync(
+    `UPDATE cycles SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
+    ...values
+  );
 }
 
 // ---- Stacks ----------------------------------------------------------------
@@ -1053,26 +1169,36 @@ export async function createStack(input: {
   items: StackItem[];
   synergy_score?: number;
 }): Promise<string> {
+  const uid = requireUserId();
   const id = genId('stack');
   await db().runAsync(
-    `INSERT INTO stacks (id, name, goal, items_json, synergy_score)
-     VALUES (?,?,?,?,?)`,
-    id, input.name, input.goal ?? null, JSON.stringify(input.items),
+    `INSERT INTO stacks (id, user_id, name, goal, items_json, synergy_score)
+     VALUES (?,?,?,?,?,?)`,
+    id, uid, input.name, input.goal ?? null, JSON.stringify(input.items),
     input.synergy_score ?? null
   );
   return id;
 }
 
 export async function listStacks(): Promise<Stack[]> {
-  return db().getAllAsync<Stack>('SELECT * FROM stacks ORDER BY created_at DESC');
+  const uid = requireUserId();
+  return db().getAllAsync<Stack>(
+    'SELECT * FROM stacks WHERE user_id = ? ORDER BY created_at DESC',
+    uid
+  );
 }
 
 export async function getStack(id: string): Promise<Stack | null> {
-  return db().getFirstAsync<Stack>('SELECT * FROM stacks WHERE id = ?', id);
+  const uid = requireUserId();
+  return db().getFirstAsync<Stack>(
+    'SELECT * FROM stacks WHERE id = ? AND user_id = ?',
+    id, uid
+  );
 }
 
 export async function deleteStack(id: string) {
-  await db().runAsync('DELETE FROM stacks WHERE id = ?', id);
+  const uid = requireUserId();
+  await db().runAsync('DELETE FROM stacks WHERE id = ? AND user_id = ?', id, uid);
 }
 
 // ---- Journal ---------------------------------------------------------------
@@ -1103,29 +1229,30 @@ export async function upsertJournal(input: {
   tags?: string[];
   body?: string;
 }) {
+  const uid = requireUserId();
   const existing = await db().getFirstAsync<JournalEntry>(
-    'SELECT * FROM journal_entries WHERE entry_date = ?',
-    input.entry_date
+    'SELECT * FROM journal_entries WHERE entry_date = ? AND user_id = ?',
+    input.entry_date, uid
   );
   if (existing) {
     await db().runAsync(
       `UPDATE journal_entries SET mood = ?, energy = ?, sleep_hours = ?, sleep_quality = ?,
          libido = ?, recovery = ?, tags_json = ?, body = ?, updated_at = datetime('now')
-       WHERE entry_date = ?`,
+       WHERE entry_date = ? AND user_id = ?`,
       input.mood ?? existing.mood, input.energy ?? existing.energy,
       input.sleep_hours ?? existing.sleep_hours, input.sleep_quality ?? existing.sleep_quality,
       input.libido ?? existing.libido, input.recovery ?? existing.recovery,
       JSON.stringify(input.tags ?? JSON.parse(existing.tags_json)),
-      input.body ?? existing.body, input.entry_date
+      input.body ?? existing.body, input.entry_date, uid
     );
     return existing.id;
   }
   const id = genId('jrnl');
   await db().runAsync(
     `INSERT INTO journal_entries
-       (id, entry_date, mood, energy, sleep_hours, sleep_quality, libido, recovery, tags_json, body)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    id, input.entry_date, input.mood ?? null, input.energy ?? null,
+       (id, user_id, entry_date, mood, energy, sleep_hours, sleep_quality, libido, recovery, tags_json, body)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    id, uid, input.entry_date, input.mood ?? null, input.energy ?? null,
     input.sleep_hours ?? null, input.sleep_quality ?? null,
     input.libido ?? null, input.recovery ?? null,
     JSON.stringify(input.tags ?? []), input.body ?? null
@@ -1134,16 +1261,18 @@ export async function upsertJournal(input: {
 }
 
 export async function getJournal(entry_date: string): Promise<JournalEntry | null> {
+  const uid = requireUserId();
   return db().getFirstAsync<JournalEntry>(
-    'SELECT * FROM journal_entries WHERE entry_date = ?',
-    entry_date
+    'SELECT * FROM journal_entries WHERE entry_date = ? AND user_id = ?',
+    entry_date, uid
   );
 }
 
 export async function listJournal(limit = 30): Promise<JournalEntry[]> {
+  const uid = requireUserId();
   return db().getAllAsync<JournalEntry>(
-    'SELECT * FROM journal_entries ORDER BY entry_date DESC LIMIT ?',
-    limit
+    'SELECT * FROM journal_entries WHERE user_id = ? ORDER BY entry_date DESC LIMIT ?',
+    uid, limit
   );
 }
 
@@ -1179,12 +1308,13 @@ export async function insertMetric(input: {
   taken_at?: string;
   note?: string;
 }): Promise<string> {
+  const uid = requireUserId();
   const id = genId('metric');
   const kind_info = METRIC_KINDS.find((k) => k.id === input.kind);
   await db().runAsync(
-    `INSERT INTO metrics (id, kind, value, unit, taken_at, source, note)
-     VALUES (?,?,?,?,?,?,?)`,
-    id, input.kind, input.value,
+    `INSERT INTO metrics (id, user_id, kind, value, unit, taken_at, source, note)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    id, uid, input.kind, input.value,
     input.unit ?? kind_info?.unit ?? null,
     input.taken_at ?? new Date().toISOString(),
     'manual', input.note ?? null
@@ -1193,18 +1323,20 @@ export async function insertMetric(input: {
 }
 
 export async function listMetrics(kind: string, limit = 90): Promise<Metric[]> {
+  const uid = requireUserId();
   return db().getAllAsync<Metric>(
-    'SELECT * FROM metrics WHERE kind = ? ORDER BY taken_at DESC LIMIT ?',
-    kind, limit
+    'SELECT * FROM metrics WHERE kind = ? AND user_id = ? ORDER BY taken_at DESC LIMIT ?',
+    kind, uid, limit
   );
 }
 
 export async function listAllMetricKindsWithLatest(): Promise<{ kind: string; latest: Metric | null }[]> {
+  const uid = requireUserId();
   const out: { kind: string; latest: Metric | null }[] = [];
   for (const k of METRIC_KINDS) {
     const latest = await db().getFirstAsync<Metric>(
-      'SELECT * FROM metrics WHERE kind = ? ORDER BY taken_at DESC LIMIT 1',
-      k.id
+      'SELECT * FROM metrics WHERE kind = ? AND user_id = ? ORDER BY taken_at DESC LIMIT 1',
+      k.id, uid
     );
     out.push({ kind: k.id, latest });
   }
@@ -1212,7 +1344,8 @@ export async function listAllMetricKindsWithLatest(): Promise<{ kind: string; la
 }
 
 export async function deleteMetric(id: string) {
-  await db().runAsync('DELETE FROM metrics WHERE id = ?', id);
+  const uid = requireUserId();
+  await db().runAsync('DELETE FROM metrics WHERE id = ? AND user_id = ?', id, uid);
 }
 
 // ---- Injection-site rotation -----------------------------------------------
@@ -1235,18 +1368,20 @@ export type SiteSuggestion = {
 };
 
 export async function siteSuggestion(): Promise<SiteSuggestion> {
+  const uid = requireUserId();
   const d = db();
   const now = Date.now();
-  // Filter the history to injection routes only — non-injection doses
-  // (Intranasal Selank, Oral MK-677, Topical GHK-Cu, etc.) shouldn't
-  // count toward the rotation map. Older rows without a route fall
-  // through as injectable for backward compatibility.
+  // Filter the history to the current user's injection-route doses only.
+  // Older rows without a user_id (pre-auth legacy) fall through so the
+  // attribution prompt has historical context until the user accepts.
   const history = await d.getAllAsync<{ site: string; last_used: string; uses: number }>(
     `SELECT s.site, MAX(s.used_at) AS last_used, COUNT(*) AS uses
        FROM injection_sites_log s
        LEFT JOIN doses d ON d.id = s.dose_id
-      WHERE d.route IS NULL OR d.route IN ('SubQ', 'IM')
-      GROUP BY s.site`
+      WHERE (s.user_id = ? OR s.user_id IS NULL)
+        AND (d.route IS NULL OR d.route IN ('SubQ', 'IM'))
+      GROUP BY s.site`,
+    uid
   );
   const map = new Map(history.map((h) => [h.site, h]));
   const scored: SiteSuggestion[] = INJECTION_SITES.map((site) => {
@@ -1266,14 +1401,17 @@ export async function siteSuggestion(): Promise<SiteSuggestion> {
 }
 
 export async function siteRecency(): Promise<SiteSuggestion[]> {
+  const uid = requireUserId();
   const now = Date.now();
-  // Same injection-route filter as siteSuggestion — see comment there.
+  // Same injection-route + user_id filter as siteSuggestion — see there.
   const history = await db().getAllAsync<{ site: string; last_used: string; uses: number }>(
     `SELECT s.site, MAX(s.used_at) AS last_used, COUNT(*) AS uses
        FROM injection_sites_log s
        LEFT JOIN doses d ON d.id = s.dose_id
-      WHERE d.route IS NULL OR d.route IN ('SubQ', 'IM')
-      GROUP BY s.site`
+      WHERE (s.user_id = ? OR s.user_id IS NULL)
+        AND (d.route IS NULL OR d.route IN ('SubQ', 'IM'))
+      GROUP BY s.site`,
+    uid
   );
   const map = new Map(history.map((h) => [h.site, h]));
   return INJECTION_SITES.map((site) => {
@@ -1293,18 +1431,21 @@ export async function siteRecency(): Promise<SiteSuggestion[]> {
 // — the bottom sheet has no virtualization so we don't want to hand it
 // 500 rows.
 export async function listDosesAtSite(site: string, limit = 10): Promise<Dose[]> {
-  // Filter to injection routes — the site sheet is the rotation map's
-  // detail view, so it only surfaces doses where a body site is
-  // meaningful. NULL route falls through for backward-compat with
-  // pre-route-tracking rows.
+  const uid = requireUserId();
+  // Filter to injection routes + the current user. NULL route / user_id
+  // fall through for backward-compat with pre-route-tracking / pre-auth
+  // rows (legacy data attribution rewrites them once the user accepts
+  // the post-signup prompt).
   return db().getAllAsync<Dose>(
     `SELECT d.* FROM doses d
        INNER JOIN injection_sites_log s ON s.dose_id = d.id
       WHERE s.site = ?
+        AND (d.user_id = ? OR d.user_id IS NULL)
         AND (d.route IS NULL OR d.route IN ('SubQ', 'IM'))
       ORDER BY d.taken_at DESC
       LIMIT ?`,
     site,
+    uid,
     limit
   );
 }
@@ -1326,16 +1467,25 @@ export async function exportAllData(): Promise<{
   exported_at: string;
   schema_version: number;
 }> {
+  const uid = requireUserId();
   const d = db();
   return {
     profile: await getProfile(),
     cycles: await listCycles(),
-    doses: await d.getAllAsync<Dose>('SELECT * FROM doses ORDER BY taken_at DESC'),
-    vials: await d.getAllAsync<Vial>('SELECT * FROM vials ORDER BY reconstituted_at DESC'),
+    doses: await d.getAllAsync<Dose>(
+      'SELECT * FROM doses WHERE user_id = ? ORDER BY taken_at DESC', uid
+    ),
+    vials: await d.getAllAsync<Vial>(
+      'SELECT * FROM vials WHERE user_id = ? ORDER BY reconstituted_at DESC', uid
+    ),
     stacks: await listStacks(),
-    metrics: await d.getAllAsync<Metric>('SELECT * FROM metrics ORDER BY taken_at DESC'),
+    metrics: await d.getAllAsync<Metric>(
+      'SELECT * FROM metrics WHERE user_id = ? ORDER BY taken_at DESC', uid
+    ),
     journal: await listJournal(1000),
-    dose_skips: await d.getAllAsync<DoseSkip>('SELECT * FROM dose_skips ORDER BY scheduled_date DESC'),
+    dose_skips: await d.getAllAsync<DoseSkip>(
+      'SELECT * FROM dose_skips WHERE user_id = ? ORDER BY scheduled_date DESC', uid
+    ),
     saved_peptides: await listSavedPeptides(),
     exported_at: new Date().toISOString(),
     schema_version: SCHEMA_VERSION,
@@ -1344,25 +1494,158 @@ export async function exportAllData(): Promise<{
 
 export const exportAll = exportAllData;
 
+// Wipes every user-data row. Pre-auth (legacy local-only) builds wipe
+// the whole DB; auth-mode builds wipe only the current user's rows so
+// other accounts on the same device aren't touched. The peptides
+// reference table is untouched in both cases.
 export async function deleteAllUserData() {
   const d = db();
+  const uid = getCurrentUserId();
   await d.withTransactionAsync(async () => {
+    if (uid) {
+      // Auth mode — scoped wipe. Pre-auth NULL-user_id rows are also
+      // cleared so accepting "Delete account" leaves no residue.
+      const where = '(user_id = ? OR user_id IS NULL)';
+      await d.runAsync(`DELETE FROM doses WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM vials WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM cycles WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM stacks WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM journal_entries WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM metrics WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM injection_sites_log WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM saved_peptides WHERE ${where}`, uid);
+      await d.runAsync(`DELETE FROM dose_skips WHERE ${where}`, uid);
+    } else {
+      // Legacy local-only mode — wipe everything.
+      await d.execAsync(`
+        DELETE FROM doses;
+        DELETE FROM vials;
+        DELETE FROM cycles;
+        DELETE FROM stacks;
+        DELETE FROM journal_entries;
+        DELETE FROM metrics;
+        DELETE FROM injection_sites_log;
+        DELETE FROM saved_peptides;
+        DELETE FROM dose_skips;
+      `);
+    }
+    // Profile is a singleton; wipe per-device acceptances + identifiers
+    // in both modes so the user lands back on a fresh state.
     await d.execAsync(`
-      DELETE FROM doses;
-      DELETE FROM vials;
-      DELETE FROM cycles;
-      DELETE FROM stacks;
-      DELETE FROM journal_entries;
-      DELETE FROM metrics;
-      DELETE FROM injection_sites_log;
-      DELETE FROM saved_peptides;
-      DELETE FROM dose_skips;
       UPDATE profile SET
         display_name = NULL, birth_year = NULL,
         onboarding_done = 0, terms_accepted_at = NULL,
-        age_gate_accepted_at = NULL, disclaimer_accepted_at = NULL
+        age_gate_accepted_at = NULL, disclaimer_accepted_at = NULL,
+        local_data_attributed_at = NULL
       WHERE id = 1;
     `);
+  });
+}
+
+// ---- Phase C: data attribution --------------------------------------------
+//
+// On first sign-in after the auth feature lands, the local SQLite has
+// (potentially) rows where user_id IS NULL — data the device accumulated
+// before accounts existed. The post-signup prompt asks the user whether
+// to keep this data or wipe it. These helpers power that screen.
+
+/**
+ * True when there's at least one NULL-user_id row across every
+ * user-owned table. Drives the "Keep your data?" prompt visibility.
+ */
+export async function hasLegacyLocalData(): Promise<boolean> {
+  const d = db();
+  for (const t of [
+    'doses', 'vials', 'cycles', 'stacks', 'journal_entries',
+    'metrics', 'injection_sites_log', 'saved_peptides', 'dose_skips',
+  ]) {
+    const row = await d.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM ${t} WHERE user_id IS NULL LIMIT 1`
+    );
+    if ((row?.n ?? 0) > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Per-table counts of NULL-user_id rows. Used by the prompt to render
+ * "47 doses, 3 vials, 2 cycles, 12 journal entries…" so the user knows
+ * what they're keeping or losing.
+ */
+export async function legacyLocalDataCounts(): Promise<{
+  doses: number;
+  vials: number;
+  cycles: number;
+  stacks: number;
+  journal: number;
+  metrics: number;
+  sites: number;
+  saved: number;
+  skips: number;
+}> {
+  const d = db();
+  const get = async (t: string) => {
+    const row = await d.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM ${t} WHERE user_id IS NULL`
+    );
+    return row?.n ?? 0;
+  };
+  return {
+    doses: await get('doses'),
+    vials: await get('vials'),
+    cycles: await get('cycles'),
+    stacks: await get('stacks'),
+    journal: await get('journal_entries'),
+    metrics: await get('metrics'),
+    sites: await get('injection_sites_log'),
+    saved: await get('saved_peptides'),
+    skips: await get('dose_skips'),
+  };
+}
+
+/**
+ * Backfill every NULL-user_id row to belong to this user. Called when
+ * the user taps "Keep my data" in the attribution prompt. Stamps
+ * profile.local_data_attributed_at so the prompt never re-fires on
+ * this device.
+ */
+export async function attributeLocalDataToUser(userId: string): Promise<void> {
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    for (const t of [
+      'doses', 'vials', 'cycles', 'stacks', 'journal_entries',
+      'metrics', 'injection_sites_log', 'saved_peptides', 'dose_skips',
+    ]) {
+      await d.runAsync(
+        `UPDATE ${t} SET user_id = ? WHERE user_id IS NULL`,
+        userId
+      );
+    }
+    await d.runAsync(
+      `UPDATE profile SET local_data_attributed_at = ? WHERE id = 1`,
+      new Date().toISOString()
+    );
+  });
+}
+
+/**
+ * "Start fresh" path from the attribution prompt — wipes every
+ * NULL-user_id row without touching this user's existing data. Stamps
+ * the attributed-at flag so the prompt doesn't re-fire.
+ */
+export async function discardLegacyLocalData(): Promise<void> {
+  const d = db();
+  await d.withTransactionAsync(async () => {
+    for (const t of [
+      'doses', 'vials', 'cycles', 'stacks', 'journal_entries',
+      'metrics', 'injection_sites_log', 'saved_peptides', 'dose_skips',
+    ]) {
+      await d.runAsync(`DELETE FROM ${t} WHERE user_id IS NULL`);
+    }
+    await d.runAsync(
+      `UPDATE profile SET local_data_attributed_at = ? WHERE id = 1`,
+      new Date().toISOString()
+    );
   });
 }
 

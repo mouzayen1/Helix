@@ -39,7 +39,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState, Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { initDatabase } from '../lib/db';
+import { hasLegacyLocalData, initDatabase } from '../lib/db';
 import { scheduleAllSafe } from '../lib/notifications';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
@@ -72,6 +72,10 @@ function RootGate() {
     number: number;
     userId: string | null;
   }>({ visible: false, number: 0, userId: null });
+  // Set once when sign-in completes — true iff legacy NULL-user_id rows
+  // exist AND the user hasn't already chosen via the attribution prompt.
+  // Gates the redirect to /(auth)/attribute-data.
+  const [legacyDataPending, setLegacyDataPending] = useState(false);
 
   useEffect(() => {
     if (!isAuthConfigured()) {
@@ -109,10 +113,20 @@ function RootGate() {
         router.replace('/(auth)/sign-up' as never);
         return;
       }
+      if (authState.status !== 'signed-in') return;
+      // Data attribution prompt — fires once per device when a signed-in
+      // user has NULL-user_id legacy rows AND hasn't been stamped as
+      // attributed yet. Push them into /(auth)/attribute-data ahead of
+      // the tabs decision below. The screen calls
+      // attributeLocalDataToUser() or discardLegacyLocalData() and then
+      // replaces to /(tabs), so on next render the gate falls through.
+      if (legacyDataPending && (segments as string[])[1] !== 'attribute-data') {
+        router.replace('/(auth)/attribute-data' as never);
+        return;
+      }
       if (authState.status === 'signed-in' && inAuth) {
         // Just authed — fall through to the onboarding/tabs decision below.
       }
-      if (authState.status !== 'signed-in') return;
     }
 
     // 2. Legacy onboarding gate. Once signed in (or when auth isn't
@@ -135,6 +149,7 @@ function RootGate() {
     authReady,
     authState.status,
     loaded,
+    legacyDataPending,
     profile?.age_gate_accepted_at,
     profile?.disclaimer_accepted_at,
     profile?.onboarding_done,
@@ -142,6 +157,28 @@ function RootGate() {
     segments,
     router,
   ]);
+
+  // Legacy-data detection on sign-in. If the local SQLite has rows that
+  // predate accounts AND the profile hasn't been stamped as attributed
+  // yet, the auth gate above routes to /(auth)/attribute-data before
+  // letting the user reach tabs.
+  useEffect(() => {
+    if (authState.status !== 'signed-in') {
+      setLegacyDataPending(false);
+      return;
+    }
+    if (profile?.local_data_attributed_at) {
+      setLegacyDataPending(false);
+      return;
+    }
+    let cancelled = false;
+    hasLegacyLocalData().then((has) => {
+      if (!cancelled) setLegacyDataPending(has);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authState.status, profile?.local_data_attributed_at]);
 
   // Founder celebration polling — only fires once per founder. Re-queries
   // every time the user transitions to signed-in; if they're a founder
