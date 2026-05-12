@@ -1,7 +1,8 @@
-// Local SQLite — Helix spec v2.0 §05 / §14.
-// Phase 1 / local-only (no user_id scoping). All user writes go here;
-// Phase 2 will add outbox + sync to Supabase. Schema mirrors the server
-// schema (same column names) so the migration is lossless.
+// Local SQLite — mirrors the Supabase schema in supabase/migrations/.
+// All user-owned tables carry a user_id column (added in the auth
+// migration); reads and writes filter / inject via setCurrentUserId() +
+// requireUserId() helpers below. The peptides table is global reference
+// data, no user_id.
 
 import * as SQLite from 'expo-sqlite';
 import { PEPTIDES } from './peptides';
@@ -13,6 +14,57 @@ let _db: SQLite.SQLiteDatabase | null = null;
 function db(): SQLite.SQLiteDatabase {
   if (!_db) _db = SQLite.openDatabaseSync(DB_NAME);
   return _db;
+}
+
+// ---- Current user context -------------------------------------------------
+//
+// Auth-feature scaffolding. The session manager in lib/auth/session.ts
+// pushes the active user_id here whenever Supabase reports a sign-in or
+// sign-out; every user-owned query in this file reads from
+// `requireUserId()` (added in Phase C). Pre-auth code paths
+// (legacy local-only flow before EXPO_PUBLIC_SUPABASE_URL is set) leave
+// the value at null — the actual query filtering hasn't shipped yet, so
+// the null is currently inert.
+
+let _currentUserId: string | null = null;
+
+/**
+ * Set or clear the active user. Called by lib/auth/session.ts on sign-in,
+ * sign-out, and token-refresh events. Pure module state — no React
+ * context, no Zustand — so it's reachable from non-React call sites
+ * (notification scheduling, background jobs).
+ */
+export function setCurrentUserId(id: string | null): void {
+  _currentUserId = id;
+}
+
+/**
+ * Read the active user_id without throwing. Use this in code paths that
+ * legitimately run pre-auth (database init, the reference-only peptides
+ * table seed) or in callers that need to branch on signed-in vs not.
+ */
+export function getCurrentUserId(): string | null {
+  return _currentUserId;
+}
+
+/**
+ * Read the active user_id; throw if no user is set. Use this in every
+ * user-owned query. The throw is deliberate: it surfaces "missing scope"
+ * bugs at the query site instead of letting a missing WHERE clause
+ * silently leak data between accounts.
+ *
+ * The throw is dormant today because the underlying queries don't yet
+ * filter by user_id; the Phase C commit turns this into a real
+ * enforcement mechanism.
+ */
+export function requireUserId(): string {
+  if (!_currentUserId) {
+    throw new Error(
+      'No active user — call setCurrentUserId() before this query, ' +
+        'or move the query inside an auth-gated screen.',
+    );
+  }
+  return _currentUserId;
 }
 
 // ---- v1.1 migration helper -----------------------------------------------
