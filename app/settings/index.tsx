@@ -3,6 +3,7 @@
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
@@ -10,12 +11,22 @@ import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { useProfile } from '../../lib/profile-context';
+import { getAuthState, signOut, subscribeAuth, type AuthState } from '../../lib/auth/session';
+import { signOutGoogle } from '../../lib/auth/google';
+import { isAuthConfigured } from '../../lib/supabase';
 
 export default function Settings() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, update } = useProfile();
+  // Auth state mirrored from the session manager so the Account section
+  // re-renders when the user signs out (or in, mid-session). When
+  // isAuthConfigured() is false the section hides — pre-auth builds
+  // continue to show the legacy settings layout unchanged.
+  const [authState, setAuthState] = useState<AuthState>(getAuthState());
+  useEffect(() => subscribeAuth(setAuthState), []);
+  const session = authState.status === 'signed-in' ? authState.session : null;
 
   const setBiometricLock = async (enabled: boolean) => {
     if (!enabled) {
@@ -85,6 +96,73 @@ export default function Settings() {
         </Text>
         <EditorialHeadline size="title1">{`Your *preferences*.`}</EditorialHeadline>
       </View>
+
+      {/* Account — only when Supabase is configured. The native Apple /
+          Google session is signed out alongside Supabase so the next
+          picker re-prompts rather than auto-picking the last identity. */}
+      {isAuthConfigured() && session ? (
+        <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Account</EyebrowLabel>
+          <View style={{ paddingVertical: 18 }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular'),
+                fontSize: 20,
+                letterSpacing: -0.3,
+                color: ed.colors.ink1,
+              }}
+            >
+              {session.user.user_metadata?.display_name ||
+                session.user.email?.split('@')[0] ||
+                'Researcher'}
+            </Text>
+            {session.user.email ? (
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontFamily: ed.typography.dataMd.fontFamily,
+                  fontSize: ed.typography.dataMd.fontSize,
+                  color: ed.colors.ink3,
+                }}
+              >
+                {session.user.email}
+              </Text>
+            ) : null}
+          </View>
+          <HairlineRow />
+          <NavRow
+            label="Sign out"
+            onPress={() => {
+              Alert.alert(
+                'Sign out of Helix?',
+                'Your data stays safe on this device and in the cloud backup. You can sign back in anytime.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Sign out',
+                    style: 'destructive',
+                    onPress: async () => {
+                      // Native Google session — best-effort; non-fatal on failure.
+                      await signOutGoogle();
+                      await signOut();
+                      // The auth gate in app/_layout.tsx watches the
+                      // session listener and replaces to /(auth)/sign-up
+                      // automatically once the state flips to 'signed-out'.
+                    },
+                  },
+                ],
+              );
+            }}
+          />
+          <HairlineRow />
+          <NavRow
+            label="Delete account"
+            tone="warn"
+            onPress={() => router.push('/settings/delete-account' as any)}
+          />
+          <HairlineRow strong />
+        </View>
+      ) : null}
 
       {/* Appearance */}
       <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
@@ -161,12 +239,20 @@ export default function Settings() {
         <NavRow label="Export data" onPress={() => router.push('/settings/export')} />
         <HairlineRow />
         <NavRow label="About Helix" onPress={() => router.push('/settings/about')} />
-        <HairlineRow />
-        <NavRow
-          label="Delete all data"
-          tone="warn"
-          onPress={() => router.push('/settings/delete-account')}
-        />
+        {/* Pre-auth legacy: "Delete all data" only exists when there's no
+            Account section to host the same affordance. Once auth is
+            configured, Account → Delete account replaces this row and
+            covers both local wipe AND server-side soft delete. */}
+        {!isAuthConfigured() ? (
+          <>
+            <HairlineRow />
+            <NavRow
+              label="Delete all data"
+              tone="warn"
+              onPress={() => router.push('/settings/delete-account')}
+            />
+          </>
+        ) : null}
         <HairlineRow strong />
       </View>
 
