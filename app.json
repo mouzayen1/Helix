@@ -11,15 +11,28 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.helix.demo"
+      "bundleIdentifier": "com.omniaworks.helix",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
-      "package": "app.helix.demo",
+      "package": "com.omniaworks.helix",
       "adaptiveIcon": {
         "backgroundColor": "#0A8E83",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": [{ "scheme": "helix", "host": "auth" }],
+          "autoVerify": false
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -43,6 +56,14 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow Helix to use Face ID to unlock your local data."
+        }
+      ],
+      "expo-apple-authentication",
+      "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "REPLACE_WITH_REVERSED_IOS_CLIENT_ID"
         }
       ]
     ],
