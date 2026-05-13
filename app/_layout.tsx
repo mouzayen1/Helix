@@ -47,6 +47,13 @@ import { font, radius, space } from '../theme/tokens';
 import { hydrateSession, subscribeAuth, type AuthState } from '../lib/auth/session';
 import { isAuthConfigured } from '../lib/supabase';
 import { getMyFounderStatus, markFounderBannerSeen } from '../lib/auth/founder';
+import {
+  clearTermsStatusCache,
+  getCachedTermsStatus,
+  refreshTermsStatus,
+  subscribeTermsStatus,
+  type TermsStatus,
+} from '../lib/auth/terms-status';
 import { FounderCelebrationModal } from '../components/FounderCelebrationModal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -76,6 +83,12 @@ function RootGate() {
   // exist AND the user hasn't already chosen via the attribution prompt.
   // Gates the redirect to /(auth)/attribute-data.
   const [legacyDataPending, setLegacyDataPending] = useState(false);
+  // Terms acceptance status for the current signed-in user. Sourced from
+  // Supabase (lib/auth/terms-status.ts) so it's per-user, not per-device.
+  // Null while the first fetch is in-flight (or signed-out). The cache
+  // is published from accept-terms via markTermsAccepted() so the gate
+  // doesn't bounce the user back after they accept.
+  const [termsState, setTermsState] = useState<TermsStatus | null>(null);
 
   useEffect(() => {
     if (!isAuthConfigured()) {
@@ -99,11 +112,34 @@ function RootGate() {
     };
   }, []);
 
+  // Terms-status cache subscription. The accept-terms screen calls
+  // markTermsAccepted() after the Supabase update succeeds, and
+  // signOut() clears the cache — both events fire this listener so the
+  // gate's routing effect re-runs with the new value.
+  useEffect(() => {
+    const userId =
+      authState.status === 'signed-in' ? authState.session.user.id : null;
+    if (!userId) {
+      setTermsState(null);
+      return;
+    }
+    const sync = () => setTermsState(getCachedTermsStatus(userId));
+    sync();
+    const unsubscribe = subscribeTermsStatus(sync);
+    // Kick off a fetch if nothing is cached yet for this user. Cached
+    // hits short-circuit (no network round-trip on returning sign-ins).
+    if (getCachedTermsStatus(userId) === null) {
+      void refreshTermsStatus(userId).catch(() => {});
+    }
+    return unsubscribe;
+  }, [authState]);
+
   useEffect(() => {
     if (!authReady || !loaded) return;
     const authConfigured = isAuthConfigured();
     const inAuth = segments[0] === '(auth)';
     const inOnboarding = segments[0] === '(onboarding)' || segments[0] === 'welcome';
+    const authSub = (segments as string[])[1] ?? null;
 
     // 1. Auth gate — only enforced when Supabase is configured. Routes
     //    signed-out users to the sign-up screen; once a user is
@@ -119,22 +155,41 @@ function RootGate() {
         return;
       }
       if (authState.status !== 'signed-in') return;
+      // Password recovery overrides every other gate. The recovery deep
+      // link creates a temporary signed-in session whose only purpose is
+      // updateUser({ password }); we must NOT route the user away before
+      // they finish setting a new password.
+      if (authSub === 'reset-password') return;
       // Data attribution prompt — fires once per device when a signed-in
       // user has NULL-user_id legacy rows AND hasn't been stamped as
-      // attributed yet.
-      if (legacyDataPending && (segments as string[])[1] !== 'attribute-data') {
+      // attributed yet. Routed before terms so attribution finishes
+      // before we ask for legal consent on the now-owned data.
+      if (legacyDataPending && authSub !== 'attribute-data') {
         router.replace('/(auth)/attribute-data' as never);
         return;
       }
-      // Kick signed-in users out of any leftover legacy onboarding
-      // routes (welcome / (onboarding)/*). Auth mode owns the legal
-      // acceptance via accept-terms; legacy onboarding is unreachable.
-      if (inOnboarding) {
+      if (authSub === 'attribute-data') return;
+      // Wait for the terms-status fetch on this user before routing.
+      // Without this, we'd briefly flash accept-terms before the cache
+      // says "already accepted" → defeats the whole point of the fix.
+      if (termsState === null) return;
+      // Pending terms → force accept-terms screen. Covers (a) first-
+      // time sign-up, (b) returning user whose accepted version is
+      // stale, (c) cold launch where session is valid but terms were
+      // never accepted (interrupted sign-up).
+      if (termsState === 'pending') {
+        if (authSub !== 'accept-terms') {
+          router.replace('/(auth)/accept-terms' as never);
+        }
+        return;
+      }
+      // Accepted current terms → kick out of any (auth) or legacy
+      // onboarding route into the app proper. Idempotent: if the user
+      // is already on /(tabs) or any other in-app route, no-op.
+      if (inAuth || inOnboarding) {
         router.replace('/(tabs)');
         return;
       }
-      // Stay inside (auth) until acceptance is recorded; let the
-      // accept-terms screen replace to /(tabs) on success.
       return;
     }
 
@@ -157,6 +212,7 @@ function RootGate() {
     authState.status,
     loaded,
     legacyDataPending,
+    termsState,
     profile?.age_gate_accepted_at,
     profile?.disclaimer_accepted_at,
     profile?.onboarding_done,

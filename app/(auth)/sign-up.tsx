@@ -19,6 +19,7 @@ import { useEditorialTheme } from '../../lib/design/theme';
 import { isAppleSignInAvailable, signInWithApple, AppleSignInError } from '../../lib/auth/apple';
 import { signInWithGoogle, GoogleSignInError } from '../../lib/auth/google';
 import { grantFounderIfEligible, getFounderCounter } from '../../lib/auth/founder';
+import { nextRouteAfterSignIn } from '../../lib/auth/terms-status';
 import { haptic } from '../../lib/haptics';
 
 type Provider = 'apple' | 'google' | 'email';
@@ -49,9 +50,11 @@ export default function SignUpScreen() {
         await grantFounderIfEligible(session.user.id);
       } catch {}
       haptic.success();
-      // Navigate to accept-terms; the auth gate handles the redirect
-      // once acceptances land.
-      router.replace('/(auth)/accept-terms');
+      // Returning users with a live terms acceptance skip accept-terms
+      // and land straight on /(tabs); first-time sign-ups (or stale
+      // terms_version) pass through accept-terms.
+      const next = await nextRouteAfterSignIn(session.user.id);
+      router.replace(next as never);
     } catch (err) {
       if (err instanceof AppleSignInError && err.code === 'CANCELED') {
         // Silent dismissal.
@@ -76,7 +79,8 @@ export default function SignUpScreen() {
         await grantFounderIfEligible(session.user.id);
       } catch {}
       haptic.success();
-      router.replace('/(auth)/accept-terms');
+      const next = await nextRouteAfterSignIn(session.user.id);
+      router.replace(next as never);
     } catch (err) {
       if (err instanceof GoogleSignInError && err.code === 'CANCELED') {
         return;

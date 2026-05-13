@@ -10,6 +10,7 @@ import { EditorialHeadline } from '../../components/editorial/EditorialHeadline'
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { signInWithEmail, validateEmail, EmailAuthError } from '../../lib/auth/email';
+import { nextRouteAfterSignIn } from '../../lib/auth/terms-status';
 import { haptic } from '../../lib/haptics';
 
 export default function EmailSignInScreen() {
@@ -32,10 +33,11 @@ export default function EmailSignInScreen() {
     }
     setBusy(true);
     try {
-      await signInWithEmail(email, password);
+      const session = await signInWithEmail(email, password);
       haptic.success();
-      // Auth gate decides where to land next (accept-terms or tabs).
-      router.replace('/(auth)/accept-terms');
+      // Returning users with a live terms acceptance skip accept-terms.
+      const next = await nextRouteAfterSignIn(session.user.id);
+      router.replace(next as never);
     } catch (err) {
       haptic.error();
       const msg = err instanceof EmailAuthError ? err.message : 'Please try again.';

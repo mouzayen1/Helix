@@ -19,6 +19,7 @@
 import type { Session, Subscription } from '@supabase/supabase-js';
 import { setCurrentUserId } from '../db';
 import { isAuthConfigured, supabase } from '../supabase';
+import { clearTermsStatusCache } from './terms-status';
 
 export type AuthState =
   | { status: 'loading' }
@@ -54,6 +55,7 @@ export async function hydrateSession(): Promise<AuthState> {
   if (error) {
     // Token unreadable / expired beyond refresh. Treat as signed-out.
     setCurrentUserId(null);
+    clearTermsStatusCache();
     setState({ status: 'signed-out' });
     return currentState;
   }
@@ -62,6 +64,7 @@ export async function hydrateSession(): Promise<AuthState> {
     setState({ status: 'signed-in', session: data.session });
   } else {
     setCurrentUserId(null);
+    clearTermsStatusCache();
     setState({ status: 'signed-out' });
   }
   attachListenerOnce();
@@ -83,6 +86,7 @@ function attachListenerOnce(): void {
       setState({ status: 'signed-in', session });
     } else {
       setCurrentUserId(null);
+      clearTermsStatusCache();
       setState({ status: 'signed-out' });
     }
   });

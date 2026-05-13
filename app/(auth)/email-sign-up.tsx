@@ -11,6 +11,7 @@ import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { signUpWithEmail, validateEmail, validatePassword, EmailAuthError } from '../../lib/auth/email';
 import { grantFounderIfEligible } from '../../lib/auth/founder';
+import { nextRouteAfterSignIn } from '../../lib/auth/terms-status';
 import { haptic } from '../../lib/haptics';
 
 export default function EmailSignUpScreen() {
@@ -47,7 +48,8 @@ export default function EmailSignUpScreen() {
           await grantFounderIfEligible(session.user.id);
         } catch {}
         haptic.success();
-        router.replace('/(auth)/accept-terms');
+        const next = await nextRouteAfterSignIn(session.user.id);
+        router.replace(next as never);
       }
     } catch (err) {
       haptic.error();

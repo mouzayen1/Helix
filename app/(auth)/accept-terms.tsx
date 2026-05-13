@@ -24,6 +24,7 @@ import { requireSupabase } from '../../lib/supabase';
 import { TERMS_VERSION } from '../../lib/disclaimers';
 import { haptic } from '../../lib/haptics';
 import { grantFounderIfEligible } from '../../lib/auth/founder';
+import { markTermsAccepted } from '../../lib/auth/terms-status';
 import { useProfile } from '../../lib/profile-context';
 
 export default function AcceptTermsScreen() {
@@ -81,6 +82,12 @@ export default function AcceptTermsScreen() {
       } catch {
         // Non-fatal — celebration banner just won't fire if this fails.
       }
+
+      // Tell the root gate the user has accepted — without this, the
+      // gate's termsState is still 'pending' from its initial fetch
+      // and would bounce the router.replace below straight back to
+      // /(auth)/accept-terms.
+      markTermsAccepted(user.id);
 
       haptic.success();
       router.replace('/(tabs)' as never);

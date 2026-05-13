@@ -220,3 +220,40 @@ client code never needs to add a `.eq('user_id', ...)` filter (it'd be
 redundant). RLS is the backstop against a buggy client.
 
 Sync between SQLite and Supabase is v1.1+ — out of scope for this audit.
+
+---
+
+## Dashboard checklist (NOT covered by migrations)
+
+These settings live in the Supabase Dashboard, not in tracked SQL files.
+Forgetting any of them surfaces as a runtime bug. After applying every
+`supabase/migrations/*.sql`, verify each entry below.
+
+1. **Authentication → URL Configuration → Redirect URLs** — must include
+   `helix://reset-password` (password-reset email deep link target) and
+   `helix://auth` (OAuth callback). Without these, the recovery link
+   silently lands on the project's site URL and the app never opens.
+
+2. **Authentication → Providers → Apple** — Service ID + Team ID + Key
+   ID + .p8 contents filled in. The "Authorized client IDs" field
+   accepts comma-separated values; include both the iOS bundle ID
+   (`com.omniaworks.helix`) and the Apple Service ID.
+
+3. **Authentication → Providers → Google** — Client IDs include the
+   Web OAuth client ID (used by Supabase server-side), iOS Client ID,
+   AND the Android Client ID. Comma-separated. Missing any one of these
+   makes `signInWithIdToken` reject the token with "Invalid audience".
+
+4. **Authentication → Identity Linking → "Manual linking enabled"** —
+   **leave this ON.** When OFF, signing in with Google using an email
+   that's already attached to an Apple account creates a separate
+   `auth.users` row — the user ends up with two accounts sharing one
+   email and can't see their original data after switching providers.
+   With it ON, Supabase matches by email at sign-in and links the new
+   identity to the existing user.
+
+5. **Authentication → Email → "Confirm email"** — recommended OFF for
+   v1.0 (signup friction); a confirmed email isn't a meaningful safety
+   improvement over the provider-issued identity verification. If you
+   flip it ON later, `signUpWithEmail` returns `requiresEmailVerification: true`
+   and the UI handles it (`app/(auth)/email-sign-up.tsx`).
