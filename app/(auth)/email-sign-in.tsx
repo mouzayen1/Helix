@@ -40,7 +40,12 @@ export default function EmailSignInScreen() {
       router.replace(next as never);
     } catch (err) {
       haptic.error();
-      const msg = err instanceof EmailAuthError ? err.message : 'Please try again.';
+      const msg =
+        err instanceof EmailAuthError
+          ? err.message
+          : err instanceof Error && err.message
+            ? err.message
+            : 'Please try again.';
       Alert.alert('Sign-in failed', msg);
     } finally {
       setBusy(false);

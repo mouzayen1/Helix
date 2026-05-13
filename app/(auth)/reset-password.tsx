@@ -170,7 +170,12 @@ export default function ResetPasswordScreen() {
       );
     } catch (e) {
       haptic.error();
-      const msg = e instanceof EmailAuthError ? e.message : 'Please try again.';
+      const msg =
+        e instanceof EmailAuthError
+          ? e.message
+          : e instanceof Error && e.message
+            ? e.message
+            : 'Please try again.';
       Alert.alert('Could not update password', msg);
     } finally {
       setBusy(false);

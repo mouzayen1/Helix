@@ -33,7 +33,12 @@ export default function ForgotPasswordScreen() {
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch (err) {
-      const msg = err instanceof EmailAuthError ? err.message : 'Please try again.';
+      const msg =
+        err instanceof EmailAuthError
+          ? err.message
+          : err instanceof Error && err.message
+            ? err.message
+            : 'Please try again.';
       Alert.alert('Could not send reset email', msg);
     } finally {
       setBusy(false);
