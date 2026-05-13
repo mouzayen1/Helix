@@ -56,15 +56,22 @@ export default function Settings() {
       LocalAuthentication.hasHardwareAsync(),
       LocalAuthentication.isEnrolledAsync(),
     ]);
-    if (!hasHardware || !enrolled) {
+    if (!hasHardware) {
       Alert.alert(
-        'Biometric lock unavailable',
-        'Set up Face ID, Touch ID, or device biometrics before enabling Helix lock.'
+        'Biometric unlock unavailable',
+        "This device doesn't have biometric hardware. Helix can't lock to a fingerprint or Face ID here.",
+      );
+      return;
+    }
+    if (!enrolled) {
+      Alert.alert(
+        'No biometrics enrolled',
+        'Set up a fingerprint or Face ID in your device settings first, then enable Helix lock.',
       );
       return;
     }
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Enable Helix lock',
+      promptMessage: 'Confirm to require unlock for Helix',
       fallbackLabel: 'Use device passcode',
       disableDeviceFallback: false,
     });
@@ -274,7 +281,7 @@ export default function Settings() {
           </SettingRow>
         </Pressable>
         <HairlineRow />
-        <SettingRow label="Biometric lock">
+        <SettingRow label="Require unlock to open Helix">
           <Switch
             value={profile?.biometric_lock === 1}
             onValueChange={(v) => void setBiometricLock(v)}

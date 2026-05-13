@@ -36,7 +36,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Pressable, Text, View } from 'react-native';
+import { Alert, AppState, Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { hasLegacyLocalData, initDatabase } from '../lib/db';
@@ -44,7 +44,13 @@ import { scheduleAllSafe } from '../lib/notifications';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
-import { hydrateSession, subscribeAuth, type AuthState } from '../lib/auth/session';
+import {
+  getAuthState,
+  hydrateSession,
+  signOut,
+  subscribeAuth,
+  type AuthState,
+} from '../lib/auth/session';
 import { isAuthConfigured } from '../lib/supabase';
 import { getMyFounderStatus, markFounderBannerSeen } from '../lib/auth/founder';
 import {
@@ -90,26 +96,24 @@ function RootGate() {
   // doesn't bounce the user back after they accept.
   const [termsState, setTermsState] = useState<TermsStatus | null>(null);
 
+  // Subscribe to the auth state hydrated by RootLayout — both this gate
+  // AND the BiometricGate observe the same module-level state. Hydration
+  // runs at the top of the tree so it can complete in parallel with
+  // biometric unlock rather than serially behind it. `authReady` flips
+  // when we first see a non-loading state (signed-in or signed-out).
   useEffect(() => {
     if (!isAuthConfigured()) {
-      // No Supabase configured — legacy local-only flow. Don't enforce
-      // an auth gate; downstream onboarding gate handles routing.
       setAuthState({ status: 'signed-out' });
       setAuthReady(true);
       return;
     }
-    let cancelled = false;
-    hydrateSession().then((state) => {
-      if (!cancelled) {
-        setAuthState(state);
-        setAuthReady(true);
-      }
+    const initial = getAuthState();
+    setAuthState(initial);
+    if (initial.status !== 'loading') setAuthReady(true);
+    return subscribeAuth((s) => {
+      setAuthState(s);
+      if (s.status !== 'loading') setAuthReady(true);
     });
-    const unsubscribe = subscribeAuth(setAuthState);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
   }, []);
 
   // Terms-status cache subscription. The accept-terms screen calls
@@ -326,14 +330,31 @@ function RootGate() {
 function BiometricGate({ children }: { children: React.ReactNode }) {
   const { t } = useTheme();
   const { profile, loaded } = useProfile();
+  // Auth state subscription — biometric is a local-authorization gate
+  // on an already-authenticated session. Without a session, there's
+  // nothing to unlock, so the gate falls through to children and the
+  // routing layer sends the user to the sign-up screen.
+  const [authState, setAuthState] = useState<AuthState>(getAuthState());
+  useEffect(() => {
+    setAuthState(getAuthState());
+    return subscribeAuth(setAuthState);
+  }, []);
   const [authenticated, setAuthenticated] = useState(false);
   const [checking, setChecking] = useState(false);
-  const lockEnabled = loaded && profile?.biometric_lock === 1;
+  // Cold-launch flag. Biometric prompts once per app process. Foregrounding
+  // from a brief background (e.g. returning from the Google OAuth intent)
+  // does NOT re-prompt — that was the source of the "second fingerprint
+  // prompt on Continue with Google" bug.
+  const [promptedThisLaunch, setPromptedThisLaunch] = useState(false);
+  const authConfigured = isAuthConfigured();
+  const sessionReady = !authConfigured || authState.status !== 'loading';
+  const signedIn = !authConfigured || authState.status === 'signed-in';
+  const lockApplicable =
+    loaded && sessionReady && signedIn && profile?.biometric_lock === 1;
 
   const authenticate = useCallback(async () => {
-    if (!lockEnabled) return;
-    // No native module → APK predates biometric-lock; treat as
-    // unlocked so the user can still use the app.
+    // No native module → APK predates biometric-lock; treat as unlocked
+    // so the user can still use the app.
     if (!LocalAuthentication) {
       setAuthenticated(true);
       return;
@@ -358,31 +379,46 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
     } finally {
       setChecking(false);
     }
-  }, [lockEnabled]);
+  }, []);
 
   useEffect(() => {
-    if (!loaded) return;
-    if (!lockEnabled) {
+    if (!sessionReady || !loaded) return;
+    if (!lockApplicable) {
+      // No session, no lock setting, or hardware unavailable — pass
+      // through. Routing layer below decides where to send the user.
       setAuthenticated(true);
       return;
     }
-    setAuthenticated(false);
+    // Lock is applicable. Prompt at most once per cold launch; after
+    // that, the user is considered unlocked for the remainder of the
+    // app process (sign-out + re-sign-in within the same launch does
+    // not re-prompt — they just OAuthed).
+    if (promptedThisLaunch || authenticated) return;
+    setPromptedThisLaunch(true);
     void authenticate();
-  }, [authenticate, loaded, lockEnabled]);
+  }, [authenticate, authenticated, loaded, lockApplicable, promptedThisLaunch, sessionReady]);
 
-  useEffect(() => {
-    if (!lockEnabled) return;
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        void authenticate();
-      } else {
-        setAuthenticated(false);
-      }
-    });
-    return () => sub.remove();
-  }, [authenticate, lockEnabled]);
+  const onSignOutEscape = useCallback(() => {
+    Alert.alert(
+      'Sign out and exit lock?',
+      "You'll be returned to the sign-in screen. Your data stays on this device.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            // signOut clears the session; the gate's effect will see
+            // !signedIn and pass through to children, where the routing
+            // layer redirects to /(auth)/sign-up.
+          },
+        },
+      ],
+    );
+  }, []);
 
-  if (!lockEnabled || authenticated) return <>{children}</>;
+  if (!lockApplicable || authenticated) return <>{children}</>;
 
   return (
     <View
@@ -397,6 +433,17 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
       <Text style={{ color: t.ink, fontSize: 24, fontFamily: font.sansBold }}>
         Helix is locked
       </Text>
+      <Text
+        style={{
+          marginTop: space.sm,
+          color: t.ink3,
+          fontSize: 14,
+          fontFamily: font.sans,
+          textAlign: 'center',
+        }}
+      >
+        Unlock with biometric to continue.
+      </Text>
       <Pressable
         onPress={() => void authenticate()}
         disabled={checking}
@@ -410,6 +457,19 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
       >
         <Text style={{ color: checking ? t.ink3 : t.bg, fontSize: 14, fontFamily: font.sansSemi }}>
           {checking ? 'Checking...' : 'Unlock'}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={onSignOutEscape}
+        style={{
+          marginTop: space.lg,
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+        }}
+        hitSlop={8}
+      >
+        <Text style={{ color: t.ink3, fontSize: 13, fontFamily: font.sans }}>
+          Sign out instead
         </Text>
       </Pressable>
     </View>
@@ -442,6 +502,18 @@ export default function RootLayout() {
         console.error('DB init failed', err);
         setDbReady(true);
       });
+  }, []);
+
+  // Hydrate the Supabase session at the top of the tree so it runs in
+  // parallel with everything else (fonts, DB, biometric). Without this,
+  // the BiometricGate would block RootGate, which in turn was where
+  // hydrateSession used to run — meaning the session never restored
+  // until biometric passed, and a state flash routed the user to
+  // sign-up. Both BiometricGate and RootGate subscribe to the resulting
+  // state via subscribeAuth.
+  useEffect(() => {
+    if (!isAuthConfigured()) return;
+    void hydrateSession();
   }, []);
 
   // Re-schedule local notifications on launch and whenever the app returns
