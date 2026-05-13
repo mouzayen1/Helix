@@ -144,7 +144,7 @@ export default function SignUpScreen() {
             Android and on iOS devices without an Apple ID. */}
         {appleAvailable ? (
           <ProviderButton
-            label="Continue with Apple"
+            label="Sign in with Apple"
             variant="primary"
             disabled={!!busyProvider}
             busy={busyProvider === 'apple'}
@@ -153,7 +153,7 @@ export default function SignUpScreen() {
         ) : null}
 
         <ProviderButton
-          label="Continue with Google"
+          label="Sign in with Google"
           variant="secondary"
           disabled={!!busyProvider}
           busy={busyProvider === 'google'}
@@ -165,7 +165,7 @@ export default function SignUpScreen() {
           onPress={onEmail}
           disabled={!!busyProvider}
           accessibilityRole="button"
-          accessibilityLabel="Continue with Email"
+          accessibilityLabel="Continue with email"
           style={{ marginTop: 24, paddingVertical: 12, alignItems: 'center' }}
         >
           <Text
@@ -177,9 +177,28 @@ export default function SignUpScreen() {
               textTransform: 'uppercase',
             }}
           >
-            Continue with Email
+            Continue with email
           </Text>
         </Pressable>
+
+        {/* Tiny clarity line: the same buttons handle both new accounts
+            and returning users. Apple's button text is fixed by their
+            HIG ("Sign in with Apple"), so we keep the others consistent;
+            the email button stays "Continue with email" since the
+            downstream screen handles both create + sign-in. */}
+        <Text
+          style={{
+            marginTop: 12,
+            textAlign: 'center',
+            fontFamily: ed.typography.labelSm.fontFamily,
+            fontSize: ed.typography.labelSm.fontSize,
+            letterSpacing: ed.typography.labelSm.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          New or returning · tap any option above
+        </Text>
 
         <Text
           style={{

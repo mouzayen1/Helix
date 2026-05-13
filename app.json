@@ -29,7 +29,10 @@
         {
           "action": "VIEW",
           "category": ["DEFAULT", "BROWSABLE"],
-          "data": [{ "scheme": "helix", "host": "auth" }],
+          "data": [
+            { "scheme": "helix", "host": "auth" },
+            { "scheme": "helix", "host": "reset-password" }
+          ],
           "autoVerify": false
         }
       ]

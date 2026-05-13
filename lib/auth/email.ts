@@ -147,9 +147,14 @@ export async function sendPasswordReset(email: string): Promise<void> {
   const emailErr = validateEmail(email);
   if (emailErr) throw new EmailAuthError(emailErr, 'INVALID_EMAIL');
 
+  // Deep link target — must match an Android intent filter in app.json
+  // AND be present in Supabase Dashboard → Auth → URL Configuration →
+  // Redirect URLs allowlist. Route groups (parens) are stripped from
+  // URL paths by expo-router, so the file at app/(auth)/reset-password
+  // is reachable as helix://reset-password (NOT helix://auth/reset-password).
   const sb = requireSupabase();
   const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: 'helix://auth/reset-password',
+    redirectTo: 'helix://reset-password',
   });
   if (error) {
     throw new EmailAuthError(error.message, error.name);

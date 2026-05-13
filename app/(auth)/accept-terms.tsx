@@ -23,11 +23,14 @@ import { signOut } from '../../lib/auth/session';
 import { requireSupabase } from '../../lib/supabase';
 import { TERMS_VERSION } from '../../lib/disclaimers';
 import { haptic } from '../../lib/haptics';
+import { grantFounderIfEligible } from '../../lib/auth/founder';
+import { useProfile } from '../../lib/profile-context';
 
 export default function AcceptTermsScreen() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { update: updateLocalProfile } = useProfile();
   const [age, setAge] = useState(false);
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
@@ -56,9 +59,30 @@ export default function AcceptTermsScreen() {
         })
         .eq('user_id', user.id);
       if (error) throw error;
+
+      // Mirror to local profile so legacy onboarding gate is satisfied
+      // even on fallback. Belt and suspenders — the root gate already
+      // skips legacy onboarding in auth mode, but stamping locally
+      // prevents any edge case (e.g., user signs out then signs back
+      // in pre-auth) from re-routing through welcome.
+      await updateLocalProfile({
+        age_gate_accepted_at: now,
+        terms_accepted_at: now,
+        terms_version: TERMS_VERSION,
+        disclaimer_accepted_at: now,
+        onboarding_done: 1,
+      });
+
+      // Founder grant — called here as a fallback in case the
+      // post-signup invocation failed silently. Idempotent server-side:
+      // returns the existing number for already-founder users.
+      try {
+        await grantFounderIfEligible(user.id);
+      } catch {
+        // Non-fatal — celebration banner just won't fire if this fails.
+      }
+
       haptic.success();
-      // Auth gate will route forward — to onboarding for first-timers,
-      // straight to tabs for returners.
       router.replace('/(tabs)' as never);
     } catch (err) {
       haptic.error();

@@ -106,8 +106,13 @@ function RootGate() {
     const inOnboarding = segments[0] === '(onboarding)' || segments[0] === 'welcome';
 
     // 1. Auth gate — only enforced when Supabase is configured. Routes
-    //    signed-out users to the sign-up screen; routes signed-in users
-    //    out of the auth group once they've authenticated.
+    //    signed-out users to the sign-up screen; once a user is
+    //    signed-in + accepted terms, falls through to /(tabs) directly
+    //    and the legacy onboarding flow (welcome → age-gate → terms →
+    //    acknowledge → preferences → choose-path) is bypassed entirely.
+    //    Account-required is the v1.0 product decision; the legacy
+    //    onboarding only runs in legacy local-only builds where
+    //    Supabase env vars aren't set.
     if (authConfigured) {
       if (authState.status === 'signed-out' && !inAuth) {
         router.replace('/(auth)/sign-up' as never);
@@ -116,25 +121,27 @@ function RootGate() {
       if (authState.status !== 'signed-in') return;
       // Data attribution prompt — fires once per device when a signed-in
       // user has NULL-user_id legacy rows AND hasn't been stamped as
-      // attributed yet. Push them into /(auth)/attribute-data ahead of
-      // the tabs decision below. The screen calls
-      // attributeLocalDataToUser() or discardLegacyLocalData() and then
-      // replaces to /(tabs), so on next render the gate falls through.
+      // attributed yet.
       if (legacyDataPending && (segments as string[])[1] !== 'attribute-data') {
         router.replace('/(auth)/attribute-data' as never);
         return;
       }
-      if (authState.status === 'signed-in' && inAuth) {
-        // Just authed — fall through to the onboarding/tabs decision below.
+      // Kick signed-in users out of any leftover legacy onboarding
+      // routes (welcome / (onboarding)/*). Auth mode owns the legal
+      // acceptance via accept-terms; legacy onboarding is unreachable.
+      if (inOnboarding) {
+        router.replace('/(tabs)');
+        return;
       }
+      // Stay inside (auth) until acceptance is recorded; let the
+      // accept-terms screen replace to /(tabs) on success.
+      return;
     }
 
-    // 2. Legacy onboarding gate. Once signed in (or when auth isn't
-    //    configured), users still need to complete the existing
-    //    onboarding flow before reaching tabs. The accept-terms screen
-    //    in the (auth) group writes the same acceptance fields to the
-    //    Supabase profile; the local profile mirrors via the eventual
-    //    sync layer. Until then, both flows coexist.
+    // 2. Legacy onboarding gate — runs ONLY when Supabase isn't
+    //    configured (no env vars baked in). Real production builds
+    //    never hit this path; preserved for dev builds without an
+    //    auth backend.
     const fullyOnboarded =
       profile?.onboarding_done === 1 &&
       !!profile.age_gate_accepted_at &&
