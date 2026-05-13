@@ -34,7 +34,10 @@ export default function EmailSignUpScreen() {
     if (ee || pe) return;
     setBusy(true);
     try {
-      const { session, requiresEmailVerification } = await signUpWithEmail(email, password);
+      const { session, requiresEmailVerification, wasReturningUser } = await signUpWithEmail(
+        email,
+        password,
+      );
       if (requiresEmailVerification) {
         Alert.alert(
           'Check your email',
@@ -49,10 +52,50 @@ export default function EmailSignUpScreen() {
         } catch {}
         haptic.success();
         const next = await nextRouteAfterSignIn(session.user.id);
-        router.replace(next as never);
+        // Returning-user case: the email was already registered and
+        // the password matched, so we signed in instead of creating a
+        // new account. Acknowledge that explicitly before navigating;
+        // covers both "I forgot I had an account" and "I typed the
+        // wrong email and it happened to match someone with the same
+        // password" (the latter is vanishingly rare, but the same
+        // notice still gives the user a recovery path).
+        if (wasReturningUser) {
+          Alert.alert(
+            'Welcome back',
+            "An account with this email already exists, and your password matched — so we signed you in instead of creating a new one. If this wasn't you, sign out from Settings.",
+            [{ text: 'Continue', onPress: () => router.replace(next as never) }],
+          );
+        } else {
+          router.replace(next as never);
+        }
       }
     } catch (err) {
       haptic.error();
+      // Existing-account + wrong-password case. The email is registered
+      // but the supplied password didn't match, so neither sign-up nor
+      // the silent sign-in retry could complete. Offer the two paths
+      // the user actually has: sign in with the correct password, or
+      // reset the password they don't remember.
+      if (
+        err instanceof EmailAuthError &&
+        err.code === 'EMAIL_TAKEN_WRONG_PASSWORD'
+      ) {
+        Alert.alert(
+          'This email already has an account',
+          "An account with this email exists, but your password doesn't match. Sign in with the correct password, or tap \"Forgot password\" to reset it.",
+          [
+            {
+              text: 'Sign in instead',
+              onPress: () => router.replace('/(auth)/email-sign-in'),
+            },
+            {
+              text: 'Forgot password',
+              onPress: () => router.push('/(auth)/forgot-password'),
+            },
+          ],
+        );
+        return;
+      }
       const msg = err instanceof EmailAuthError ? err.message : 'Please try again.';
       Alert.alert('Sign-up failed', msg);
     } finally {

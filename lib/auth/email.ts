@@ -51,20 +51,28 @@ export function validatePassword(password: string): string | null {
 
 /**
  * Sign up with email + password. Returns:
- *   - { session, requiresEmailVerification: false } — happy path,
- *     user is signed in immediately.
- *   - { session: null, requiresEmailVerification: true } — Supabase
- *     project has email confirmation ON; user must click the email
- *     link before signing in. The UI shows "Check your email."
+ *   - { session, requiresEmailVerification: false, wasReturningUser: false }
+ *     — happy path, brand-new account, signed in immediately.
+ *   - { session: null, requiresEmailVerification: true, wasReturningUser: false }
+ *     — Supabase project has email confirmation ON; user must click the
+ *     email link before signing in. The UI shows "Check your email."
+ *   - { session, requiresEmailVerification: false, wasReturningUser: true }
+ *     — the email was already registered AND the supplied password
+ *     matched, so we silently signed them in. The UI surfaces a
+ *     "Welcome back" alert before routing.
  *
- * If the email is already registered, falls through to signIn with
- * the same password. The user may have forgotten they already
- * have an account.
+ * If the email is already registered AND the password does NOT match,
+ * throws EmailAuthError with code 'EMAIL_TAKEN_WRONG_PASSWORD' so the
+ * UI can offer Sign-In / Forgot-Password instead of a generic failure.
  */
 export async function signUpWithEmail(
   email: string,
   password: string,
-): Promise<{ session: Session | null; requiresEmailVerification: boolean }> {
+): Promise<{
+  session: Session | null;
+  requiresEmailVerification: boolean;
+  wasReturningUser: boolean;
+}> {
   const emailErr = validateEmail(email);
   if (emailErr) throw new EmailAuthError(emailErr, 'INVALID_EMAIL');
   const pwErr = validatePassword(password);
@@ -85,11 +93,27 @@ export async function signUpWithEmail(
   if (error) {
     const msg = error.message.toLowerCase();
     if (msg.includes('already registered') || msg.includes('user already')) {
-      // Silently retry as sign-in — the user may have forgotten the account.
-      return signInWithEmail(email, password).then((session) => ({
-        session,
-        requiresEmailVerification: false,
-      }));
+      // Silently retry as sign-in. If the password matches the user
+      // forgot they had an account — return wasReturningUser:true so
+      // the UI shows a "Welcome back" notice before navigating.
+      // If the retry fails with bad credentials, throw a distinct
+      // error code so the UI can offer Sign-In / Forgot-Password
+      // buttons instead of a generic "Sign-up failed" message.
+      try {
+        const session = await signInWithEmail(email, password);
+        return { session, requiresEmailVerification: false, wasReturningUser: true };
+      } catch (retryErr) {
+        if (
+          retryErr instanceof EmailAuthError &&
+          retryErr.code === 'BAD_CREDENTIALS'
+        ) {
+          throw new EmailAuthError(
+            "This email already has an account, but the password doesn't match.",
+            'EMAIL_TAKEN_WRONG_PASSWORD',
+          );
+        }
+        throw retryErr;
+      }
     }
     throw new EmailAuthError(error.message, error.name);
   }
@@ -98,12 +122,12 @@ export async function signUpWithEmail(
   // session. The user must verify their email first. UI shows
   // "Check your email — we sent a verification link."
   if (data.user && !data.session) {
-    return { session: null, requiresEmailVerification: true };
+    return { session: null, requiresEmailVerification: true, wasReturningUser: false };
   }
   if (!data.session) {
     throw new EmailAuthError('Sign-up did not return a session.');
   }
-  return { session: data.session, requiresEmailVerification: false };
+  return { session: data.session, requiresEmailVerification: false, wasReturningUser: false };
 }
 
 /**
