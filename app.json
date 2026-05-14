@@ -13,6 +13,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.omniaworks.helix",
       "buildNumber": "1",
+      "appleTeamId": "PUHZTA99Y2",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,

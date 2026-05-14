@@ -23,8 +23,7 @@
       "distribution": "store",
       "channel": "preview",
       "ios": {
-        "simulator": false,
-        "appleTeamId": "PUHZTA99Y2"
+        "simulator": false
       }
     },
     "production": {
