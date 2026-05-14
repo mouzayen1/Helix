@@ -14,6 +14,9 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
       }
     },
     "production": {
@@ -22,6 +25,13 @@
     }
   },
   "submit": {
+    "preview": {
+      "ios": {
+        "appleId": "REPLACE_WITH_YOUR_APPLE_ID_EMAIL",
+        "ascAppId": "REPLACE_AFTER_APP_STORE_CONNECT_RECORD_CREATED",
+        "appleTeamId": "PUHZTA99Y2"
+      }
+    },
     "production": {}
   }
 }
