@@ -81,7 +81,7 @@ export default function Preferences() {
       unit_volume: volUnit,
       theme,
     });
-    router.push('/(onboarding)/choose-path');
+    router.push('/(auth)/sign-up');
   };
 
   return (

@@ -22,6 +22,7 @@
     "preview-ios": {
       "distribution": "store",
       "channel": "preview",
+      "environment": "preview",
       "ios": {
         "simulator": false
       }

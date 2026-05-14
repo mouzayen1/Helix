@@ -149,7 +149,7 @@ function RootGate() {
     //    signed-out users to the sign-up screen; once a user is
     //    signed-in + accepted terms, falls through to /(tabs) directly
     //    and the legacy onboarding flow (welcome → age-gate → terms →
-    //    acknowledge → preferences → choose-path) is bypassed entirely.
+    //    acknowledge → preferences) is bypassed entirely.
     //    Account-required is the v1.0 product decision; the legacy
     //    onboarding only runs in legacy local-only builds where
     //    Supabase env vars aren't set.
