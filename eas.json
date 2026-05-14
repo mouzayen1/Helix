@@ -23,7 +23,8 @@
       "distribution": "store",
       "channel": "preview",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "appleTeamId": "PUHZTA99Y2"
       }
     },
     "production": {
@@ -35,7 +36,7 @@
     "preview-ios": {
       "ios": {
         "appleId": "drpepperandhookah@gmail.com",
-        "ascAppId": "REPLACE_AFTER_APP_STORE_CONNECT_RECORD_CREATED",
+        "ascAppId": "6769559763",
         "appleTeamId": "PUHZTA99Y2"
       }
     },
