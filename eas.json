@@ -23,6 +23,7 @@
       "distribution": "store",
       "channel": "preview",
       "environment": "preview",
+      "autoIncrement": "buildNumber",
       "ios": {
         "simulator": false
       }
