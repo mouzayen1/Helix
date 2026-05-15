@@ -132,6 +132,7 @@ export default function LibraryScreen() {
               flex: 1,
               fontFamily: ed.typography.dataMd.fontFamily,
               fontSize: ed.typography.dataMd.fontSize,
+              lineHeight: ed.typography.dataMd.lineHeight,
               letterSpacing: 0.4,
               color: ed.colors.ink1,
               paddingVertical: 10,

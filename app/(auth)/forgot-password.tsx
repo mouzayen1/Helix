@@ -121,6 +121,7 @@ export default function ForgotPasswordScreen() {
             style={{
               fontFamily: ed.fraunces('Fraunces_400Regular'),
               fontSize: 18,
+              lineHeight: 24,
               color: ed.colors.ink1,
               paddingVertical: 12,
               borderBottomWidth: 1,
