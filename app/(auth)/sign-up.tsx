@@ -156,14 +156,26 @@ export default function SignUpScreen() {
           />
         ) : null}
 
-        <ProviderButton
-          label="Sign in with Google"
-          variant="secondary"
-          disabled={!!busyProvider}
-          busy={busyProvider === 'google'}
-          onPress={onGoogle}
-          style={{ marginTop: appleAvailable ? 12 : 0 }}
-        />
+        {/* Google — hidden on iOS for v1.0. The underlying iOS SDK
+            includes a nonce claim in the id_token that we have no way
+            to read or override (nonce control is gated behind the
+            paid Universal Sign In tier of @react-native-google-signin),
+            and Supabase's signInWithIdToken rejects with "Nonces
+            mismatch." Apple Sign-In is the primary iOS social
+            provider anyway (App Store policy requires it whenever
+            other social logins are offered). Re-enable in v1.1 via
+            expo-auth-session/providers/google or by patching the
+            library. */}
+        {Platform.OS !== 'ios' ? (
+          <ProviderButton
+            label="Sign in with Google"
+            variant="secondary"
+            disabled={!!busyProvider}
+            busy={busyProvider === 'google'}
+            onPress={onGoogle}
+            style={{ marginTop: appleAvailable ? 12 : 0 }}
+          />
+        ) : null}
 
         <Pressable
           onPress={onEmail}
