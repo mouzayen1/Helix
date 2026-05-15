@@ -112,10 +112,24 @@ export async function signInWithGoogle(): Promise<Session> {
     throw new GoogleSignInError('Google did not return an identity token.');
   }
 
+  // Supabase enforces nonce-or-no-nonce parity: if the id_token has a
+  // `nonce` claim, the call to signInWithIdToken must include a `nonce`
+  // option (and vice versa) — otherwise it rejects with "Passed nonce
+  // and nonce in id_token should either both exist or not." Recent
+  // builds of the underlying GoogleSignIn iOS SDK include a nonce claim
+  // by default, even though @react-native-google-signin v14 doesn't
+  // expose a way to set one from JS. Parse the nonce out of the token
+  // itself and pass it through, so Supabase's parity check is satisfied.
+  // Note: this means we're not contributing client-generated nonce
+  // entropy to the verification, but the underlying native SDK still
+  // does its own anti-replay protection.
+  const tokenNonce = extractNonceFromIdToken(idToken);
+
   const sb = requireSupabase();
   const { data, error } = await sb.auth.signInWithIdToken({
     provider: 'google',
     token: idToken,
+    ...(tokenNonce ? { nonce: tokenNonce } : {}),
   });
 
   if (error) {
@@ -140,6 +154,25 @@ export async function signInWithGoogle(): Promise<Session> {
   }
 
   return data.session;
+}
+
+/**
+ * Decode a JWT payload and return the nonce claim if present.
+ * Returns undefined if the token is malformed or has no nonce.
+ * Uses globalThis.atob (available in Hermes) to avoid Node's Buffer dep.
+ */
+function extractNonceFromIdToken(jwt: string): string | undefined {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length !== 3) return undefined;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const json = globalThis.atob(padded);
+    const payload = JSON.parse(json) as { nonce?: unknown };
+    return typeof payload.nonce === 'string' ? payload.nonce : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Sign out of the native Google session in addition to Supabase. */
