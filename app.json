@@ -12,7 +12,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.omniaworks.helix",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "appleTeamId": "PUHZTA99Y2",
       "usesAppleSignIn": true,
       "infoPlist": {
@@ -30,10 +30,19 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "category": ["DEFAULT", "BROWSABLE"],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
           "data": [
-            { "scheme": "helix", "host": "auth" },
-            { "scheme": "helix", "host": "reset-password" }
+            {
+              "scheme": "helix",
+              "host": "auth"
+            },
+            {
+              "scheme": "helix",
+              "host": "reset-password"
+            }
           ],
           "autoVerify": false
         }
@@ -75,7 +84,9 @@
     "experiments": {
       "typedRoutes": true
     },
-    "runtimeVersion": { "policy": "appVersion" },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/37ad6fea-d1cd-48e5-97b9-8368b2226cef",
       "fallbackToCacheTimeout": 0
