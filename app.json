@@ -3,7 +3,7 @@
     "name": "Helix",
     "slug": "helix",
     "owner": "saltymo",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "helix",
@@ -22,6 +22,7 @@
     },
     "android": {
       "package": "com.omniaworks.helix",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0A8E83",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
