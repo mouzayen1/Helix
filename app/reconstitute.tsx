@@ -23,7 +23,7 @@ import {
   parseDoseInput,
   resolveDoseUnit,
 } from '../lib/dose-format';
-import { createVial, getActiveVial, type Cycle } from '../lib/db';
+import { attachVialToCycle, createVial, getActiveVial, type Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
 import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../lib/peptides';
@@ -59,7 +59,13 @@ export default function ReconstituteModal() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { pref: doseUnitPref } = useDoseUnitPref();
-  const { peptideId: initialId } = useLocalSearchParams<{ peptideId?: string }>();
+  // cycleId is set when reconstitute is deep-linked from a cycle detail
+  // page (alongside peptideId). The new vial auto-attaches to that cycle
+  // so the user doesn't have to manually + ATTACH it afterward.
+  const { peptideId: initialId, cycleId } = useLocalSearchParams<{
+    peptideId?: string;
+    cycleId?: string;
+  }>();
 
   // Reconstitution is an injection-only workflow (mg + BAC water →
   // mg/mL concentration math). Non-injectable peptides — Selank
@@ -213,11 +219,18 @@ export default function ReconstituteModal() {
     if (saving) return;
     setSaving(true);
     try {
-      await createVial({
+      const newVialId = await createVial({
         peptide_id: peptideId,
         strength_mg: strengthMg,
         bac_water_ml: bacMl,
       });
+      // Auto-attach to the originating cycle. Guarded on the peptide still
+      // matching the one the cycle deep-linked for — if the user switched
+      // peptides in the picker, the cycle context no longer applies and a
+      // wrong attachment would be worse than none (manual + ATTACH remains).
+      if (cycleId && peptideId === initialId) {
+        await attachVialToCycle(newVialId, cycleId);
+      }
       if (coReconstitutePartner) {
         const partner = findPeptide(coReconstitutePartner);
         if (partner) {
