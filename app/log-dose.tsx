@@ -32,11 +32,12 @@ import {
 } from '../lib/dose-format';
 import {
   attachVialToCycle,
+  countUnattachedActiveVials,
   getActiveCycle,
-  getActiveCycleForPeptide,
   getDoseById,
   getVialsForPeptide,
   INJECTION_SITES,
+  listActiveCyclesForPeptide,
   listActiveVials,
   listDoses,
   logDose,
@@ -378,11 +379,28 @@ export default function LogDoseModal() {
       });
       haptic.success();
       // v1.2: if the dose's vial isn't attached to any cycle but an
-      // active cycle covers this peptide, offer to attach. We never
-      // auto-attach silently.
+      // active cycle covers this peptide, link them. When the linkage is
+      // unambiguous — exactly one covering cycle AND this is the only
+      // unattached vial of the peptide — do it silently; the connection
+      // is obvious and a prompt is just friction. Only confirm when
+      // there's genuine ambiguity (multiple covering cycles, or other
+      // unattached vials of the same peptide exist).
       if (vial && !vial.cycle_id) {
-        const cov = await getActiveCycleForPeptide(peptideId);
-        if (cov) {
+        const covering = await listActiveCyclesForPeptide(peptideId);
+        if (covering.length > 0) {
+          const unattached = await countUnattachedActiveVials(peptideId);
+          if (covering.length === 1 && unattached === 1) {
+            try {
+              await attachVialToCycle(vial.id, covering[0].id);
+            } catch {
+              /* non-fatal — the dose is already logged */
+            }
+            router.back();
+            return;
+          }
+          // Ambiguous — default the prompt to the most recently started
+          // covering cycle (listActiveCyclesForPeptide is starts_on DESC).
+          const cov = covering[0];
           Alert.alert(
             'Attach this vial to your cycle?',
             `This ${peptide?.name ?? 'vial'} isn't linked to a cycle yet. Attach it to "${cov.name}" so future doses associate automatically?`,

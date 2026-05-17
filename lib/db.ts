@@ -634,6 +634,21 @@ export async function detachVial(vial_id: string) {
   );
 }
 
+// Count of active vials of this peptide not attached to any cycle.
+// log-dose uses this to decide whether vial→cycle linkage is
+// unambiguous enough to do silently (exactly one such vial + exactly
+// one covering cycle = no prompt).
+export async function countUnattachedActiveVials(peptide_id: string): Promise<number> {
+  const uid = requireUserId();
+  const row = await db().getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM vials
+       WHERE peptide_id = ? AND user_id = ?
+         AND cycle_id IS NULL AND is_active = 1`,
+    peptide_id, uid
+  );
+  return row?.n ?? 0;
+}
+
 // v1.1: all doses drawn from a specific vial (timeline on vial detail).
 export async function getDosesForVial(vialId: string): Promise<Dose[]> {
   const uid = requireUserId();
@@ -981,23 +996,32 @@ export async function listActiveCycles(): Promise<Cycle[]> {
   );
 }
 
-// v1.1: find the active cycle (if any) whose protocol includes this
-// peptide. Used by logDose to auto-attach cycle_id so doses stop
-// accumulating as 'orphan' when a covering cycle is running. When more
-// than one active cycle covers the same peptide, returns the most
-// recently started one — the user's clearest intent.
-export async function getActiveCycleForPeptide(peptideId: string): Promise<Cycle | null> {
+// v1.1: all active cycles whose protocol includes this peptide, most
+// recently started first (listActiveCycles orders by starts_on DESC).
+// 'paused' cycles are excluded — only genuinely running cycles cover a
+// peptide for dose/vial-attachment purposes.
+export async function listActiveCyclesForPeptide(peptideId: string): Promise<Cycle[]> {
   const all = await listActiveCycles();
+  const out: Cycle[] = [];
   for (const c of all) {
     if (c.status !== 'active') continue;
     try {
       const protocol = JSON.parse(c.protocol_json || '[]') as { peptide_id: string }[];
-      if (protocol.some((row) => row.peptide_id === peptideId)) return c;
+      if (protocol.some((row) => row.peptide_id === peptideId)) out.push(c);
     } catch {
       // Malformed protocol_json — skip; don't crash the lookup.
     }
   }
-  return null;
+  return out;
+}
+
+// v1.1: most recently started active cycle covering this peptide, or
+// null. Used by logDose to auto-attach a dose's cycle_id so doses stop
+// accumulating as 'orphan' when a covering cycle is running. When more
+// than one active cycle covers the same peptide, returns the most
+// recently started one — the user's clearest intent.
+export async function getActiveCycleForPeptide(peptideId: string): Promise<Cycle | null> {
+  return (await listActiveCyclesForPeptide(peptideId))[0] ?? null;
 }
 
 export async function listCycles(): Promise<Cycle[]> {
