@@ -14,7 +14,7 @@ import { HeroRing } from '../../components/editorial/HeroRing';
 import { StatPair } from '../../components/editorial/StatPair';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { DoseValue } from '../../components/editorial/DoseUnitChip';
-import { getActiveCycle, listCycles, listDoses, listStacks, type Cycle, type Stack } from '../../lib/db';
+import { listActiveCycles, listCycles, listDoses, listStacks, type Cycle, type Stack } from '../../lib/db';
 import { findPeptide } from '../../lib/peptides';
 
 const TEMPLATES = [
@@ -49,7 +49,7 @@ export default function StacksScreen() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [active, setActive] = useState<Cycle | null>(null);
+  const [active, setActive] = useState<Cycle[]>([]);
   const [past, setPast] = useState<Cycle[]>([]);
   const [stacks, setStacks] = useState<Stack[]>([]);
   // Last-30-days dose count drives the Recent Activity NavRow caption.
@@ -62,13 +62,15 @@ export default function StacksScreen() {
       (async () => {
         const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
         const [a, cs, ss, recent] = await Promise.all([
-          getActiveCycle(),
+          listActiveCycles(),
           listCycles(),
           listStacks(),
           listDoses({ from: since }),
         ]);
         setActive(a);
-        setPast(cs.filter((c) => c.status !== 'active'));
+        // listActiveCycles covers status IN (active, paused); exclude both
+        // from Past so a paused cycle never renders in two sections.
+        setPast(cs.filter((c) => c.status !== 'active' && c.status !== 'paused'));
         setStacks(ss);
         setDoses30d(recent.length);
       })();
@@ -147,9 +149,18 @@ export default function StacksScreen() {
         <HairlineRow strong />
       </View>
 
-      {/* Active cycle */}
-      {active ? (
-        <ActiveCycleHero cycle={active} />
+      {/* Active cycles — one hero per concurrent cycle. */}
+      {active.length > 0 ? (
+        active.map((c, i) => (
+          <View key={c.id}>
+            {i > 0 ? (
+              <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+                <HairlineRow strong />
+              </View>
+            ) : null}
+            <ActiveCycleHero cycle={c} />
+          </View>
+        ))
       ) : (
         <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
           <HairlineRow strong />
