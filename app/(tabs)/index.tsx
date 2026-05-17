@@ -23,7 +23,7 @@ import {
   deleteDose,
   deleteDoseSkip,
   deleteVial,
-  getActiveCycle,
+  listActiveCycles,
   listActiveVials,
   listDoseSkips,
   listDoses,
@@ -55,6 +55,27 @@ function formatHeaderDate(d: Date) {
 
 function daysBetween(a: Date, b: Date) {
   return Math.floor((b.getTime() - a.getTime()) / 864e5);
+}
+
+// Day-of-cycle math for a single cycle. Each active cycle has its own
+// start date and therefore its own day index — when the Today schedule
+// merges multiple concurrent cycles it must resolve each one's phase
+// against that cycle's own day, not a shared one.
+function cycleDayInfo(c: Cycle): {
+  day: number;
+  displayDay: number;
+  total: number;
+  pct: number;
+  remaining: number;
+} {
+  const start = new Date(c.starts_on);
+  const end = new Date(c.ends_on);
+  const today = new Date();
+  const total = Math.max(1, daysBetween(start, end));
+  const day = Math.min(total, Math.max(0, daysBetween(start, today)));
+  const displayDay = Math.min(total, day + 1);
+  const pct = Math.round((day / total) * 100);
+  return { day, displayDay, total, pct, remaining: total - day };
 }
 
 function greet(d: Date) {
@@ -90,7 +111,7 @@ export default function TodayScreen() {
   const { profile } = useProfile();
   const { pref: doseUnitPref } = useDoseUnitPref();
 
-  const [cycle, setCycle] = useState<Cycle | null>(null);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
   const [vials, setVials] = useState<Vial[]>([]);
   const [todayDoses, setTodayDoses] = useState<Dose[]>([]);
   const [todaySkips, setTodaySkips] = useState<DoseSkip[]>([]);
@@ -100,13 +121,14 @@ export default function TodayScreen() {
     peptideId: string;
     peptideName: string;
     window: 'AM' | 'PM' | 'ALL';
+    cycleId: string;
   } | null>(null);
   const [skipReason, setSkipReason] = useState<string | null>(null);
   const [skipNote, setSkipNote] = useState('');
 
   const refresh = useCallback(async () => {
-    const [c, v] = await Promise.all([getActiveCycle(), listActiveVials()]);
-    setCycle(c);
+    const [cs, v] = await Promise.all([listActiveCycles(), listActiveVials()]);
+    setCycles(cs);
     setVials(v);
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -129,54 +151,87 @@ export default function TodayScreen() {
 
   const displayName = profile?.display_name?.trim() || 'there';
 
+  // Representative cycle for the single-value hero ring / day-progress
+  // dial / paused banner. Mirrors the old getActiveCycle() pick: newest
+  // active cycle (listActiveCycles is ORDER BY starts_on DESC), falling
+  // back to the newest paused one so the paused banner still surfaces.
+  // The schedule list below is NOT driven by this — it merges every
+  // active cycle (see the `schedule` memo).
+  const primaryCycle = useMemo<Cycle | null>(
+    () => cycles.find((c) => c.status === 'active') ?? cycles[0] ?? null,
+    [cycles]
+  );
+
   const cycleView = useMemo(() => {
-    if (!cycle) return null;
-    const start = new Date(cycle.starts_on);
-    const end = new Date(cycle.ends_on);
-    const today = new Date();
-    const total = Math.max(1, daysBetween(start, end));
-    const dayOfCycle = Math.min(total, Math.max(0, daysBetween(start, today)));
-    const displayDay = Math.min(total, dayOfCycle + 1);
-    const pct = Math.round((dayOfCycle / total) * 100);
-    return { day: dayOfCycle, displayDay, total, pct, remaining: total - dayOfCycle };
-  }, [cycle]);
+    if (!primaryCycle) return null;
+    return cycleDayInfo(primaryCycle);
+  }, [primaryCycle]);
 
   // Today's scheduled protocol rows. Twice-daily items split into AM + PM
   // rows so each half can be independently logged.
   const schedule = useMemo(() => {
-    if (!cycle || !cycleView) return [];
-    try {
-      const protocol = JSON.parse(cycle.protocol_json || '[]') as CycleProtocolItem[];
-      const matching = protocol.filter((row) => isScheduledToday(row, cycleView.day));
-      const skipFor = (pid: string, win: 'AM' | 'PM' | 'ALL') =>
-        todaySkips.find(
-          (s) =>
-            s.peptide_id === pid &&
-            (s.time_of_day === win ||
-              (win === 'ALL' && (s.time_of_day === null || s.time_of_day === 'ALL')))
-        ) ?? null;
-      const out: (CycleProtocolItem & {
-        logged: boolean;
-        skip: DoseSkip | null;
-        window: 'AM' | 'PM' | 'ALL';
-        resolvedDose: number;
-        resolvedFreq: string;
-        phaseCaption?: string;
-      })[] = [];
+    // Merge today's doses across EVERY active cycle. Concurrent cycles
+    // are a first-class case (e.g. a healing protocol alongside a GLP-1
+    // cut) and each has its own start date → its own day index, so the
+    // phase resolver must run against that cycle's own day. Paused
+    // cycles don't dose, so they're excluded here (the paused banner
+    // keys off primaryCycle separately).
+    const activeCycles = cycles.filter((c) => c.status === 'active');
+    if (activeCycles.length === 0) return [];
+    const showCycleTag = activeCycles.length > 1;
+    const skipFor = (pid: string, cid: string, win: 'AM' | 'PM' | 'ALL') =>
+      todaySkips.find(
+        (s) =>
+          s.peptide_id === pid &&
+          (s.cycle_id === cid || s.cycle_id === null) &&
+          (s.time_of_day === win ||
+            (win === 'ALL' && (s.time_of_day === null || s.time_of_day === 'ALL')))
+      ) ?? null;
+    const out: (CycleProtocolItem & {
+      logged: boolean;
+      skip: DoseSkip | null;
+      window: 'AM' | 'PM' | 'ALL';
+      resolvedDose: number;
+      resolvedFreq: string;
+      caption?: string;
+      cycleId: string;
+      cycleName: string;
+    })[] = [];
+    for (const c of activeCycles) {
+      let protocol: CycleProtocolItem[];
+      try {
+        protocol = JSON.parse(c.protocol_json || '[]') as CycleProtocolItem[];
+      } catch {
+        continue;
+      }
+      const day = cycleDayInfo(c).day;
+      const matching = protocol.filter((row) => isScheduledToday(row, day));
       for (const row of matching) {
         // resolvePhase picks the active phase's freq + dose so phased
         // ramps (Tesa daily→5-on/2-off, Sema titration) display the
         // right values without re-implementing the math here.
-        const rp = resolvePhase(row, cycleView.day);
+        const rp = resolvePhase(row, day);
         const activeFreq = rp.freq.toLowerCase();
         const isTwice = activeFreq.includes('twice daily') || activeFreq.includes('2x daily');
-        const phaseCaption =
+        const phasePart =
           rp.phaseCount > 1
             ? `${(rp.phaseName ?? `Phase ${rp.phaseIndex + 1}`).toUpperCase()} · WK ${rp.weekInPhase} / ${
                 Number.isFinite(rp.totalPhaseWeeks) ? rp.totalPhaseWeeks : '∞'
               }`
             : undefined;
-        const base = { resolvedDose: rp.dose_mcg, resolvedFreq: rp.freq, phaseCaption };
+        // Only attribute the cycle on the row when more than one cycle
+        // is active — single-cycle users keep the cleaner caption.
+        const caption =
+          [showCycleTag ? c.name.toUpperCase() : undefined, phasePart]
+            .filter(Boolean)
+            .join(' · ') || undefined;
+        const base = {
+          resolvedDose: rp.dose_mcg,
+          resolvedFreq: rp.freq,
+          caption,
+          cycleId: c.id,
+          cycleName: c.name,
+        };
         if (isTwice) {
           const amLogged = todayDoses.some(
             (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() < 12
@@ -184,18 +239,25 @@ export default function TodayScreen() {
           const pmLogged = todayDoses.some(
             (d) => d.peptide_id === row.peptide_id && new Date(d.taken_at).getHours() >= 12
           );
-          out.push({ ...row, logged: amLogged, skip: skipFor(row.peptide_id, 'AM'), window: 'AM', ...base });
-          out.push({ ...row, logged: pmLogged, skip: skipFor(row.peptide_id, 'PM'), window: 'PM', ...base });
+          out.push({ ...row, logged: amLogged, skip: skipFor(row.peptide_id, c.id, 'AM'), window: 'AM', ...base });
+          out.push({ ...row, logged: pmLogged, skip: skipFor(row.peptide_id, c.id, 'PM'), window: 'PM', ...base });
         } else {
           const logged = todayDoses.some((d) => d.peptide_id === row.peptide_id);
-          out.push({ ...row, logged, skip: skipFor(row.peptide_id, 'ALL'), window: 'ALL', ...base });
+          out.push({ ...row, logged, skip: skipFor(row.peptide_id, c.id, 'ALL'), window: 'ALL', ...base });
         }
       }
-      return out;
-    } catch {
-      return [];
     }
-  }, [cycle, cycleView, todayDoses, todaySkips]);
+    // AM first, then untimed, then PM; stable by cycle then peptide so
+    // the list ordering doesn't jump between renders.
+    const rank = { AM: 0, ALL: 1, PM: 2 } as const;
+    out.sort(
+      (a, b) =>
+        rank[a.window] - rank[b.window] ||
+        a.cycleName.localeCompare(b.cycleName) ||
+        a.peptide_id.localeCompare(b.peptide_id)
+    );
+    return out;
+  }, [cycles, todayDoses, todaySkips]);
 
   // Compliance %: doses logged / scheduled. Drives the hero ring.
   const compliance = useMemo(() => {
@@ -219,8 +281,13 @@ export default function TodayScreen() {
     ).padStart(2, '0')}`;
   }, []);
 
-  const openSkipSheet = (peptideId: string, peptideName: string, window: 'AM' | 'PM' | 'ALL') => {
-    setSkipSheet({ peptideId, peptideName, window });
+  const openSkipSheet = (
+    peptideId: string,
+    peptideName: string,
+    window: 'AM' | 'PM' | 'ALL',
+    cycleId: string
+  ) => {
+    setSkipSheet({ peptideId, peptideName, window, cycleId });
     setSkipReason(null);
     setSkipNote('');
   };
@@ -229,7 +296,7 @@ export default function TodayScreen() {
     if (!skipSheet) return;
     await createDoseSkip({
       peptide_id: skipSheet.peptideId,
-      cycle_id: cycle?.id ?? undefined,
+      cycle_id: skipSheet.cycleId,
       scheduled_date: todayIsoDate,
       time_of_day: skipSheet.window,
       reason: skipReason ?? undefined,
@@ -254,8 +321,8 @@ export default function TodayScreen() {
   };
 
   const onResumeCycle = async () => {
-    if (!cycle) return;
-    await resumeCycle(cycle.id);
+    if (!primaryCycle) return;
+    await resumeCycle(primaryCycle.id);
     haptic.success();
     await refresh();
   };
@@ -301,7 +368,11 @@ export default function TodayScreen() {
     }
     router.push({
       pathname: '/log-dose',
-      params: { peptideId: row.peptide_id, prefillDoseMcg: row.resolvedDose },
+      params: {
+        peptideId: row.peptide_id,
+        prefillDoseMcg: row.resolvedDose,
+        cycleId: row.cycleId,
+      },
     } as any);
   };
 
@@ -309,7 +380,7 @@ export default function TodayScreen() {
     if (row.logged || row.skip) return;
     const p = findPeptide(row.peptide_id);
     if (!p) return;
-    openSkipSheet(p.id, p.name, row.window);
+    openSkipSheet(p.id, p.name, row.window, row.cycleId);
   };
 
   return (
@@ -367,7 +438,7 @@ export default function TodayScreen() {
 
         {/* Paused-cycle notice — keep visible because it's a critical state.
             Editorial-styled: hairline framed, brass eyebrow, serif body. */}
-        {cycle && cycle.status === 'paused' ? (
+        {primaryCycle && primaryCycle.status === 'paused' ? (
           <View style={{ marginHorizontal: 24, marginTop: 28 }}>
             <HairlineRow strong />
             <View style={{ paddingVertical: 18, gap: 6 }}>
@@ -390,8 +461,8 @@ export default function TodayScreen() {
                   color: ed.colors.ink2,
                 }}
               >
-                {cycle.paused_at
-                  ? `Paused since ${new Date(cycle.paused_at).toLocaleDateString('en-US', {
+                {primaryCycle.paused_at
+                  ? `Paused since ${new Date(primaryCycle.paused_at).toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}. Resume to continue tracking.`
@@ -423,7 +494,7 @@ export default function TodayScreen() {
                   : 'brand'
               }
             />
-          ) : cycle && cycleView ? (
+          ) : primaryCycle && cycleView ? (
             <HeroRing
               value={cycleView.pct}
               unit="%"
@@ -436,7 +507,7 @@ export default function TodayScreen() {
         </View>
 
         {/* No-cycle CTA pair */}
-        {!cycle ? (
+        {!primaryCycle ? (
           <View
             style={{
               marginTop: 32,
@@ -455,8 +526,8 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
-        {/* Cycle stats — day / progress / remaining */}
-        {cycle && cycleView ? (
+        {/* Cycle stats — day / progress / remaining (primary cycle) */}
+        {primaryCycle && cycleView ? (
           <View style={{ marginTop: 32, marginHorizontal: 24 }}>
             <HairlineRow strong />
             <StatPair
@@ -494,7 +565,7 @@ export default function TodayScreen() {
                       title={p.name}
                       detail={detail}
                       doseMcg={row.resolvedDose}
-                      caption={row.phaseCaption}
+                      caption={row.caption}
                       // Status keyword stays as-is; ScheduleItem renders
                       // "OVERDUE" for skipped rows but the dim row + skip
                       // detail line carry the meaning.
