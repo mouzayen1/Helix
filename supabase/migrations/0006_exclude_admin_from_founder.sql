@@ -106,7 +106,7 @@ GRANT EXECUTE ON FUNCTION public.grant_founder_if_eligible(UUID) TO authenticate
 -- ─────────────────────────────────────────────────────────────────────────────
 
 INSERT INTO public.founder_excluded_emails (email, note) VALUES
-  ('drpepperandhookah+helixreview@gmail.com', 'Google Play review / admin test account')
+  ('review@gethelixapp.org', 'Google Play review / admin test account')
 ON CONFLICT (email) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ ON CONFLICT (email) DO NOTHING;
 -- WITH victim AS (
 --   SELECT user_id, founder_number
 --     FROM public.profiles
---    WHERE lower(email) = lower('drpepperandhookah+helixreview@gmail.com')
+--    WHERE lower(email) = lower('review@gethelixapp.org')
 --      AND founder_status
 -- )
 -- UPDATE public.profiles p
