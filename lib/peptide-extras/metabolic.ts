@@ -19,12 +19,45 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       duration_weeks: 68,
       phase_notes: 'Not cycled — long-term use is the norm. Consider maintenance after goal weight.',
       schedule: 'Start 0.25 mg SubQ weekly; titrate monthly per tolerance to 2.4 mg weekly.',
+      phases: [
+        { name: 'Titration 0.25 mg', weeks: 4, dose_modifier: '0.25 mg SubQ weekly' },
+        { name: 'Titration 0.5 mg', weeks: 4, dose_modifier: '0.5 mg SubQ weekly' },
+        { name: 'Titration 1.0 mg', weeks: 4, dose_modifier: '1.0 mg SubQ weekly' },
+        { name: 'Titration 1.7 mg', weeks: 4, dose_modifier: '1.7 mg SubQ weekly' },
+        { name: 'Maintenance 2.4 mg', weeks: 52, dose_modifier: '2.4 mg SubQ weekly' },
+      ],
     },
     timing: 'Same day each week. Any time of day; take with or without food.',
     coAdministration: [
       { peptide_id: 'cagri', note: 'CagriSema combination — phase-3 tested; GLP-1 + amylin for greater weight loss.' },
     ],
     stackConflicts: glp1ConflictsExcept('sema'),
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation (most common; usually worst right after dose increases)',
+      'Reduced appetite to the point of skipping meals',
+      'Heartburn / reflux on higher doses',
+      'Fatigue and headache during titration',
+      'Pancreatitis (rare but a known class risk)',
+      'Gallbladder disease, including cholelithiasis',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'Multiple Endocrine Neoplasia syndrome type 2 (MEN2)',
+      'Active or prior pancreatitis',
+      'Pregnancy (label: stop ≥2 months before planned conception)',
+    ],
+    overview: {
+      whatItDoes:
+        'Semaglutide mimics a natural gut hormone called GLP-1 that signals fullness to your brain and slows how fast your stomach empties. Net effect: you feel full sooner, stay full longer, and your appetite drops noticeably. It also helps your body release insulin in response to meals, which is why it was originally approved for type 2 diabetes (sold as Ozempic) before being approved for obesity (sold as Wegovy). Among peptides, this is one of the most thoroughly studied — large-scale human trials show 10–15% body weight loss over 6–12 months in obesity studies.',
+      storage: {
+        beforeMixing:
+          "Refrigerate at 36–46°F (2–8°C). Do not freeze. Do not use if it's been frozen.",
+        afterMixing:
+          'Refrigerate. Use within 28 days (per FDA labeling for prescription Semaglutide).',
+        handling:
+          'Keep away from light. The solution should be clear and colorless — discard if cloudy or discolored.',
+      },
+    },
   },
 
   tirz: {
@@ -36,10 +69,44 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       duration_weeks: 72,
       phase_notes: 'Long-term use; no standard cycling.',
       schedule: 'Start 2.5 mg SubQ weekly; titrate every 4 weeks up to 15 mg weekly.',
+      phases: [
+        { name: 'Titration 2.5 mg', weeks: 4, dose_modifier: '2.5 mg SubQ weekly' },
+        { name: 'Titration 5 mg', weeks: 4, dose_modifier: '5 mg SubQ weekly' },
+        { name: 'Titration 7.5 mg', weeks: 4, dose_modifier: '7.5 mg SubQ weekly' },
+        { name: 'Titration 10 mg', weeks: 4, dose_modifier: '10 mg SubQ weekly' },
+        { name: 'Titration 12.5 mg', weeks: 4, dose_modifier: '12.5 mg SubQ weekly' },
+        { name: 'Maintenance 15 mg', weeks: 52, dose_modifier: '15 mg SubQ weekly' },
+      ],
     },
     timing: 'Same day each week.',
     coAdministration: [],
     stackConflicts: glp1ConflictsExcept('tirz'),
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation — same GI cluster as semaglutide',
+      'Decreased appetite; risk of inadequate intake',
+      'Injection-site reactions',
+      'Pancreatitis (class risk)',
+      'Gallbladder disease',
+      'Hypoglycemia when used with insulin or sulfonylureas',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'MEN2 syndrome',
+      'Active or prior pancreatitis',
+      'Pregnancy',
+    ],
+    overview: {
+      whatItDoes:
+        'Tirzepatide is a "dual agonist" — it activates two natural gut hormones at once: GLP-1 (the same one Semaglutide mimics) and GIP. Hitting both signals simultaneously creates a stronger appetite-suppression and blood-sugar effect than GLP-1 alone. You feel full sooner, stay full longer, and your insulin response improves. Originally approved for type 2 diabetes (sold as Mounjaro), then for obesity (sold as Zepbound). Among peptides, this is one of the most thoroughly studied — large human trials show 15–22% body weight loss over 18 months, meaningfully more than Semaglutide.',
+      storage: {
+        beforeMixing:
+          "Refrigerate at 36–46°F (2–8°C). Do not freeze. Do not use if it's been frozen.",
+        afterMixing:
+          'Refrigerate. Use within 28 days (per FDA labeling).',
+        handling:
+          'Keep away from light. The solution should be clear and colorless — discard if cloudy.',
+      },
+    },
   },
 
   reta: {
@@ -51,10 +118,41 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       duration_weeks: 48,
       phase_notes: 'Investigational — long-term safety profile still being established.',
       schedule: 'Titrate per trial protocol; max 12 mg weekly.',
+      phases: [
+        { name: 'Titration 2 mg', weeks: 4, dose_modifier: '2 mg SubQ weekly' },
+        { name: 'Titration 4 mg', weeks: 4, dose_modifier: '4 mg SubQ weekly' },
+        { name: 'Titration 8 mg', weeks: 4, dose_modifier: '8 mg SubQ weekly' },
+        { name: 'Maintenance 12 mg', weeks: 36, dose_modifier: '12 mg SubQ weekly' },
+      ],
     },
     timing: 'Same day each week.',
     coAdministration: [],
     stackConflicts: glp1ConflictsExcept('reta'),
+    sideEffects: [
+      'Strong GI cluster: nausea, vomiting, diarrhea',
+      'Mild heart-rate elevation reported in trials',
+      'Decreased appetite; risk of inadequate intake',
+      'Injection-site reactions',
+      'Investigational — long-term safety profile still being characterized',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'MEN2 syndrome',
+      'Active or prior pancreatitis',
+      'Pregnancy',
+    ],
+    overview: {
+      whatItDoes:
+        'Retatrutide is a "triple agonist" — it activates three natural gut hormones at once: GLP-1, GIP, and glucagon. Adding glucagon to the mix is the new variable: it increases the rate at which your body burns stored fat for energy, on top of the appetite suppression you get from the other two. Phase 2 human trials showed roughly 24% body weight loss over 11 months — the highest reduction of any obesity drug studied so far. Currently in Phase 3 trials with Eli Lilly; not yet FDA-approved. Most users accessing it now are doing so for research purposes ahead of approval.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. Less storage data is published for Reta than for older GLP-1s — observe for cloudiness or discoloration.',
+        handling:
+          "Keep away from light. Don't shake; swirl gently to dissolve.",
+      },
+    },
   },
 
   lira: {
@@ -66,10 +164,41 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       duration_weeks: 56,
       phase_notes: 'Daily SubQ; typically long-term.',
       schedule: 'Start 0.6 mg daily; titrate weekly to 3.0 mg daily per tolerance.',
+      phases: [
+        { name: 'Titration 0.6 mg', weeks: 1, dose_modifier: '0.6 mg SubQ daily' },
+        { name: 'Titration 1.2 mg', weeks: 1, dose_modifier: '1.2 mg SubQ daily' },
+        { name: 'Titration 1.8 mg', weeks: 1, dose_modifier: '1.8 mg SubQ daily' },
+        { name: 'Titration 2.4 mg', weeks: 1, dose_modifier: '2.4 mg SubQ daily' },
+        { name: 'Maintenance 3.0 mg', weeks: 52, dose_modifier: '3.0 mg SubQ daily' },
+      ],
     },
     timing: 'Same time each day.',
     coAdministration: [],
     stackConflicts: glp1ConflictsExcept('lira'),
+    sideEffects: [
+      'Nausea, vomiting, diarrhea, constipation — daily GI burden often higher than once-weekly GLP-1s',
+      'Injection-site reactions',
+      'Hypoglycemia when paired with insulin or sulfonylureas',
+      'Pancreatitis (class risk)',
+      'Gallbladder disease',
+    ],
+    contraindications: [
+      'Personal or family history of medullary thyroid carcinoma',
+      'MEN2 syndrome',
+      'Active or prior pancreatitis',
+      'Pregnancy',
+    ],
+    overview: {
+      whatItDoes:
+        "Liraglutide is the older sibling of Semaglutide — same GLP-1 mimicking mechanism, but a shorter-acting version that requires daily injections instead of weekly. Originally approved for type 2 diabetes (Victoza) and later for obesity (Saxenda). Because the half-life is shorter (~13 hours vs Semaglutide's ~7 days), the effects are smoother day-to-day but require more frequent dosing. Effective in human trials but typically produces less weight loss than Semaglutide or Tirzepatide — usually 5–10% over 6–12 months.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze.',
+        afterMixing:
+          'Refrigerate. Use within 30 days (per FDA labeling for prescription forms).',
+        handling: 'Keep away from light. The solution should be clear — discard if cloudy.',
+      },
+    },
   },
 
   cagri: {
@@ -81,12 +210,39 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       duration_weeks: 68,
       phase_notes: 'Long-term, titrated upward monthly.',
       schedule: 'Match titration of paired GLP-1 (usually semaglutide).',
+      phases: [
+        { name: 'Titration 0.16 mg', weeks: 4, dose_modifier: '0.16 mg SubQ weekly' },
+        { name: 'Titration 0.3 mg', weeks: 4, dose_modifier: '0.3 mg SubQ weekly' },
+        { name: 'Titration 0.6 mg', weeks: 4, dose_modifier: '0.6 mg SubQ weekly' },
+        { name: 'Titration 1.2 mg', weeks: 4, dose_modifier: '1.2 mg SubQ weekly' },
+        { name: 'Maintenance 2.4 mg', weeks: 52, dose_modifier: '2.4 mg SubQ weekly' },
+      ],
     },
     timing: 'Same day each week.',
     coAdministration: [
       { peptide_id: 'sema', note: 'CagriSema — the canonical pairing; separate vials, same injection day.' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Nausea (less than GLP-1 alone in trials but still common)',
+      'Decreased appetite; rapid satiety',
+      'Injection-site reactions',
+      'Investigational — long-term safety profile still being established',
+    ],
+    contraindications: [
+      'Pregnancy',
+      'Active pancreatitis',
+    ],
+    overview: {
+      whatItDoes:
+        "Cagrilintide is a synthetic version of amylin, a hormone your pancreas releases alongside insulin to signal fullness and slow stomach emptying. It works through a different pathway than GLP-1, which is why it's often paired with Semaglutide (the combination is called CagriSema). On its own, it provides modest weight loss; combined with Semaglutide, the weight loss is meaningfully larger than either alone. Phase 2 human trials are promising; Phase 3 in progress. Not yet FDA-approved as a standalone product.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   aod: {
@@ -111,6 +267,24 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     proTips: [
       'Pair with fasted morning cardio if following published fat-loss research protocols.',
     ],
+    sideEffects: [
+      'Generally well-tolerated in trials; injection-site reactions most common',
+      'Mild headache or fatigue reported anecdotally',
+      'Effect size in human trials has been modest — disappointment is the most common "side effect"',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'AOD-9604 is a small piece of human growth hormone designed specifically for fat loss. It signals your body to break down stored fat for energy without triggering the muscle-growth, blood-sugar, or IGF-1 effects of full growth hormone. Originally developed as an anti-obesity drug in human trials, results were modest (about 2–3% body fat loss over 12 weeks) — not enough to win FDA approval as obesity treatment. Most current research and use is for targeted fat loss in stubborn areas, often paired with other compounds.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen, 1 year refrigerated.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: "Keep away from light. Don't shake — swirl gently to dissolve.",
+      },
+    },
   },
 
   tesofensine: {
@@ -135,8 +309,31 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       'Ignoring blood-pressure monitoring — trial safety data required periodic checks.',
     ],
     proTips: [
-      'Start at 250 mcg for the first week to assess tolerance before moving to 500 mcg.',
+      'Starting at 250 mcg for the first week to assess tolerance before moving to 500 mcg is a common research approach.',
     ],
+    sideEffects: [
+      'Insomnia, especially with evening dosing',
+      'Elevated blood pressure and heart rate',
+      'Dry mouth, headache',
+      'Mood changes / agitation in a subset of users',
+      'Constipation',
+    ],
+    contraindications: [
+      'Cardiovascular disease, uncontrolled hypertension, or arrhythmia',
+      'MAOI use within 14 days',
+      'Pregnancy and breastfeeding',
+      'Anxiety disorders or psychiatric history (monoamine stimulation can worsen)',
+    ],
+    overview: {
+      whatItDoes:
+        "Tesofensine isn't a peptide — it's a small-molecule drug (technically a triple monoamine reuptake inhibitor) that increases brain levels of serotonin, dopamine, and norepinephrine. The result is significant appetite suppression and increased energy expenditure. Originally developed for Alzheimer's and Parkinson's, it failed for those uses but turned out to produce substantial weight loss in trials — about 10% body weight over 6 months at higher doses, which is comparable to Semaglutide. Currently approved for obesity in some countries (notably Mexico under the brand Nupode); not FDA-approved in the US. Functions more like a stimulant than a metabolic hormone, which means a different side-effect profile than GLP-1s.",
+      storage: {
+        beforeMixing:
+          'Most often supplied as oral capsules or tablets — store at room temperature, away from light and humidity.',
+        afterMixing:
+          'If supplied as a powder: store sealed in a cool dry place.',
+      },
+    },
   },
 
   amq: {
@@ -152,6 +349,24 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
     timing: 'Morning with food.',
     coAdministration: [],
     stackConflicts: [],
+    sideEffects: [
+      'Limited human safety data — most reports come from rodent studies',
+      'Mild GI upset reported anecdotally',
+      'Long-term effects of NNMT inhibition in humans not yet characterized',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        '5-Amino-1MQ is a small molecule (technically not a peptide, despite often being grouped with them) that blocks an enzyme called NNMT. NNMT activity is elevated in obese fat tissue, where it interferes with fat-burning and energy metabolism. By blocking NNMT, 5-Amino-1MQ allows fat cells to burn energy more efficiently — essentially "unlocking" stuck fat metabolism. Most evidence is preclinical (mouse studies show significant fat loss without dietary changes). Human data is very limited but growing among researchers and athletes.',
+      storage: {
+        beforeMixing:
+          'Most often supplied as oral capsules — store at room temperature, away from light and humidity.',
+        afterMixing:
+          'If supplied as injectable powder: refrigerate before mixing at 36–46°F (2–8°C). After mixing with bacteriostatic water, refrigerate and use within 30 days.',
+      },
+    },
   },
 
   motsc: {
@@ -169,5 +384,23 @@ export const METABOLIC_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'ss31', note: 'Dual mitochondrial-support approach.' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Injection-site reactions',
+      'Mild fatigue or headache early in a course',
+      'Long-term human safety data is limited',
+    ],
+    contraindications: [
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'MOTS-c is a "mitochondrial peptide" — encoded inside your mitochondria (your cells\' energy factories) rather than your nuclear DNA, which is unusual. It signals your mitochondria to burn energy more efficiently, improves how your muscles use glucose, and seems to mimic some of the metabolic benefits of exercise. Research connects it to improved insulin sensitivity, fat loss, and possibly slowed aging. Most evidence is preclinical with promising animal studies; early human trials are underway. Used by researchers interested in metabolic health and longevity.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 };

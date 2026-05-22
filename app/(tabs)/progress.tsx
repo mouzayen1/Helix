@@ -1,9 +1,16 @@
-// Progress — spec v2.0 §10 "Progress home". Tiles, journal preview, insights.
+// Progress — editorial rebuild. Cost rollup uses StatPair, metric tiles
+// become hairline-divided rows with serif numerals + mono labels,
+// journal preview matches the Cycle Detail / Today schedule rhythm.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HCard, HSectionHeader } from '../../components/Primitives';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { StatPair } from '../../components/editorial/StatPair';
+import { useEditorialTheme } from '../../lib/design/theme';
 import {
   getActiveCycle,
   getVialHistory,
@@ -16,11 +23,9 @@ import {
   METRIC_KINDS,
   type Vial,
 } from '../../lib/db';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function ProgressScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [tiles, setTiles] = useState<{ kind: string; latest: Metric | null }[]>([]);
@@ -46,8 +51,6 @@ export default function ProgressScreen() {
     }, [])
   );
 
-  // Cost rollup across all vials with cost_usd set. Hidden entirely when no
-  // vial has a cost — this is an opt-in feature, not a required surface.
   const costSummary = useMemo(() => {
     const withCost = allVials.filter((v) => v.cost_usd != null && v.cost_usd > 0);
     if (withCost.length === 0) return null;
@@ -68,256 +71,355 @@ export default function ProgressScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{ paddingTop: insets.top + space.md, paddingBottom: 140 }}
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
       showsVerticalScrollIndicator={false}
     >
-      <View style={{ paddingHorizontal: space.xl }}>
+      {/* Header */}
+      <View style={{ paddingHorizontal: 24 }}>
         <Text
           style={{
-            fontSize: 28,
-            fontFamily: font.sansBold,
-            color: t.ink,
-            letterSpacing: -0.6,
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
           }}
         >
           Progress
         </Text>
-        <Text style={{ fontSize: 13, color: t.ink3, marginTop: 2 }}>
-          Metrics, journals, trends
+        <EditorialHeadline size="title1">{`The *trend* line.`}</EditorialHeadline>
+        <Text
+          style={{
+            marginTop: 8,
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            lineHeight: ed.typography.bodySm.lineHeight,
+            color: ed.colors.ink3,
+          }}
+        >
+          Metrics, journals, patterns.
         </Text>
       </View>
 
-      {/* Cost rollup — hidden entirely unless at least one vial has cost set */}
+      {/* Cost rollup */}
       {costSummary ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+        <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Cost</EyebrowLabel>
+          <HairlineRow strong style={{ marginTop: 4 }} />
+          <StatPair
+            cells={[
+              {
+                value: `$${costSummary.total.toFixed(0)}`,
+                label: 'Total',
+                color: 'brand',
+              },
+              {
+                value: costSummary.perDose != null ? `$${costSummary.perDose.toFixed(2)}` : '—',
+                label: 'Per dose',
+              },
+              ...(costSummary.cycleCost != null
+                ? [
+                    {
+                      value: `$${costSummary.cycleCost.toFixed(0)}`,
+                      label: 'This cycle',
+                    },
+                  ]
+                : []),
+            ]}
+          />
+          <HairlineRow strong />
+        </View>
+      ) : null}
+
+      {/* Metric tiles */}
+      <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <EyebrowLabel withRule>Metrics</EyebrowLabel>
+          <Pressable onPress={() => router.push('/log-metric' as any)} hitSlop={8}>
+            <Text
+              style={{
+                marginLeft: 12,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.brand,
+                textTransform: 'uppercase',
+              }}
+            >
+              + Log
+            </Text>
+          </Pressable>
+        </View>
+        {tiles.length === 0 ? (
+          <View style={{ paddingVertical: 28, alignItems: 'center', gap: 14 }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 19,
+                color: ed.colors.ink2,
+                textAlign: 'center',
+              }}
+            >
+              Nothing logged yet.
+            </Text>
+            <Text
+              style={{
+                fontFamily: ed.typography.bodySm.fontFamily,
+                fontSize: ed.typography.bodySm.fontSize,
+                lineHeight: ed.typography.bodySm.lineHeight,
+                color: ed.colors.ink3,
+                textAlign: 'center',
+                maxWidth: 280,
+              }}
+            >
+              Track weight, sleep, labs, see trends over time.
+            </Text>
+            <EditorialButton onPress={() => router.push('/log-metric' as any)}>
+              Log first metric
+            </EditorialButton>
+          </View>
+        ) : (
+          <View style={{ marginTop: 4 }}>
+            {tiles.map(({ kind, latest }, idx) => {
+              const info = METRIC_KINDS.find((k) => k.id === kind);
+              if (!latest || !info) return null;
+              return (
+                <View key={kind}>
+                  <Pressable
+                    onPress={() => router.push(`/metric/${kind}` as any)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'baseline',
+                      paddingVertical: 18,
+                      gap: 12,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontFamily: ed.typography.label.fontFamily,
+                        fontSize: ed.typography.label.fontSize,
+                        letterSpacing: ed.typography.label.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {info.label}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_300Light'),
+                        fontSize: 32,
+                        letterSpacing: -0.6,
+                        color: ed.colors.ink1,
+                      }}
+                    >
+                      {latest.value.toString()}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {info.unit}
+                    </Text>
+                  </Pressable>
+                  {idx < tiles.length - 1 ? <HairlineRow /> : null}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      {/* Journal preview */}
+      <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <EyebrowLabel withRule>Journal</EyebrowLabel>
+          <Pressable onPress={() => router.push('/journal-entry' as any)} hitSlop={8}>
+            <Text
+              style={{
+                marginLeft: 12,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.brand,
+                textTransform: 'uppercase',
+              }}
+            >
+              + Write
+            </Text>
+          </Pressable>
+        </View>
+
+        {journal.length === 0 ? (
+          <View style={{ paddingVertical: 28, alignItems: 'center', gap: 14 }}>
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 19,
+                color: ed.colors.ink2,
+                textAlign: 'center',
+              }}
+            >
+              No entries yet.
+            </Text>
+            <Text
+              style={{
+                fontFamily: ed.typography.bodySm.fontFamily,
+                fontSize: ed.typography.bodySm.fontSize,
+                lineHeight: ed.typography.bodySm.lineHeight,
+                color: ed.colors.ink3,
+                textAlign: 'center',
+                maxWidth: 280,
+              }}
+            >
+              A daily line or two. Pattern insights unlock at 14 entries.
+            </Text>
+            <EditorialButton onPress={() => router.push('/journal-entry' as any)}>
+              Write today's entry
+            </EditorialButton>
+          </View>
+        ) : (
+          <View style={{ marginTop: 4 }}>
+            {journal.map((j, idx) => {
+              const tags = (() => {
+                try {
+                  return JSON.parse(j.tags_json) as string[];
+                } catch {
+                  return [];
+                }
+              })();
+              return (
+                <View key={j.id}>
+                  <Pressable
+                    onPress={() =>
+                      router.push({ pathname: '/journal-entry', params: { date: j.entry_date } } as any)
+                    }
+                    style={{ paddingVertical: 16, gap: 6 }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.label.fontFamily,
+                          fontSize: ed.typography.label.fontSize,
+                          letterSpacing: ed.typography.label.letterSpacing,
+                          color: ed.colors.ink3,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {new Date(j.entry_date)
+                          .toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                          })
+                          .toUpperCase()}
+                      </Text>
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.dataMd.fontFamily,
+                          fontSize: ed.typography.dataMd.fontSize,
+                          color: ed.colors.ink3,
+                        }}
+                      >
+                        mood {j.mood ?? '—'} · energy {j.energy ?? '—'}
+                      </Text>
+                    </View>
+                    {j.body ? (
+                      <Text
+                        numberOfLines={3}
+                        style={{
+                          fontFamily: ed.fraunces('Fraunces_400Regular'),
+                          fontSize: 16,
+                          lineHeight: 24,
+                          letterSpacing: -0.2,
+                          color: ed.colors.ink1,
+                        }}
+                      >
+                        {j.body}
+                      </Text>
+                    ) : null}
+                    {tags.length > 0 ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                        {tags.map((tag) => (
+                          <View
+                            key={tag}
+                            style={{
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderWidth: 1,
+                              borderColor: ed.colors.line,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontFamily: ed.typography.labelSm.fontFamily,
+                                fontSize: ed.typography.labelSm.fontSize,
+                                letterSpacing: ed.typography.labelSm.letterSpacing,
+                                color: ed.colors.ink3,
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {tag}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </Pressable>
+                  {idx < journal.length - 1 ? <HairlineRow /> : null}
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      {/* Insights tease */}
+      {journal.length > 0 && journal.length < 14 ? (
+        <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
           <View
             style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-              padding: space.md,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.brandLine,
+              paddingVertical: 16,
               gap: 6,
             }}
           >
             <Text
               style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                color: t.ink3,
-                fontFamily: font.sansSemi,
-                textTransform: 'uppercase',
-              }}
-            >
-              Cost
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-              <Text style={{ fontSize: 22, fontFamily: font.monoSemi, color: t.ink }}>
-                ${costSummary.total.toFixed(0)}
-              </Text>
-              <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
-                total spent
-              </Text>
-            </View>
-            <Text style={{ fontSize: 12, color: t.ink3, fontFamily: font.mono }}>
-              {costSummary.perDose != null
-                ? `~$${costSummary.perDose.toFixed(2)} per dose`
-                : 'No dose history yet'}
-              {costSummary.cycleCost != null
-                ? ` · $${costSummary.cycleCost.toFixed(0)} this cycle`
-                : ''}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      {/* Metric tiles */}
-      <HSectionHeader
-        title="Metrics"
-        action={<Text onPress={() => router.push('/log-metric' as any)}>Add</Text>}
-      />
-      {tiles.length === 0 ? (
-        <View style={{ paddingHorizontal: space.xl }}>
-          <HCard>
-            <Text style={{ color: t.ink3, fontSize: 14, lineHeight: 20, marginBottom: space.md }}>
-              Nothing logged yet. Start tracking weight, sleep, labs, and see trends over time.
-            </Text>
-            <Pressable
-              onPress={() => router.push('/log-metric' as any)}
-              style={{
-                padding: space.md,
-                borderRadius: radius.md,
-                backgroundColor: t.ink,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: t.bg, fontFamily: font.sansSemi, fontSize: 14 }}>
-                Log your first metric
-              </Text>
-            </Pressable>
-          </HCard>
-        </View>
-      ) : (
-        <View
-          style={{
-            paddingHorizontal: space.xl,
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 10,
-          }}
-        >
-          {tiles.map(({ kind, latest }) => {
-            const info = METRIC_KINDS.find((k) => k.id === kind);
-            if (!latest || !info) return null;
-            return (
-              <Pressable
-                key={kind}
-                onPress={() => router.push(`/metric/${kind}` as any)}
-                style={{
-                  width: '48.5%',
-                  padding: space.md,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: t.line,
-                  backgroundColor: t.surface,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 11,
-                    color: t.ink3,
-                    letterSpacing: 0.9,
-                    fontFamily: font.sansSemi,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {info.label}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 6 }}>
-                  <Text style={{ fontSize: 22, fontFamily: font.monoSemi, color: t.ink }}>
-                    {latest.value.toString()}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: t.ink3, marginLeft: 4 }}>
-                    {info.unit}
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 11, color: t.ink4, marginTop: 4 }}>
-                  {new Date(latest.taken_at).toLocaleDateString()}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      {/* Journal preview */}
-      <HSectionHeader
-        title="Journal"
-        action={<Text onPress={() => router.push('/journal-entry' as any)}>New</Text>}
-      />
-      {journal.length === 0 ? (
-        <View style={{ paddingHorizontal: space.xl }}>
-          <HCard>
-            <Text style={{ color: t.ink3, fontSize: 14, lineHeight: 20, marginBottom: space.md }}>
-              A daily line or two about how you feel. Pattern insights unlock at 14 entries.
-            </Text>
-            <Pressable
-              onPress={() => router.push('/journal-entry' as any)}
-              style={{
-                padding: space.md,
-                borderRadius: radius.md,
-                backgroundColor: t.ink,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: t.bg, fontFamily: font.sansSemi, fontSize: 14 }}>
-                {"Write today's entry"}
-              </Text>
-            </Pressable>
-          </HCard>
-        </View>
-      ) : (
-        <View style={{ paddingHorizontal: space.xl, gap: 8 }}>
-          {journal.map((j) => (
-            <View
-              key={j.id}
-              style={{
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.md,
-                gap: 6,
-              }}
-            >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: t.ink, fontSize: 14, fontFamily: font.sansSemi }}>
-                  {new Date(j.entry_date).toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </Text>
-                <Text style={{ color: t.ink3, fontSize: 12, fontFamily: font.mono }}>
-                  mood {j.mood ?? '—'} · energy {j.energy ?? '—'}
-                </Text>
-              </View>
-              {j.body ? (
-                <Text style={{ color: t.ink2, fontSize: 13, lineHeight: 19 }} numberOfLines={3}>
-                  {j.body}
-                </Text>
-              ) : null}
-              {JSON.parse(j.tags_json).length > 0 ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                  {(JSON.parse(j.tags_json) as string[]).map((tag) => (
-                    <View
-                      key={tag}
-                      style={{
-                        paddingVertical: 2,
-                        paddingHorizontal: 7,
-                        borderRadius: radius.pill,
-                        backgroundColor: t.surfaceAlt,
-                      }}
-                    >
-                      <Text style={{ fontSize: 10, color: t.ink2, fontFamily: font.sansMed }}>
-                        {tag}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Insights placeholder */}
-      {journal.length < 14 ? (
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.xl }}>
-          <View
-            style={{
-              padding: space.md,
-              borderRadius: radius.md,
-              backgroundColor: t.accentSoft,
-              borderLeftWidth: 3,
-              borderLeftColor: t.accent,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 11,
-                color: t.accentInk,
-                letterSpacing: 0.9,
-                fontFamily: font.sansSemi,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.brand,
                 textTransform: 'uppercase',
               }}
             >
               Pattern insights
             </Text>
-            <Text style={{ color: t.ink2, fontSize: 13, lineHeight: 19, marginTop: 4 }}>
-              Keep logging — automatic pattern insights unlock after you have 14
-              journal entries. ({journal.length}/14)
+            <Text
+              style={{
+                fontFamily: ed.typography.bodyMd.fontFamily,
+                fontSize: ed.typography.bodyMd.fontSize,
+                lineHeight: ed.typography.bodyMd.lineHeight,
+                color: ed.colors.ink2,
+              }}
+            >
+              Pattern insights unlock at 14 entries. ({journal.length}/14)
             </Text>
           </View>
         </View>

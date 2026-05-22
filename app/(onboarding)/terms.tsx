@@ -1,15 +1,18 @@
-// Terms & Liability — onboarding step 5. Records acceptance timestamp.
+// Terms — editorial rebuild. The terms scroll view is the focal point;
+// chrome around it is hairline-quiet so the reader's eye stays on the
+// terms text itself.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EditorialButton } from '../../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { TERMS_FULL, TERMS_VERSION } from '../../lib/disclaimers';
 import { useProfile } from '../../lib/profile-context';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function Terms() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { update } = useProfile();
@@ -26,103 +29,111 @@ export default function Terms() {
     <View
       style={{
         flex: 1,
-        backgroundColor: t.bg,
-        paddingTop: insets.top + space.xl,
-        paddingBottom: insets.bottom + space.xl,
-        paddingHorizontal: space.xl,
+        backgroundColor: ed.colors.bg,
+        paddingTop: insets.top + 28,
+        paddingBottom: insets.bottom + 24,
+        paddingHorizontal: 24,
       }}
     >
-      <Text style={{ color: t.ink3, fontSize: 11, fontFamily: font.sansSemi, letterSpacing: 1.2 }}>
-        STEP 3 OF 5
-      </Text>
-
       <Text
         style={{
-          marginTop: space.lg,
-          fontSize: 28,
-          lineHeight: 34,
-          fontFamily: font.sansBold,
-          color: t.ink,
-          letterSpacing: -0.6,
+          fontFamily: ed.typography.eyebrow.fontFamily,
+          fontSize: ed.typography.eyebrow.fontSize,
+          letterSpacing: ed.typography.eyebrow.letterSpacing,
+          color: ed.colors.ink3,
+          textTransform: 'uppercase',
         }}
       >
-        Terms of use{'\n'}and liability.
+        Step 3 of 5
       </Text>
+      <View style={{ marginTop: 18 }}>
+        <EditorialHeadline size="title1">{`Terms and *liability*.`}</EditorialHeadline>
+      </View>
 
       <ScrollView
         style={{
           flex: 1,
-          marginTop: space.lg,
-          backgroundColor: t.surface,
-          borderRadius: radius.md,
-          borderWidth: 1,
-          borderColor: t.line,
-          padding: space.md,
+          marginTop: 24,
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: ed.colors.line,
         }}
+        contentContainerStyle={{ paddingVertical: 18 }}
         showsVerticalScrollIndicator
       >
-        <Text style={{ color: t.ink2, fontSize: 13, lineHeight: 19 }}>{TERMS_FULL}</Text>
+        <Text
+          style={{
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 14,
+            lineHeight: 22,
+            letterSpacing: -0.1,
+            color: ed.colors.ink2,
+          }}
+        >
+          {TERMS_FULL}
+        </Text>
       </ScrollView>
 
       <Pressable
         onPress={() => setChecked((v) => !v)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked }}
         style={{
-          marginTop: space.md,
+          marginTop: 14,
           flexDirection: 'row',
-          gap: space.md,
+          gap: 14,
           alignItems: 'flex-start',
-          padding: space.md,
-          borderRadius: radius.md,
-          borderWidth: 1,
-          borderColor: checked ? t.accent : t.line,
-          backgroundColor: checked ? t.accentSoft : 'transparent',
+          paddingVertical: 14,
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: checked ? ed.colors.brand : ed.colors.lineStrong,
         }}
       >
         <View
           style={{
-            width: 20,
-            height: 20,
-            borderRadius: 4,
-            borderWidth: 2,
-            borderColor: checked ? t.accent : t.ink4,
-            backgroundColor: checked ? t.accent : 'transparent',
+            width: 18,
+            height: 18,
+            marginTop: 4,
+            borderWidth: 1,
+            borderColor: checked ? ed.colors.brand : ed.colors.lineStrong,
+            backgroundColor: checked ? ed.colors.brand : 'transparent',
             alignItems: 'center',
             justifyContent: 'center',
-            marginTop: 1,
           }}
         >
           {checked ? (
-            <Text style={{ color: '#fff', fontSize: 12, fontFamily: font.sansBold }}>✓</Text>
+            <Text
+              style={{
+                color: ed.colors.bg,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: 12,
+                lineHeight: 14,
+              }}
+            >
+              ✓
+            </Text>
           ) : null}
         </View>
-        <Text style={{ flex: 1, color: t.ink, fontSize: 14, lineHeight: 20 }}>
-          I have read and agree to the Terms of Use. I confirm I am 18+, I
-          understand Helix is for research purposes only, and I accept that
-          Helix and its creators are not liable for any outcome of my use.
+        <Text
+          style={{
+            flex: 1,
+            fontFamily: ed.typography.bodyMd.fontFamily,
+            fontSize: 14,
+            lineHeight: 21,
+            color: ed.colors.ink1,
+          }}
+        >
+          I have read and agree to the Terms of Use. I confirm I am 18+, I understand Helix is
+          for research purposes only, and I accept that Helix and its creators are not liable for
+          any outcome of my use.
         </Text>
       </Pressable>
 
-      <Pressable
-        onPress={proceed}
-        disabled={!checked}
-        style={{
-          marginTop: space.md,
-          backgroundColor: checked ? t.ink : t.surfaceAlt,
-          padding: space.lg,
-          borderRadius: radius.md,
-          alignItems: 'center',
-        }}
-      >
-        <Text
-          style={{
-            color: checked ? t.bg : t.ink3,
-            fontSize: 16,
-            fontFamily: font.sansSemi,
-          }}
-        >
+      <View style={{ marginTop: 14 }}>
+        <EditorialButton fullWidth onPress={proceed} disabled={!checked}>
           I agree — continue
-        </Text>
-      </Pressable>
+        </EditorialButton>
+      </View>
     </View>
   );
 }

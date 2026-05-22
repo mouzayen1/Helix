@@ -39,6 +39,27 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       'Pre-bed dose stacks on the natural slow-wave-sleep GH pulse — this is why users report better sleep subjectively.',
       'Pair with CJC-1295 (no DAC) in separate vials, injected at the same time, for the GHRH + GHRP synergy.',
     ],
+    sideEffects: [
+      'Transient head-rush, flushing, or tingling shortly after injection',
+      'Increased water retention; mild puffiness in face / hands',
+      'Numbness or tingling in fingers (carpal-tunnel-like) at higher chronic doses',
+      'Mild blood-glucose elevation; insulin sensitivity can drift on long cycles',
+    ],
+    contraindications: [
+      'Active malignancy (GH/IGF-1 elevation is undesirable)',
+      'Severe insulin resistance or uncontrolled diabetes',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'Ipamorelin is a "selective growth hormone secretagogue" — it tells your pituitary to release growth hormone in clean, brief pulses without affecting other hormones like cortisol or prolactin (which is the issue with older GH-releasers). It\'s almost always paired with CJC-1295, which acts on a complementary pathway. The two together produce a stronger, more natural pulse than either alone. Mostly preclinical and limited human data, but widely used in research and athletic recovery contexts due to a clean side-effect profile.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   cjc_nodac: {
@@ -66,6 +87,27 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'sermor', reason: 'Two GHRH analogs — redundant.' },
       { peptide_id: 'tesamor', reason: 'Two GHRH analogs — redundant.' },
     ],
+    sideEffects: [
+      'Brief facial flushing or warmth right after injection',
+      'Injection-site reactions (redness, mild swelling)',
+      'Mild headache or lightheadedness',
+      'When paired with a GHRP, water retention and glucose drift apply (see paired-peptide profile)',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'CJC-1295 is a synthetic version of the natural growth hormone signal your brain sends. Like Tesamorelin, it tells your body to release its own growth hormone in pulses — not by injecting growth hormone directly. The "no DAC" version (without Drug Affinity Complex) has a short half-life of about 30 minutes, which means it produces a clean, brief pulse of growth hormone that mimics natural release. It\'s almost always paired with Ipamorelin to amplify the pulse. Research is mostly preclinical; human clinical data is limited but it\'s widely used in research and athletic recovery contexts.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen, 1 year refrigerated as lyophilized powder.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. Some research suggests CJC-1295 (no DAC) is less stable than other peptides once mixed — observe for cloudiness or discoloration.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   cjc_dac: {
@@ -88,6 +130,27 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'tesamor', reason: 'Two GHRH analogs — redundant.' },
       { peptide_id: 'mk677', reason: 'Both produce constant GH stimulation; compounding desensitization risk.' },
     ],
+    sideEffects: [
+      'Sustained water retention and mild puffiness',
+      'Numbness or tingling in hands at higher chronic doses',
+      'Mild fasting-glucose elevation; insulin sensitivity may drift',
+      'Joint achiness in some users on extended cycles',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Severe insulin resistance or uncontrolled diabetes',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'CJC-1295 with DAC (Drug Affinity Complex) is the long-acting version of CJC-1295. The DAC modification binds the peptide to albumin in your blood, extending its half-life from 30 minutes to roughly 8 days. Instead of brief pulses, it creates a sustained elevation of growth hormone signaling — what researchers call a "GH bleed." This is fundamentally different from the no-DAC version: less natural, more constant. Whether that\'s a benefit or a drawback is debated; the constant signal may reduce your body\'s natural pulse rhythm over time.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   sermor: {
@@ -109,6 +172,27 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'cjc_dac', reason: 'Same mechanism — redundant.' },
       { peptide_id: 'tesamor', reason: 'Same mechanism — redundant.' },
     ],
+    sideEffects: [
+      'Brief flushing or warmth post-injection',
+      'Injection-site reactions',
+      'Headache or lightheadedness in some users',
+      'When paired with a GHRP, water retention and glucose drift apply',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'Sermorelin is a synthetic fragment of natural GHRH (growth hormone releasing hormone) — specifically, the first 29 amino acids, which is the part that actually does the signaling. Like Tesamorelin and CJC-1295, it tells your pituitary to release its own growth hormone in normal pulses rather than injecting GH directly. Sermorelin has the shortest half-life of the GHRH peptides (around 10–20 minutes), which gives a very clean pulse that mimics youthful GH release. Has been used clinically since the 1990s for pediatric GH deficiency.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Some sources allow short-term room temperature storage for the lyophilized powder, but refrigeration is safer.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. Sermorelin degrades faster than longer-acting GHRH peptides; some researchers freeze pre-drawn syringes for stability.',
+        handling: "Keep away from light. Don't shake.",
+      },
+    },
   },
 
   tesamor: {
@@ -134,6 +218,29 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'cjc_dac', reason: 'Redundant GHRH.' },
       { peptide_id: 'sermor', reason: 'Redundant GHRH.' },
     ],
+    sideEffects: [
+      'Injection-site reactions (most common label finding)',
+      'Arthralgia (joint pain), peripheral edema, paresthesias',
+      'Elevated fasting glucose / IGF-1; periodic monitoring is required per label',
+      'Hypersensitivity reactions including rash and pruritus',
+    ],
+    contraindications: [
+      'Active malignancy (FDA label contraindication)',
+      'Pregnancy (label category)',
+      'Hypersensitivity to tesamorelin or mannitol',
+    ],
+    overview: {
+      whatItDoes:
+        "Tesamorelin is a synthetic version of GHRH (growth hormone releasing hormone), the natural signal your brain sends to release growth hormone. Instead of injecting growth hormone directly, Tesamorelin tells your body to make its own — in normal pulses, like a healthy younger person produces. It's the only GHRH peptide that's FDA-approved (under the brand Egrifta), specifically for reducing visceral fat in HIV patients. Off-label research focuses on its effects on body composition, sleep quality, and cognitive function. Strong human clinical data for visceral fat loss (5–15% reduction over 6 months in studies).",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Do not freeze the lyophilized powder.',
+        afterMixing:
+          'Refrigerate. Use within 7 days with sterile water, up to 28 days with bacteriostatic water (per FDA labeling).',
+        handling:
+          "Keep away from light. Don't shake — swirl gently. The solution should be clear after mixing.",
+      },
+    },
   },
 
   hexar: {
@@ -156,6 +263,27 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'ghrp6', reason: 'Multiple GHRPs — desensitization risk.' },
       { peptide_id: 'mk677', reason: 'Compounding ghrelin-receptor stimulation.' },
     ],
+    sideEffects: [
+      'Marked prolactin and cortisol elevation (more than other GHRPs)',
+      'Fast receptor desensitization on continuous dosing',
+      'Strong head-rush and flushing post-injection',
+      'Water retention; mild glucose drift',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Hyperprolactinemia or prolactin-sensitive conditions',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'Hexarelin is one of the more powerful synthetic GH-releasers — it produces a stronger pulse of growth hormone than Ipamorelin or GHRP-6, but with more side effects and a tendency to cause "tachyphylaxis" (your body becomes desensitized over time). For this reason it\'s typically used in short cycles rather than long-term protocols. There\'s also research interest in its cardioprotective effects (it may help heart tissue recover after damage), independent of its GH-releasing function. Mostly preclinical with limited human data.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   ghrp2: {
@@ -178,6 +306,26 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'hexar', reason: 'Multiple GHRPs — desensitization.' },
       { peptide_id: 'mk677', reason: 'Compounding ghrelin agonism.' },
     ],
+    sideEffects: [
+      'Modest prolactin and cortisol elevation',
+      'Hunger spike (less than GHRP-6 but noticeable)',
+      'Flushing, mild head-rush after injection',
+      'Water retention on chronic dosing',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        "GHRP-2 is a synthetic ghrelin mimetic similar to GHRP-6 — it tells your pituitary to release growth hormone and stimulates appetite, though typically with less hunger and less cortisol elevation than GHRP-6. Among the GHRP family, GHRP-2 produces the strongest GH pulse but isn't as \"clean\" as Ipamorelin, which selectively triggers GH without affecting other hormones. Often paired with a GHRH peptide like CJC-1295 (no DAC) for synergistic effect. Mostly preclinical research with limited human data.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   ghrp6: {
@@ -200,6 +348,27 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'hexar', reason: 'Multiple GHRPs — desensitization.' },
       { peptide_id: 'mk677', reason: 'Compounding ghrelin agonism.' },
     ],
+    sideEffects: [
+      'Pronounced hunger / appetite spike (the defining side effect)',
+      'Flushing, head-rush after injection',
+      'Mild prolactin and cortisol elevation',
+      'Water retention; mild glucose drift',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+      'Eating-disorder history (appetite signal can be disruptive)',
+    ],
+    overview: {
+      whatItDoes:
+        "GHRP-6 was one of the first synthetic ghrelin mimetics — it triggers growth hormone release while also dramatically increasing hunger (ghrelin is the \"hunger hormone\"). Effective at boosting GH but the appetite stimulation is the most prominent feature for most users, which is why it's largely been replaced by selective options like Ipamorelin in newer protocols. Still used in research contexts where increased appetite is desired (e.g., recovery from illness, underweight individuals). Some preclinical evidence for tissue-protective effects beyond GH release.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve.',
+      },
+    },
   },
 
   mk677: {
@@ -221,5 +390,30 @@ export const GROWTH_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'hexar', reason: 'Compounding ghrelin-receptor stimulation.' },
       { peptide_id: 'cjc_dac', reason: 'Both produce constant GH elevation — over-stimulation.' },
     ],
+    sideEffects: [
+      'Sustained appetite increase, weight gain partly from food intake',
+      'Notable water retention; puffy face, hands, ankles',
+      'Fatigue or lethargy in the morning at higher doses',
+      'Fasting glucose elevation; insulin sensitivity drift on long cycles',
+      'Vivid dreams and altered sleep architecture',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Congestive heart failure or fluid-overload conditions',
+      'Pre-diabetes / poorly controlled diabetes',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        "MK-677 (also called Ibutamoren) isn't a peptide — it's a small molecule that mimics ghrelin, the hormone that signals hunger and triggers growth hormone release. Unlike injectable GHRHs, it's orally active and lasts about 24 hours per dose. It increases growth hormone and IGF-1 levels meaningfully — roughly comparable to what younger people produce naturally. It's the most convenient way to access GH-releasing effects (no injections), but it's also more aggressive: the constant elevation of IGF-1 raises long-term safety questions.",
+      storage: {
+        beforeMixing:
+          'Most often supplied as capsules or liquid — store at room temperature in a cool, dry place. Away from light and humidity.',
+        afterMixing:
+          'Liquid preparations: follow product-specific storage instructions; once opened, most are stable several months at room temperature.',
+        handling:
+          'If supplied as a powder: store sealed in a cool dry place; some users refrigerate.',
+      },
+    },
   },
 };

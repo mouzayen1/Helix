@@ -1,49 +1,48 @@
-// Reconstitute — spec v2.0 §10 + extras.
-// Creates real vial row. Supports peptideId query param, beginner-mode walkthrough,
-// typed number inputs, auto-fill from peptide.reconstitution, co-reconstitute option.
+// Reconstitute — editorial rebuild. Same data flow as the v1.2
+// implementation (parseRecon, calc, createVial, co-reconstitute partner)
+// — only the visual layer is re-skinned. Beginner walkthrough + peptide
+// picker preserved; result block uses StatPair instead of an inverted
+// black card; the syringe SVG is retinted to the editorial palette.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Line, Rect } from 'react-native-svg';
-import { IconChevronRight, IconClose } from '../components/Icons';
-import { DosingDisclaimer, HCodeAvatar } from '../components/Primitives';
-import { createVial } from '../lib/db';
+import { EditorialButton } from '../components/editorial/EditorialButton';
+import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../components/editorial/HairlineRow';
+import { StatPair } from '../components/editorial/StatPair';
+import { DosingDisclaimer } from '../components/Primitives';
+import { SyringeDiagram } from '../components/SyringeDiagram';
+import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
+import { useEditorialTheme } from '../lib/design/theme';
+import { useDoseUnitPref } from '../lib/profile-context';
+import {
+  formatDose,
+  formatDoseLabel,
+  parseDoseInput,
+  resolveDoseUnit,
+} from '../lib/dose-format';
+import { attachVialToCycle, createVial, getActiveVial, type Cycle } from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
-import { findPeptide, PEPTIDES } from '../lib/peptides';
-import { useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
+import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../lib/peptides';
 
-const STRENGTH_PRESETS = [2, 5, 10, 15];
+// Default vial-strength chip row. Peptides with `commonVialSizes` in the
+// catalog override this — GHK-Cu shows 10/50/100/200, NAD+ shows
+// 100/250/500/1000, etc.
+const STRENGTH_PRESETS_DEFAULT = [2, 5, 10, 15];
 
-// Parse strings like "5 mg + 2 mL BAC = 2.5 mg/mL · 10 units = 250 mcg" or
-// "5 mg + 1 mL BAC = 5 mg/mL · 32 units = 1.6 mg" into
-// { strength_mg, bac_water_ml, target_dose_mcg }. Both mg and mcg are
-// accepted for the example dose; mg is converted to mcg internally so the
-// reconstitute UI's "Draw Xu" callout always matches the monograph.
-//
-// fallbackMcg is the peptide's authoritative defaultDoseMcg (preferred over
-// the legacy 250 mcg hardcoded fallback when the example dose can't be
-// parsed — e.g. mL-based intranasal recipes or pen-only strings).
 function parseRecon(recon: string | undefined, fallbackMcg = 250) {
   if (!recon) return null;
   const strengthMatch = recon.match(/(\d+(?:\.\d+)?)\s*mg\s*\+/);
   const bacMatch = recon.match(/\+\s*(\d+(?:\.\d+)?)\s*mL/);
   if (!strengthMatch || !bacMatch) return null;
-  // Find the *last* "= N mg" or "= N mcg" — for strings that contain both
-  // "= 5 mg/mL" (concentration) and "= 1.6 mg" (example dose), we want the
-  // example, which always comes after the concentration.
-  const doseMatches = [
-    ...recon.matchAll(/=\s*(\d+(?:\.\d+)?)\s*(mcg|mg)\b/gi),
-  ];
+  const doseMatches = [...recon.matchAll(/=\s*(\d+(?:\.\d+)?)\s*(mcg|mg)\b/gi)];
   let target_dose_mcg = fallbackMcg;
   for (let i = doseMatches.length - 1; i >= 0; i--) {
     const m = doseMatches[i];
-    // Skip the "= N mg/mL" concentration callout — only the example dose.
-    if (recon.slice(m.index ?? 0, (m.index ?? 0) + m[0].length + 3).includes('mg/mL')) {
-      continue;
-    }
+    if (recon.slice(m.index ?? 0, (m.index ?? 0) + m[0].length + 3).includes('mg/mL')) continue;
     const n = parseFloat(m[1]);
     target_dose_mcg = m[2].toLowerCase() === 'mg' ? n * 1000 : n;
     break;
@@ -56,22 +55,60 @@ function parseRecon(recon: string | undefined, fallbackMcg = 250) {
 }
 
 export default function ReconstituteModal() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { peptideId: initialId } = useLocalSearchParams<{ peptideId?: string }>();
+  const { pref: doseUnitPref } = useDoseUnitPref();
+  // cycleId is set when reconstitute is deep-linked from a cycle detail
+  // page (alongside peptideId). The new vial auto-attaches to that cycle
+  // so the user doesn't have to manually + ATTACH it afterward.
+  const { peptideId: initialId, cycleId } = useLocalSearchParams<{
+    peptideId?: string;
+    cycleId?: string;
+  }>();
 
+  // Reconstitution is an injection-only workflow (mg + BAC water →
+  // mg/mL concentration math). Non-injectable peptides — Selank
+  // intranasal, MK-677 oral, GHK-Cu when used topically — ship in
+  // capsules / pre-made nasal sprays / droppers and don't fit this
+  // screen. Filter the picker to injectable peptides only and
+  // silently redirect deep-links that arrive with a non-injectable
+  // peptideId.
+  const injectablePeptides = useMemo(
+    () => PEPTIDES.filter((p) => isInjectionRoute(derivePrimaryRoute(p.route))),
+    [],
+  );
+  const initialInjectable =
+    initialId && injectablePeptides.some((p) => p.id === initialId)
+      ? initialId
+      : injectablePeptides[0]?.id ?? PEPTIDES[0].id;
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
-  const [peptideId, setPeptideId] = useState<string>(initialId || PEPTIDES[0].id);
+  const [peptideId, setPeptideId] = useState<string>(initialInjectable);
+  const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
+  const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
   const [strengthMg, setStrengthMg] = useState(5);
   const [strengthText, setStrengthText] = useState('5');
   const [bacMl, setBacMl] = useState(2);
   const [bacText, setBacText] = useState('2');
   const [targetDoseMcg, setTargetDoseMcg] = useState(250);
   const [targetDoseText, setTargetDoseText] = useState('250');
+  // Reconstitute is a "passive" context — no chip, but the displayed
+  // unit follows the global pref. Recompute on every relevant change.
+  const targetDoseUnit = resolveDoseUnit(targetDoseMcg, doseUnitPref);
+  useEffect(() => {
+    setTargetDoseText(formatDose(targetDoseMcg, targetDoseUnit).value);
+  }, [targetDoseMcg, targetDoseUnit]);
   const [beginnerMode, setBeginnerMode] = useState(false);
   const [coReconstitutePartner, setCoReconstitutePartner] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // v1.2 reverse-calc mode. Forward computes the dose volume from chosen
+  // BAC. Reverse flips: pick a clean target draw (e.g. 20u) and the app
+  // solves for the BAC needed to make that draw produce the target dose.
+  //   forward:  units = (dose_mcg / 1000) * BAC / strength * 100
+  //   reverse:  BAC   = units * strength * 10 / dose_mcg
+  const [calcMode, setCalcMode] = useState<'forward' | 'reverse'>('forward');
+  const [targetUnits, setTargetUnits] = useState(20);
+  const [targetUnitsText, setTargetUnitsText] = useState('20');
 
   const peptide = findPeptide(peptideId)!;
   const extras = getPeptideExtras(peptideId);
@@ -80,10 +117,6 @@ export default function ReconstituteModal() {
     [extras]
   );
 
-  // Auto-fill numeric fields from the selected peptide's suggested
-  // reconstitution. Pass defaultDoseMcg so peptides whose example dose can't
-  // be parsed (intranasal mL recipes, pen-only strings) still seed a
-  // sensible target value.
   useEffect(() => {
     const parsed = parseRecon(peptide.reconstitution, peptide.defaultDoseMcg);
     if (parsed) {
@@ -94,9 +127,62 @@ export default function ReconstituteModal() {
       setTargetDoseMcg(parsed.target_dose_mcg);
       setTargetDoseText(String(parsed.target_dose_mcg));
     }
-    // Clear any prior co-reconstitute partner when peptide changes
     setCoReconstitutePartner(null);
   }, [peptide.defaultDoseMcg, peptide.id, peptide.reconstitution]);
+
+  // Pull active-cycle peptide list once on mount; figure out which of those
+  // peptides still need a vial. The picker uses this to pin "needed" pids
+  // at the top with a NEEDED pill, and to default-select the first needy
+  // peptide if no `?peptideId=` was passed.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const byPeptide = await getActiveCyclesByPeptide();
+      if (cancelled) return;
+      setActiveCycleByPeptide(byPeptide);
+      const needs = new Set<string>();
+      for (const pid of byPeptide.keys()) {
+        const v = await getActiveVial(pid);
+        if (!v || v.remaining_mg <= 0) needs.add(pid);
+      }
+      if (cancelled) return;
+      setNeedyPeptides(needs);
+      if (!initialId && needs.size > 0) {
+        const first = Array.from(needs)[0];
+        setPeptideId(first);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sorted peptide list for the picker — needed (no vial) first, then
+  // needed (with vial), then everything else. Restricted to
+  // injectable peptides (see comment above injectablePeptides).
+  const sortedPeptides = useMemo(() => {
+    const bucket = (id: string) => {
+      if (needyPeptides.has(id)) return 0;
+      if (activeCycleByPeptide.has(id)) return 1;
+      return 2;
+    };
+    return [...injectablePeptides].sort((a, b) => bucket(a.id) - bucket(b.id));
+  }, [activeCycleByPeptide, injectablePeptides, needyPeptides]);
+
+  // Reverse mode: BAC water is computed from (target dose, target units,
+  // vial strength) and synced into bacMl so save() / result block / soft
+  // warn tier all read the same value. Switching back to forward leaves
+  // the user's last computed value in place.
+  useEffect(() => {
+    if (calcMode !== 'reverse') return;
+    if (targetUnits <= 0 || targetDoseMcg <= 0 || strengthMg <= 0) return;
+    const computed = (targetUnits * strengthMg * 10) / targetDoseMcg;
+    if (!isFinite(computed) || computed <= 0) return;
+    const rounded = Math.round(computed * 100) / 100;
+    setBacMl(rounded);
+    setBacText(String(rounded));
+  }, [calcMode, targetUnits, targetDoseMcg, strengthMg]);
 
   const calc = useMemo(() => {
     const concMgPerMl = strengthMg / bacMl;
@@ -110,8 +196,6 @@ export default function ReconstituteModal() {
       totalDoses: isFinite(totalDoses) ? totalDoses : 0,
     };
   }, [strengthMg, bacMl, targetDoseMcg]);
-
-  const fillPct = Math.max(0.02, Math.min(1, calc.unitsPerDose / 100));
 
   const commitNum = (
     text: string,
@@ -135,12 +219,18 @@ export default function ReconstituteModal() {
     if (saving) return;
     setSaving(true);
     try {
-      await createVial({
+      const newVialId = await createVial({
         peptide_id: peptideId,
         strength_mg: strengthMg,
         bac_water_ml: bacMl,
       });
-      // Create a second vial row for the co-reconstitute partner (shared BAC).
+      // Auto-attach to the originating cycle. Guarded on the peptide still
+      // matching the one the cycle deep-linked for — if the user switched
+      // peptides in the picker, the cycle context no longer applies and a
+      // wrong attachment would be worse than none (manual + ATTACH remains).
+      if (cycleId && peptideId === initialId) {
+        await attachVialToCycle(newVialId, cycleId);
+      }
       if (coReconstitutePartner) {
         const partner = findPeptide(coReconstitutePartner);
         if (partner) {
@@ -163,79 +253,114 @@ export default function ReconstituteModal() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
+      {/* Header bar — close ×, mono uppercase title, no right action. */}
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingTop: insets.top + space.md,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <IconClose size={16} color={t.ink3} />
+        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button">
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ×
+          </Text>
         </Pressable>
-        <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>Reconstitute</Text>
+        <Text
+          style={{
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          Reconstitute
+        </Text>
         <View style={{ width: 16 }} />
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={{ paddingHorizontal: space.xl }}>
+        <View style={{ paddingHorizontal: 24 }}>
+          <EditorialHeadline size="title1">{`Mix a *new* vial.`}</EditorialHeadline>
           <Text
             style={{
-              fontSize: 26,
-              fontFamily: font.sansBold,
-              color: t.ink,
-              letterSpacing: -0.6,
-              lineHeight: 30,
+              marginTop: 8,
+              fontFamily: ed.typography.bodySm.fontFamily,
+              fontSize: ed.typography.bodySm.fontSize,
+              lineHeight: ed.typography.bodySm.lineHeight,
+              color: ed.colors.ink3,
             }}
           >
-            Mix a new vial.
-          </Text>
-          <Text style={{ fontSize: 13, color: t.ink3, marginTop: 4 }}>
             We will tell you exactly how much BAC water to draw.
           </Text>
 
-          {/* Beginner mode toggle */}
+          {/* Beginner mode toggle — hairline-framed, no fill. */}
           <View
             style={{
-              marginTop: space.md,
+              marginTop: 20,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              borderRadius: radius.md,
-              backgroundColor: t.accentSoft,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: ed.colors.line,
+              paddingVertical: 14,
             }}
           >
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, color: t.accentInk, fontFamily: font.sansSemi }}>
+              <Text
+                style={{
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
                 Beginner mode
               </Text>
-              <Text style={{ fontSize: 11, color: t.ink2, marginTop: 2 }}>
-                Step-by-step walkthrough for first reconstitution
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontFamily: ed.typography.bodySm.fontFamily,
+                  fontSize: ed.typography.bodySm.fontSize,
+                  color: ed.colors.ink2,
+                }}
+              >
+                Step-by-step walkthrough.
               </Text>
             </View>
             <Switch
               value={beginnerMode}
               onValueChange={setBeginnerMode}
-              trackColor={{ false: t.surfaceAlt, true: t.accent }}
+              trackColor={{ false: ed.colors.lineStrong, true: ed.colors.brand }}
+              thumbColor={ed.colors.bg}
             />
           </View>
         </View>
 
         {beginnerMode ? (
-          <View style={{ paddingHorizontal: space.xl, marginTop: space.md, gap: 8 }}>
+          <View style={{ paddingHorizontal: 24, marginTop: 20, gap: 14 }}>
             <WalkthroughStep
               n={1}
               title="What is reconstitution?"
-              body="Most peptides ship as a dry powder. 'Reconstitution' just means adding sterile bacteriostatic (BAC) water to dissolve the powder into a liquid you can draw into a syringe."
+              body="Most peptides ship as a dry powder. Reconstitution just means adding sterile bacteriostatic (BAC) water to dissolve the powder into a liquid you can draw into a syringe."
             />
             <WalkthroughStep
               n={2}
@@ -248,103 +373,164 @@ export default function ReconstituteModal() {
             />
             <WalkthroughStep
               n={3}
-              title="What are 'units'?"
-              body="Insulin syringes are marked in units. A 1 mL (100-unit) syringe = 100 'units' total. 10 units = 0.10 mL. Helix shows the units-per-dose below so you know exactly how far to pull the plunger."
+              title="What are units?"
+              body="Insulin syringes are marked in units. A 1 mL (100-unit) syringe = 100 units total. 10 units = 0.10 mL. Helix shows the units-per-dose below."
             />
           </View>
         ) : null}
 
-        {/* Peptide picker */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.lg }}>
+        {/* Peptide selector */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Peptide</EyebrowLabel>
           <Pressable
-            onPress={() => setShowPeptidePicker(!showPeptidePicker)}
+            onPress={() => setShowPeptidePicker((v) => !v)}
+            accessibilityRole="button"
             style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              borderWidth: 1,
-              borderColor: t.line,
               flexDirection: 'row',
               alignItems: 'center',
+              paddingVertical: 18,
               gap: 12,
             }}
           >
-            <HCodeAvatar id={peptide.name.replace(/[^A-Za-z]/g, '').slice(0, 3)} color={peptide.color} />
             <View style={{ flex: 1 }}>
               <Text
                 style={{
-                  fontSize: 11,
-                  color: t.ink3,
-                  letterSpacing: 0.3,
-                  fontFamily: font.sansSemi,
-                  textTransform: 'uppercase',
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 24,
+                  color: ed.colors.ink1,
+                  letterSpacing: -0.4,
                 }}
               >
-                Peptide
-              </Text>
-              <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink, marginTop: 2 }}>
                 {peptide.name}
               </Text>
+              <Text
+                style={{
+                  marginTop: 2,
+                  fontFamily: ed.typography.dataMd.fontFamily,
+                  fontSize: ed.typography.dataMd.fontSize,
+                  color: ed.colors.ink3,
+                }}
+              >
+                {peptide.class}
+              </Text>
             </View>
-            <IconChevronRight size={14} color={t.ink4} />
-          </Pressable>
-          {showPeptidePicker ? (
-            <View
+            <Text
               style={{
-                marginTop: 4,
-                height: 340,
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 22,
+                color: ed.colors.ink3,
               }}
             >
+              {showPeptidePicker ? '▴' : '▾'}
+            </Text>
+          </Pressable>
+          <HairlineRow strong />
+          {showPeptidePicker ? (
+            <View style={{ height: 320, marginTop: 4 }}>
               <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-                {PEPTIDES.map((p) => (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => {
-                      setPeptideId(p.id);
-                      setShowPeptidePicker(false);
-                    }}
-                    style={{
-                      padding: space.md,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      borderBottomWidth: 1,
-                      borderBottomColor: t.line,
-                    }}
-                  >
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: p.color }} />
-                    <Text style={{ flex: 1, color: t.ink, fontSize: 14, fontFamily: font.sansMed }}>
-                      {p.name}
-                    </Text>
-                    <Text style={{ color: t.ink3, fontSize: 11 }}>{p.class.split('/')[0].trim()}</Text>
-                  </Pressable>
-                ))}
+                {sortedPeptides.map((p, idx) => {
+                  const needed = needyPeptides.has(p.id);
+                  const inActiveCycle = activeCycleByPeptide.has(p.id);
+                  return (
+                    <View key={p.id}>
+                      <Pressable
+                        onPress={() => {
+                          setPeptideId(p.id);
+                          setShowPeptidePicker(false);
+                        }}
+                        style={{
+                          paddingVertical: 14,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 12,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: p.color,
+                          }}
+                        />
+                        <Text
+                          style={{
+                            flex: 1,
+                            fontFamily: ed.fraunces('Fraunces_400Regular'),
+                            fontSize: 17,
+                            color: ed.colors.ink1,
+                          }}
+                        >
+                          {p.name}
+                        </Text>
+                        {needed ? (
+                          <Text
+                            style={{
+                              fontFamily: ed.typography.labelSm.fontFamily,
+                              fontSize: ed.typography.labelSm.fontSize,
+                              letterSpacing: ed.typography.labelSm.letterSpacing,
+                              color: ed.colors.brand,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            ★ Needed
+                          </Text>
+                        ) : inActiveCycle ? (
+                          <Text
+                            style={{
+                              fontFamily: ed.typography.labelSm.fontFamily,
+                              fontSize: ed.typography.labelSm.fontSize,
+                              letterSpacing: ed.typography.labelSm.letterSpacing,
+                              color: ed.colors.ink3,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            In cycle
+                          </Text>
+                        ) : (
+                          <Text
+                            style={{
+                              fontFamily: ed.typography.labelSm.fontFamily,
+                              fontSize: ed.typography.labelSm.fontSize,
+                              letterSpacing: ed.typography.labelSm.letterSpacing,
+                              color: ed.colors.ink3,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {p.class.split('/')[0].trim()}
+                          </Text>
+                        )}
+                      </Pressable>
+                      {idx < sortedPeptides.length - 1 ? <HairlineRow /> : null}
+                    </View>
+                  );
+                })}
               </ScrollView>
             </View>
           ) : null}
+          {/* Research range — passive dose-range reminder pulled from
+              the catalog. Same string Log Dose surfaces. Helps users
+              think about target dose before they pick a vial strength
+              and BAC volume. */}
+          {peptide.dose ? (
+            <Text
+              style={{
+                marginTop: 12,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              Research range: {peptide.dose}
+            </Text>
+          ) : null}
         </View>
 
-        {/* Strength presets */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <Text
-            style={{
-              fontSize: 11,
-              color: t.ink3,
-              letterSpacing: 0.3,
-              fontFamily: font.sansSemi,
-              textTransform: 'uppercase',
-              marginBottom: 8,
-            }}
-          >
-            Vial strength
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {STRENGTH_PRESETS.map((s) => {
+        {/* Vial strength presets */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Vial strength</EyebrowLabel>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
+            {(peptide.commonVialSizes ?? STRENGTH_PRESETS_DEFAULT).map((s) => {
               const active = s === strengthMg;
               return (
                 <Pressable
@@ -354,23 +540,34 @@ export default function ReconstituteModal() {
                     setStrengthText(String(s));
                   }}
                   style={{
-                    flex: 1,
+                    flexBasis: '22%',
+                    flexGrow: 1,
                     paddingVertical: 14,
-                    borderRadius: radius.md,
-                    backgroundColor: active ? t.ink : t.surface,
-                    borderWidth: 1,
-                    borderColor: active ? t.ink : t.line,
                     alignItems: 'center',
+                    backgroundColor: active ? ed.colors.ink1 : 'transparent',
+                    borderWidth: 1,
+                    borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
                   }}
                 >
                   <Text
                     style={{
-                      fontSize: 16,
-                      fontFamily: font.monoSemi,
-                      color: active ? t.bg : t.ink,
+                      fontFamily: ed.fraunces(active ? 'Fraunces_400Regular' : 'Fraunces_300Light'),
+                      fontSize: 22,
+                      color: active ? ed.colors.bg : ed.colors.ink1,
+                      letterSpacing: -0.3,
                     }}
                   >
-                    {s} mg
+                    {s}
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: active ? ed.colors.bg : ed.colors.ink3,
+                      }}
+                    >
+                      {' MG'}
+                    </Text>
                   </Text>
                 </Pressable>
               );
@@ -378,8 +575,64 @@ export default function ReconstituteModal() {
           </View>
         </View>
 
-        {/* Typed-number inputs */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md, gap: 10 }}>
+        {/* Calc-mode toggle. Forward = "I'm putting X mg in Y mL, what
+            dose do I get?" Reverse = "I want a Z mcg dose at N units,
+            how much BAC do I add?" Reverse is a research-grade feature —
+            only PeptideFox had it before now. */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Calculator</EyebrowLabel>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 14 }}>
+            {(['forward', 'reverse'] as const).map((m) => {
+              const on = calcMode === m;
+              const label = m === 'forward' ? 'Calc concentration' : 'Find ideal BAC';
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => setCalcMode(m)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={label}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    backgroundColor: on ? ed.colors.ink1 : 'transparent',
+                    borderWidth: 1,
+                    borderColor: on ? ed.colors.ink1 : ed.colors.lineStrong,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: on ? ed.colors.bg : ed.colors.ink2,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {calcMode === 'reverse' ? (
+            <Text
+              style={{
+                marginTop: 10,
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 13,
+                lineHeight: 19,
+                color: ed.colors.ink3,
+              }}
+            >
+              Pick the dose you want and how many units to draw — the app solves for the BAC water needed.
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Typed numeric inputs */}
+        <View style={{ marginTop: 24, paddingHorizontal: 24 }}>
           <TypedField
             label="Vial strength"
             unit="mg"
@@ -399,6 +652,7 @@ export default function ReconstituteModal() {
               setStrengthText(String(v));
             }}
           />
+          <HairlineRow />
           <TypedField
             label="BAC water"
             unit="mL"
@@ -415,329 +669,280 @@ export default function ReconstituteModal() {
               setBacMl(v);
               setBacText(String(v));
             }}
+            readOnly={calcMode === 'reverse'}
+            readOnlyHint={
+              calcMode === 'reverse' ? 'Solved from your target dose and target draw.' : undefined
+            }
           />
+          {/* Soft capacity hint — vial physical capacity isn't knowable
+              from peptide data alone. Silent ≤3 mL (most common). */}
+          {bacMl > 5 ? (
+            <Text
+              style={{
+                marginTop: 6,
+                marginBottom: 8,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.stateWarn,
+                textTransform: 'uppercase',
+              }}
+            >
+              Most peptide vials hold 2–5 mL. Verify yours fits this volume.
+            </Text>
+          ) : bacMl > 3 ? (
+            <Text
+              style={{
+                marginTop: 6,
+                marginBottom: 8,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
+              }}
+            >
+              Most vials hold 2–5 mL — verify yours fits.
+            </Text>
+          ) : null}
+          <HairlineRow />
           <TypedField
             label="Target dose"
-            unit="mcg"
+            unit={targetDoseUnit}
             value={targetDoseText}
             onChangeText={setTargetDoseText}
-            onCommit={() =>
-              commitNum(targetDoseText, setTargetDoseMcg, setTargetDoseText, 1, 500000, targetDoseMcg)
-            }
-            onMinus={() => {
-              const v = Math.max(1, targetDoseMcg - 25);
-              setTargetDoseMcg(v);
-              setTargetDoseText(String(v));
+            onCommit={() => {
+              // Parse in the displayed unit so the user can type "1" in mg
+              // mode and get 1000 mcg back. Fall back to current value on
+              // out-of-range or bad input.
+              const parsed = parseDoseInput(targetDoseText, targetDoseUnit);
+              if (parsed === null || parsed < 1 || parsed > 500000) {
+                setTargetDoseText(formatDose(targetDoseMcg, targetDoseUnit).value);
+              } else {
+                setTargetDoseMcg(parsed);
+              }
             }}
-            onPlus={() => {
-              const v = Math.min(500000, targetDoseMcg + 25);
-              setTargetDoseMcg(v);
-              setTargetDoseText(String(v));
-            }}
+            onMinus={() => setTargetDoseMcg(Math.max(1, targetDoseMcg - 25))}
+            onPlus={() => setTargetDoseMcg(Math.min(500000, targetDoseMcg + 25))}
           />
+          {calcMode === 'reverse' ? (
+            <>
+              <HairlineRow />
+              <TypedField
+                label="Target draw"
+                unit="units"
+                value={targetUnitsText}
+                onChangeText={setTargetUnitsText}
+                onCommit={() =>
+                  commitNum(targetUnitsText, setTargetUnits, setTargetUnitsText, 1, 100, targetUnits)
+                }
+                onMinus={() => {
+                  const v = Math.max(1, targetUnits - 5);
+                  setTargetUnits(v);
+                  setTargetUnitsText(String(v));
+                }}
+                onPlus={() => {
+                  const v = Math.min(100, targetUnits + 5);
+                  setTargetUnits(v);
+                  setTargetUnitsText(String(v));
+                }}
+              />
+            </>
+          ) : null}
         </View>
 
-        {/* Result card */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.xl }}>
-          <View
-            style={{
-              backgroundColor: t.ink,
-              borderRadius: radius.lg,
-              padding: space.lg,
-              overflow: 'hidden',
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 11,
-                letterSpacing: 1.1,
-                color: t.bg,
-                opacity: 0.6,
-                fontFamily: font.sansSemi,
-                textTransform: 'uppercase',
-              }}
-            >
-              Concentration
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 6 }}>
-              <Text
-                style={{
-                  fontSize: 42,
-                  fontFamily: font.monoSemi,
-                  color: t.bg,
-                  letterSpacing: -1,
-                  lineHeight: 46,
-                }}
-              >
-                {calc.concMgPerMl.toFixed(2)}
-              </Text>
-              <Text
-                style={{
-                  fontSize: 16,
-                  color: t.bg,
-                  opacity: 0.7,
-                  marginLeft: 6,
-                  fontFamily: font.sansMed,
-                }}
-              >
-                mg / mL
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', marginTop: space.lg, gap: space.lg }}>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: t.bg,
-                    opacity: 0.5,
-                    fontFamily: font.sansSemi,
-                    letterSpacing: 0.9,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Per {targetDoseMcg} mcg
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 4 }}>
-                  <Text
-                    style={{
-                      fontSize: 24,
-                      fontFamily: font.monoSemi,
-                      color: t.bg,
-                      letterSpacing: -0.5,
-                    }}
-                  >
-                    {calc.unitsPerDose.toFixed(1)}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: t.bg,
-                      opacity: 0.7,
-                      marginLeft: 4,
-                    }}
-                  >
-                    units
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    fontSize: 11,
-                    color: t.bg,
-                    opacity: 0.6,
-                    marginTop: 2,
-                    fontFamily: font.mono,
-                  }}
-                >
-                  = {calc.volMlPerDose.toFixed(3)} mL
-                </Text>
-              </View>
-              <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.14)' }} />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontSize: 10,
-                    color: t.bg,
-                    opacity: 0.5,
-                    fontFamily: font.sansSemi,
-                    letterSpacing: 0.9,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Total doses
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 24,
-                    fontFamily: font.monoSemi,
-                    color: t.bg,
-                    marginTop: 4,
-                  }}
-                >
-                  {Math.floor(calc.totalDoses)}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 11,
-                    color: t.bg,
-                    opacity: 0.6,
-                    marginTop: 2,
-                  }}
-                >
-                  {formatDuration(calc.totalDoses, peptide.freq)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Syringe */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+        {/* Result block — StatPair triple under a strong hairline. */}
+        <View style={{ marginTop: 32, marginHorizontal: 24 }}>
+          <HairlineRow strong />
+          <StatPair
+            cells={[
+              {
+                value: calc.concMgPerMl.toFixed(2),
+                unit: 'mg/mL',
+                label: 'Concentration',
+                color: 'brand',
+              },
+              {
+                value: calc.unitsPerDose.toFixed(1),
+                unit: 'u',
+                label: `Per ${formatDoseLabel(targetDoseMcg, doseUnitPref)}`,
+              },
+              {
+                value: Math.floor(calc.totalDoses),
+                label: 'Doses',
+              },
+            ]}
+          />
+          <HairlineRow strong />
           <Text
             style={{
-              fontSize: 11,
-              fontFamily: font.sansSemi,
-              letterSpacing: 1.1,
-              color: t.ink3,
-              marginBottom: 10,
-              textTransform: 'uppercase',
+              marginTop: 10,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
             }}
           >
-            How much to draw
+            = {calc.volMlPerDose.toFixed(3)} mL per dose · {formatDuration(calc.totalDoses, peptide.freq)}
           </Text>
-          <View
-            style={{
-              backgroundColor: t.accentSoft,
-              borderRadius: radius.md,
-              paddingVertical: space.md,
-              paddingHorizontal: space.lg,
-              borderLeftWidth: 3,
-              borderLeftColor: t.accent,
-              marginBottom: 10,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 11,
-                color: t.accentInk,
-                fontFamily: font.sansSemi,
-                letterSpacing: 0.9,
-                textTransform: 'uppercase',
-              }}
-            >
-              On U100 insulin syringe
-            </Text>
-            <Text
-              style={{
-                fontSize: 28,
-                fontFamily: font.monoSemi,
-                color: t.ink,
-                marginTop: 4,
-                letterSpacing: -0.5,
-              }}
-            >
-              {calc.unitsPerDose.toFixed(1)}
-              <Text style={{ fontSize: 14, color: t.ink3, fontFamily: font.sansMed }}>
-                {' units'}
+        </View>
+
+        {/* Draw callout */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+          <EyebrowLabel withRule>Draw</EyebrowLabel>
+          <View style={{ paddingTop: 18 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_300Light'),
+                  fontSize: 64,
+                  lineHeight: 64,
+                  letterSpacing: -2,
+                  color: ed.colors.ink1,
+                }}
+              >
+                {calc.unitsPerDose.toFixed(1)}
               </Text>
-            </Text>
+              <Text
+                style={{
+                  marginLeft: 8,
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: ed.typography.label.fontSize,
+                  letterSpacing: ed.typography.label.letterSpacing,
+                  color: ed.colors.ink2,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Units · U100
+              </Text>
+            </View>
             <Text
               style={{
-                fontSize: 11,
-                color: t.ink3,
-                fontFamily: font.mono,
-                marginTop: 2,
+                marginTop: 6,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
               }}
             >
-              = {calc.volMlPerDose.toFixed(3)} mL · {targetDoseMcg} mcg per dose
+              = {calc.volMlPerDose.toFixed(3)} mL · {formatDoseLabel(targetDoseMcg, doseUnitPref)} per dose
             </Text>
           </View>
-          <View
-            style={{
-              backgroundColor: t.surface,
-              borderRadius: radius.md,
-              paddingVertical: space.lg,
-              paddingHorizontal: space.md,
-              borderWidth: 1,
-              borderColor: t.line,
-            }}
-          >
-            <Svg viewBox="0 0 320 60" width="100%" height={56}>
-              <Rect x={8} y={18} width={240} height={24} rx={2} fill="none" stroke={t.ink3} strokeWidth={1.5} />
-              {Array.from({ length: 11 }).map((_, i) => (
-                <Line
-                  key={i}
-                  x1={8 + i * 24}
-                  y1={14}
-                  x2={8 + i * 24}
-                  y2={18}
-                  stroke={t.ink3}
-                  strokeWidth={1}
-                />
-              ))}
-              <Rect x={9} y={19.5} width={238 * fillPct} height={21} fill={t.accent} opacity={0.8} />
-              <Rect x={248} y={18} width={6} height={24} fill={t.ink3} />
-              <Rect x={254} y={22} width={50} height={16} fill="none" stroke={t.ink3} strokeWidth={1.5} />
-              <Rect x={304} y={18} width={8} height={24} rx={1} fill={t.ink3} />
-              <Line x1={0} y1={30} x2={8} y2={30} stroke={t.ink3} strokeWidth={1.5} />
-            </Svg>
+          {/* Calibrated syringe — auto-picks the smallest U-100 barrel
+              that fits the dose, draws ticks at 1u/5u/10u with numeric
+              labels, and shows the plunger arrow under the fill. */}
+          <View style={{ marginTop: 20 }}>
+            <SyringeDiagram unitsToDraw={calc.unitsPerDose} />
           </View>
+          {/* Split-draw guidance for >100u doses. */}
+          {calc.unitsPerDose > 100 ? (
+            <Text
+              style={{
+                marginTop: 10,
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 13,
+                lineHeight: 19,
+                color: ed.colors.stateWarn,
+              }}
+            >
+              Doesn't fit in one syringe — split into two draws of{' '}
+              {(calc.unitsPerDose / 2).toFixed(1)} units each.
+            </Text>
+          ) : calc.unitsPerDose > 0 && calc.unitsPerDose < 5 ? (
+            <Text
+              style={{
+                marginTop: 10,
+                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+                fontSize: 13,
+                lineHeight: 19,
+                color: ed.colors.ink3,
+              }}
+            >
+              Tiny draw — a 30u (0.3 mL) insulin syringe gives the cleanest precision.
+            </Text>
+          ) : null}
         </View>
 
         {/* Co-reconstitute partners */}
         {coReconstituteOptions.length > 0 ? (
-          <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-            <Text
-              style={{
-                fontSize: 11,
-                fontFamily: font.sansSemi,
-                letterSpacing: 1.1,
-                color: t.ink3,
-                marginBottom: 8,
-                textTransform: 'uppercase',
-              }}
-            >
-              Co-reconstitute with
-            </Text>
-            <View style={{ gap: 6 }}>
-              {coReconstituteOptions.map((ca) => {
+          <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+            <EyebrowLabel withRule>Co-reconstitute with</EyebrowLabel>
+            <View style={{ marginTop: 4 }}>
+              {coReconstituteOptions.map((ca, idx) => {
                 const partner = findPeptide(ca.peptide_id);
                 if (!partner) return null;
                 const active = coReconstitutePartner === ca.peptide_id;
                 return (
-                  <Pressable
-                    key={ca.peptide_id}
-                    onPress={() =>
-                      setCoReconstitutePartner(active ? null : ca.peptide_id)
-                    }
-                    style={{
-                      backgroundColor: active ? t.accentSoft : t.surface,
-                      borderRadius: radius.md,
-                      borderWidth: 1,
-                      borderColor: active ? t.accent : t.line,
-                      padding: space.md,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                    }}
-                  >
-                    <View
+                  <View key={ca.peptide_id}>
+                    <Pressable
+                      onPress={() => setCoReconstitutePartner(active ? null : ca.peptide_id)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: active }}
                       style={{
-                        width: 18,
-                        height: 18,
-                        borderRadius: 4,
-                        borderWidth: 2,
-                        borderColor: active ? t.accent : t.ink4,
-                        backgroundColor: active ? t.accent : 'transparent',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        gap: 14,
+                        paddingVertical: 16,
                       }}
                     >
-                      {active ? (
-                        <Text style={{ color: '#fff', fontSize: 11, fontFamily: font.sansBold }}>
-                          ✓
+                      <View
+                        style={{
+                          width: 18,
+                          height: 18,
+                          marginTop: 2,
+                          borderWidth: 1,
+                          borderColor: active ? ed.colors.brand : ed.colors.lineStrong,
+                          backgroundColor: active ? ed.colors.brand : 'transparent',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {active ? (
+                          <Text
+                            style={{
+                              color: ed.colors.bg,
+                              fontFamily: ed.typography.dataMd.fontFamily,
+                              fontSize: 12,
+                              lineHeight: 14,
+                            }}
+                          >
+                            ✓
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontFamily: ed.fraunces('Fraunces_400Regular'),
+                            fontSize: 17,
+                            color: ed.colors.ink1,
+                          }}
+                        >
+                          + {partner.name}
                         </Text>
-                      ) : null}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                        + {partner.name}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: t.ink3, marginTop: 2, lineHeight: 17 }}>
-                        {ca.note}
-                      </Text>
-                    </View>
-                  </Pressable>
+                        <Text
+                          style={{
+                            marginTop: 4,
+                            fontFamily: ed.typography.bodySm.fontFamily,
+                            fontSize: ed.typography.bodySm.fontSize,
+                            lineHeight: ed.typography.bodySm.lineHeight,
+                            color: ed.colors.ink3,
+                          }}
+                        >
+                          {ca.note}
+                        </Text>
+                      </View>
+                    </Pressable>
+                    {idx < coReconstituteOptions.length - 1 ? <HairlineRow /> : null}
+                  </View>
                 );
               })}
             </View>
             {coReconstitutePartner ? (
               <Text
                 style={{
-                  fontSize: 11,
-                  color: t.ink3,
-                  marginTop: 6,
-                  fontFamily: font.mono,
+                  marginTop: 8,
+                  fontFamily: ed.typography.dataMd.fontFamily,
+                  fontSize: ed.typography.dataMd.fontSize,
+                  color: ed.colors.ink3,
                 }}
               >
                 Saving will create two vial rows sharing {bacMl} mL BAC.
@@ -746,35 +951,26 @@ export default function ReconstituteModal() {
           </View>
         ) : null}
 
-        {/* Inline disclaimer */}
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
+        {/* Disclaimer + save */}
+        <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
           <DosingDisclaimer />
         </View>
-
-        <View style={{ paddingHorizontal: space.xl, marginTop: space.md }}>
-          <Pressable
-            onPress={save}
-            disabled={saving}
-            style={{
-              padding: space.lg,
-              borderRadius: radius.lg,
-              backgroundColor: saving ? t.surfaceAlt : t.ink,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: saving ? t.ink3 : t.bg }}>
-              {saving ? 'Saving…' : 'Save vial'}
-            </Text>
-          </Pressable>
+        <View style={{ marginTop: 24, paddingHorizontal: 24 }}>
+          <EditorialButton fullWidth onPress={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save vial'}
+          </EditorialButton>
           <Text
             style={{
-              marginTop: space.sm,
-              fontSize: 11,
-              color: t.ink3,
+              marginTop: 10,
               textAlign: 'center',
+              fontFamily: ed.typography.labelSm.fontFamily,
+              fontSize: ed.typography.labelSm.fontSize,
+              letterSpacing: ed.typography.labelSm.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
             }}
           >
-            Vial expires 30 days after mixing.
+            Vial expires 30 days after mixing
           </Text>
         </View>
       </ScrollView>
@@ -783,34 +979,50 @@ export default function ReconstituteModal() {
 }
 
 function WalkthroughStep({ n, title, body }: { n: number; title: string; body: string }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   return (
     <View
       style={{
-        padding: space.md,
-        borderRadius: radius.md,
-        backgroundColor: t.surface,
-        borderWidth: 1,
-        borderColor: t.line,
         flexDirection: 'row',
-        gap: 12,
+        gap: 14,
+        paddingVertical: 14,
+        borderTopWidth: 1,
+        borderColor: ed.colors.line,
       }}
     >
-      <View
+      <Text
         style={{
-          width: 24,
-          height: 24,
-          borderRadius: 12,
-          backgroundColor: t.accent,
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: 28,
+          fontFamily: ed.fraunces('Fraunces_300Light'),
+          fontSize: 26,
+          color: ed.colors.brand,
+          lineHeight: 28,
         }}
       >
-        <Text style={{ color: '#fff', fontSize: 12, fontFamily: font.sansBold }}>{n}</Text>
-      </View>
+        {n}
+      </Text>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 13, fontFamily: font.sansSemi, color: t.ink }}>{title}</Text>
-        <Text style={{ fontSize: 12, color: t.ink2, marginTop: 3, lineHeight: 18 }}>{body}</Text>
+        <Text
+          style={{
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 17,
+            color: ed.colors.ink1,
+            letterSpacing: -0.3,
+          }}
+        >
+          {title}
+        </Text>
+        <Text
+          style={{
+            marginTop: 6,
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            lineHeight: ed.typography.bodySm.lineHeight,
+            color: ed.colors.ink2,
+          }}
+        >
+          {body}
+        </Text>
       </View>
     </View>
   );
@@ -824,6 +1036,8 @@ function TypedField({
   onCommit,
   onMinus,
   onPlus,
+  readOnly,
+  readOnlyHint,
 }: {
   label: string;
   unit: string;
@@ -832,34 +1046,45 @@ function TypedField({
   onCommit: () => void;
   onMinus: () => void;
   onPlus: () => void;
+  readOnly?: boolean;
+  readOnlyHint?: string;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
+  const valueColor = readOnly ? ed.colors.ink3 : ed.colors.ink1;
   return (
-    <View
-      style={{
-        backgroundColor: t.surface,
-        borderRadius: radius.md,
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        borderWidth: 1,
-        borderColor: t.line,
-        flexDirection: 'row',
-        alignItems: 'center',
-      }}
-    >
-      <View style={{ flex: 1 }}>
+    <View style={{ paddingVertical: 18 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Text
           style={{
-            fontSize: 10,
-            color: t.ink3,
-            letterSpacing: 0.3,
-            fontFamily: font.sansSemi,
+            flex: 1,
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
             textTransform: 'uppercase',
           }}
         >
           {label}
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 3 }}>
+        <Pressable
+          onPress={onMinus}
+          disabled={readOnly}
+          accessibilityRole="button"
+          accessibilityLabel={`Decrease ${label.toLowerCase()}`}
+          hitSlop={8}
+        >
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 22,
+              color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
+              paddingHorizontal: 10,
+            }}
+          >
+            −
+          </Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
           <TextInput
             value={value}
             onChangeText={onChangeText}
@@ -867,56 +1092,62 @@ function TypedField({
             onSubmitEditing={onCommit}
             keyboardType="decimal-pad"
             returnKeyType="done"
+            editable={!readOnly}
+            selectionColor={ed.colors.brand}
             style={{
-              fontSize: 17,
-              fontFamily: font.monoSemi,
-              color: t.ink,
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 28,
+              letterSpacing: -0.5,
+              color: valueColor,
               padding: 0,
-              minWidth: 50,
+              minWidth: 64,
+              textAlign: 'right',
             }}
           />
           <Text
             style={{
-              fontSize: 12,
-              color: t.ink3,
-              fontFamily: font.sansMed,
-              marginLeft: 4,
+              marginLeft: 6,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
             }}
           >
             {unit}
           </Text>
         </View>
-      </View>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <Pressable
-          onPress={onMinus}
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: t.surfaceAlt,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          hitSlop={4}
-        >
-          <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>−</Text>
-        </Pressable>
         <Pressable
           onPress={onPlus}
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: t.surfaceAlt,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          hitSlop={4}
+          disabled={readOnly}
+          accessibilityRole="button"
+          accessibilityLabel={`Increase ${label.toLowerCase()}`}
+          hitSlop={8}
         >
-          <Text style={{ fontSize: 18, color: t.ink, fontFamily: font.sansSemi }}>+</Text>
+          <Text
+            style={{
+              fontFamily: ed.typography.dataLg.fontFamily,
+              fontSize: 22,
+              color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
+              paddingHorizontal: 10,
+            }}
+          >
+            +
+          </Text>
         </Pressable>
       </View>
+      {readOnly && readOnlyHint ? (
+        <Text
+          style={{
+            marginTop: 6,
+            fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+            fontSize: 12,
+            color: ed.colors.ink3,
+          }}
+        >
+          {readOnlyHint}
+        </Text>
+      ) : null}
     </View>
   );
 }

@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getProfile, updateProfile as dbUpdate, type Profile } from './db';
+import { cycleDoseUnitPref, type DoseUnitPref } from './dose-format';
 
 type Ctx = {
   profile: Profile | null;
@@ -46,4 +47,32 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
 export function useProfile() {
   return useContext(ProfileCtx);
+}
+
+/**
+ * Convenience hook: reads the global dose-unit preference and exposes
+ * setters. The profile field is always one of 'auto' | 'mcg' | 'mg';
+ * defaults to 'auto' before the profile row has loaded.
+ */
+export function useDoseUnitPref(): {
+  pref: DoseUnitPref;
+  set: (next: DoseUnitPref) => Promise<void>;
+  cycle: () => Promise<DoseUnitPref>;
+} {
+  const { profile, update } = useContext(ProfileCtx);
+  const pref: DoseUnitPref = (profile?.dose_unit_pref as DoseUnitPref | undefined) ?? 'auto';
+  return useMemo(
+    () => ({
+      pref,
+      set: async (next) => {
+        await update({ dose_unit_pref: next });
+      },
+      cycle: async () => {
+        const next = cycleDoseUnitPref(pref);
+        await update({ dose_unit_pref: next });
+        return next;
+      },
+    }),
+    [pref, update],
+  );
 }

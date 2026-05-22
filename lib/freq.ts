@@ -17,6 +17,14 @@ export type FreqShape = {
   displayUnit: 'days' | 'weeks';
   // Compact human-readable form for "every X" labels.
   label: string;
+  // v1.2.3: when the freq itself expresses a range (e.g. "1–2× daily",
+  // "2–3× weekly"), these capture both bounds so the vial-life
+  // estimator can render "~2-5 days @ 1-2/day". perDay still equals
+  // upperPerDay for the conservative planning case (over-estimate
+  // cadence → under-estimate vial life → user buys/preps more, not
+  // less). Undefined means a single-cadence freq.
+  lowerPerDay?: number;
+  upperPerDay?: number;
 };
 
 export function describeFreq(freq: string | null | undefined): FreqShape {
@@ -37,6 +45,29 @@ export function describeFreq(freq: string | null | undefined): FreqShape {
   const semi = f.indexOf(';');
   if (semi >= 0) f = f.slice(0, semi);
   f = f.replace(/\s+/g, ' ').trim();
+
+  // ----- N-on / M-off ----------------------------------------------------
+  // Pulsed schedules: "5 on / 2 off", "5-on/2-off", "5 on 2 off", "5/2".
+  // Counts from the cycle (or phase) start day, NOT the calendar week — a
+  // phase that begins on a Wednesday starts its "on" window on Wednesday.
+  // perDay = N/(N+M), daysPerDose = (N+M)/N for vial-life math; the on/off
+  // pattern itself is enforced by isScheduledOnDay below.
+  const onOff =
+    f.match(/(\d+)\s*-?\s*on\s*(?:[/,-]|\s)\s*(\d+)\s*-?\s*off/) ||
+    (/^(\d+)\s*\/\s*(\d+)$/.exec(f));
+  if (onOff) {
+    const on = parseInt(onOff[1], 10);
+    const off = parseInt(onOff[2], 10);
+    if (on > 0 && off > 0) {
+      const period = on + off;
+      return {
+        perDay: on / period,
+        daysPerDose: period / on,
+        displayUnit: 'days',
+        label: `${on}-on/${off}-off`,
+      };
+    }
+  }
 
   // hasCadence: at least one frequency-keyword survived the cleaning.
   // Only when no keyword is present do we treat this as "as-needed" — that
@@ -63,12 +94,46 @@ export function describeFreq(freq: string | null | undefined): FreqShape {
   }
 
   // ----- Match specific patterns first ----------------------------------
+  // Range patterns FIRST so "1–2× daily" doesn't match the "2× daily"
+  // single-cadence rule below and lose the lower-bound information.
+  // The label keeps the range visible to users; perDay/daysPerDose use
+  // the upper bound for conservative vial-life math.
+  const dailyRange = f.match(/(\d)\s*[–-]\s*(\d)\s*[×x]\s*daily/);
+  if (dailyRange) {
+    const lo = parseInt(dailyRange[1], 10);
+    const hi = parseInt(dailyRange[2], 10);
+    if (lo > 0 && hi >= lo) {
+      return {
+        perDay: hi,
+        daysPerDose: 1 / hi,
+        displayUnit: 'days',
+        label: `${lo}-${hi}/day`,
+        lowerPerDay: lo,
+        upperPerDay: hi,
+      };
+    }
+  }
+  const weeklyRange = f.match(/(\d)\s*[–-]\s*(\d)\s*[×x]\s*weekly/);
+  if (weeklyRange) {
+    const lo = parseInt(weeklyRange[1], 10);
+    const hi = parseInt(weeklyRange[2], 10);
+    if (lo > 0 && hi >= lo) {
+      return {
+        perDay: hi / 7,
+        daysPerDose: 7 / hi,
+        displayUnit: 'weeks',
+        label: `${lo}-${hi}/week`,
+        lowerPerDay: lo / 7,
+        upperPerDay: hi / 7,
+      };
+    }
+  }
+
   // Twice-daily before generic "daily".
   if (f.includes('twice daily') || /\b2[x×]\s*daily/.test(f) || /\b2\s+per\s*day/.test(f)) {
     return { perDay: 2, daysPerDose: 0.5, displayUnit: 'days', label: '2/day' };
   }
-  // 1–3× / 2–3× / 3× daily — "multiple/day" bucket. We treat the upper
-  // bound as ≥2/day for vial-life math; the label communicates the range.
+  // 3× daily fallback — bare "3× daily" with no lower bound.
   if (
     /\b[1-9]\s*[–-]\s*[1-9][×x]\s*daily/.test(f) ||
     /\b3[x×]\s*daily/.test(f) ||
@@ -159,6 +224,16 @@ export function describeFreq(freq: string | null | undefined): FreqShape {
 export function isScheduledOnDay(freq: string | null | undefined, dayOfCycle: number): boolean {
   const shape = describeFreq(freq);
   if (shape.perDay === 0) return false;
+  // N-on/M-off: first N days of each (N+M)-day window are "on".
+  // Match the label ahead of the daily fall-through because daysPerDose
+  // here is fractional (1.4 for 5/2) — the daily rule below would treat
+  // it as on every day.
+  const onOff = /^(\d+)-on\/(\d+)-off$/.exec(shape.label);
+  if (onOff) {
+    const on = parseInt(onOff[1], 10);
+    const off = parseInt(onOff[2], 10);
+    return dayOfCycle % (on + off) < on;
+  }
   if (shape.daysPerDose <= 1) return true; // daily / twice-daily
   // Weekly / EOD / twice-weekly land on specific days of the cycle.
   // Twice-weekly: days 0 and 3 of each 7-day window (Mon + Thu spacing).
@@ -183,6 +258,33 @@ export function formatDuration(totalDoses: number, freq: string | null | undefin
   const shape = describeFreq(freq);
   const n = Math.floor(totalDoses);
   if (shape.perDay === 0) return `~${n} doses (as-needed)`;
+
+  // Range-aware: if the freq itself was a range like "1–2× daily", show
+  // both bounds so the user sees both the optimistic and conservative
+  // vial life. Tilde stays on both — both ends are estimates. Collapse
+  // to a single value when both bounds round to the same display number
+  // (e.g. lower=4.8d, upper=5.0d → "~5 days", not "~5-5 days").
+  if (
+    shape.lowerPerDay !== undefined &&
+    shape.upperPerDay !== undefined &&
+    shape.lowerPerDay !== shape.upperPerDay
+  ) {
+    if (shape.displayUnit === 'weeks') {
+      const upperWeeks = Math.floor(n / (shape.upperPerDay * 7));
+      const lowerWeeks = Math.floor(n / (shape.lowerPerDay * 7));
+      if (upperWeeks === lowerWeeks) {
+        return `~${upperWeeks} week${upperWeeks === 1 ? '' : 's'} @ ${shape.label}`;
+      }
+      return `~${upperWeeks}-${lowerWeeks} weeks @ ${shape.label}`;
+    }
+    const upperDays = Math.floor(n / shape.upperPerDay);
+    const lowerDays = Math.floor(n / shape.lowerPerDay);
+    if (upperDays === lowerDays) {
+      return `~${upperDays} day${upperDays === 1 ? '' : 's'} @ ${shape.label}`;
+    }
+    return `~${upperDays}-${lowerDays} days @ ${shape.label}`;
+  }
+
   const totalDays = n * shape.daysPerDose;
   if (shape.displayUnit === 'weeks') {
     const weeks = Math.floor(totalDays / 7);

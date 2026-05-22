@@ -3,7 +3,7 @@
     "name": "Helix",
     "slug": "helix",
     "owner": "saltymo",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "helix",
@@ -11,15 +11,43 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.helix.demo"
+      "bundleIdentifier": "com.omniaworks.helix",
+      "buildNumber": "3",
+      "appleTeamId": "PUHZTA99Y2",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
-      "package": "app.helix.demo",
+      "package": "com.omniaworks.helix",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0A8E83",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
+          "data": [
+            {
+              "scheme": "helix",
+              "host": "auth"
+            },
+            {
+              "scheme": "helix",
+              "host": "reset-password"
+            }
+          ],
+          "autoVerify": false
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -44,12 +72,22 @@
         {
           "faceIDPermission": "Allow Helix to use Face ID to unlock your local data."
         }
+      ],
+      "expo-apple-authentication",
+      "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.1058603300242-phr5kqushvln6ie352e6uu4mo2970sjf"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "runtimeVersion": { "policy": "appVersion" },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/37ad6fea-d1cd-48e5-97b9-8368b2226cef",
       "fallbackToCacheTimeout": 0

@@ -29,6 +29,27 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Reconstitute-compatible with TB-500 at the same BAC volume for a single co-administered shot.',
       'Short half-life forgives missed doses — just resume the next scheduled dose rather than double-up.',
     ],
+    sideEffects: [
+      'Mild injection-site irritation or transient redness',
+      'Occasional dizziness or lightheadedness shortly after dosing',
+      'Headache and mild fatigue reported in research subjects',
+      'Long-term human safety data is limited — most evidence is rodent / in-vitro',
+    ],
+    contraindications: [
+      'Active malignancy (pre-clinical angiogenic activity is a theoretical concern)',
+      'Pregnancy and breastfeeding (no human safety data)',
+    ],
+    overview: {
+      whatItDoes:
+        'BPC-157 is a small protein fragment originally found in human stomach acid, where it helps protect and repair the gut lining. Researchers synthesized it as a standalone compound to study its healing effects on tendons, ligaments, joints, and the digestive tract. In animal studies, it shows strong tissue-repair activity — speeding recovery from tears, ulcers, and inflammation. Most evidence is preclinical (animal models); human clinical trials are limited but anecdotal reports from athletes and researchers are extensive.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Freeze for long-term storage — stable up to 2 years frozen, 1 year refrigerated.',
+        afterMixing: 'Keep refrigerated. Use within 30 days.',
+        handling:
+          "Keep away from light. Don't shake the vial — swirl gently to dissolve. Avoid temperature swings.",
+      },
+    },
   },
 
   tb500: {
@@ -60,6 +81,28 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       'Co-reconstitute with BPC-157 in the same BAC for a single SubQ shot when running the classic healing pair.',
       'Inject into the nearest site to the injury when treating localized tendon/ligament issues (research convention; systemic effects still dominate).',
     ],
+    sideEffects: [
+      'Transient fatigue or "head-fog" during the loading phase',
+      'Injection-site reactions (redness, mild swelling)',
+      'Mild flu-like sensation in the first week reported anecdotally',
+      'WADA-prohibited — disqualifying in-competition for athletes',
+    ],
+    contraindications: [
+      'Active or recent cancer (systemic angiogenesis is undesirable)',
+      'Pregnancy and breastfeeding',
+      'Athletes subject to WADA testing',
+    ],
+    overview: {
+      whatItDoes:
+        "TB-500 is a synthetic version of a fragment from Thymosin Beta-4, a protein your body makes naturally to help cells move where they're needed for healing. Think of it as your body's repair-crew dispatcher — it tells damaged-area cells to multiply and migrate to injuries. Research focuses on muscle recovery, tendon healing, and reducing inflammation. Most studies are in animals (especially horses, where it's used widely in racing). Human data is limited but increasingly explored for soft-tissue injuries.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Freeze for long-term storage — stable up to 2 years frozen, 6 months refrigerated.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. Some users freeze pre-drawn syringes for longer storage; potency may degrade.',
+        handling: 'Keep away from light. Swirl gently — never shake.',
+      },
+    },
   },
 
   tb4_full: {
@@ -80,6 +123,25 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
     stackConflicts: [
       { peptide_id: 'tb500', reason: 'TB-500 is a fragment of this peptide — redundant to stack both' },
     ],
+    sideEffects: [
+      'Injection-site reactions',
+      'Transient fatigue early in the course',
+      'WADA-prohibited (full-length thymosin β4)',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        'Thymosin Beta-4 full-length is the complete 43-amino-acid native protein, distinct from TB-500 (the synthetic acetylated version most users mean when they say "TB-500"). The full-length version is what your body actually produces — found in essentially every cell type, with concentrations highest in platelets and white blood cells. It coordinates cell migration, blood vessel formation, and tissue repair. Most peptide research and product use focuses on TB-500 (the synthetic) rather than the native full-length, but some researchers prefer the native sequence for its broader biological activity. Evidence is largely preclinical with limited human clinical data; most inferences come from TB-500 research.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: 'Keep away from light. Swirl gently to dissolve — never shake.',
+      },
+    },
   },
 
   ghkcu: {
@@ -98,6 +160,26 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
       { peptide_id: 'tb500', note: 'Broader tissue-repair coverage' },
     ],
     stackConflicts: [],
+    sideEffects: [
+      'Topical: mild stinging or redness; rare contact dermatitis',
+      'SubQ: injection-site reactions, transient bruising',
+      'Copper accumulation theoretical with long-term high-dose use',
+    ],
+    contraindications: [
+      'Wilson disease or copper-overload conditions',
+      'Pregnancy and breastfeeding (no human safety data for SubQ use)',
+    ],
+    overview: {
+      whatItDoes:
+        'GHK-Cu is a tripeptide naturally found in your blood that binds to copper to form a small healing complex. It signals your body to repair tissue, produce collagen, and reduce inflammation. Levels naturally drop with age — roughly 60–70% lower at 60 than at 20 — which researchers think contributes to slower healing as we get older. Most often used topically for skin (it\'s well-established in skincare research) but also injected for systemic healing, hair regrowth, and tissue repair. Strong skin/topical evidence; injected use has more limited human data.',
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Protect from light — copper peptides are particularly light-sensitive.',
+        afterMixing:
+          'Refrigerate. Use within 30 days. The solution typically has a blue or green tint — this is the copper, not contamination.',
+        handling: 'Topical preparations: follow product-specific storage instructions.',
+      },
+    },
   },
 
   pda: {
@@ -118,5 +200,24 @@ export const HEALING_EXTRAS: PeptideExtrasMap = {
     stackConflicts: [
       { peptide_id: 'bpc157', reason: 'Same peptide sequence — stacking both is redundant' },
     ],
+    sideEffects: [
+      'Mirrors BPC-157: mild injection-site irritation, occasional dizziness',
+      'Headache and mild fatigue reported anecdotally',
+      'Long-term human safety data is limited',
+    ],
+    contraindications: [
+      'Active malignancy',
+      'Pregnancy and breastfeeding',
+    ],
+    overview: {
+      whatItDoes:
+        "Pentadeca Arginate is a modified version of BPC-157 — the same 15-amino-acid sequence, but with an arginate salt form rather than the standard acetate form. The change is subtle but meaningful: arginate may improve stability, absorption, and potentially extend the peptide's half-life, which has historically been one of BPC-157's limitations. Researchers and users exploring it often pair it with or substitute it for BPC-157, looking for similar tissue-repair effects with potentially better real-world performance. Evidence is very limited — most data is inferred from BPC-157 research rather than studied directly.",
+      storage: {
+        beforeMixing:
+          'Refrigerate at 36–46°F (2–8°C). Stable up to 2 years frozen, 1 year refrigerated.',
+        afterMixing: 'Refrigerate. Use within 30 days.',
+        handling: "Keep away from light. Don't shake — swirl gently to dissolve.",
+      },
+    },
   },
 };

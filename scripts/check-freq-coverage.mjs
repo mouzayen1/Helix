@@ -29,6 +29,22 @@ function describeFreq(freq) {
   if (semi >= 0) f = f.slice(0, semi);
   f = f.replace(/\s+/g, ' ').trim();
 
+  // N-on/M-off: "5 on / 2 off", "5-on/2-off", "5 on 2 off", "5/2".
+  const onOff =
+    f.match(/(\d+)\s*-?\s*on\s*(?:[/,-]|\s)\s*(\d+)\s*-?\s*off/) ||
+    (/^(\d+)\s*\/\s*(\d+)$/.exec(f));
+  if (onOff) {
+    const on = parseInt(onOff[1], 10);
+    const off = parseInt(onOff[2], 10);
+    if (on > 0 && off > 0) {
+      const period = on + off;
+      return {
+        perDay: on / period, daysPerDose: period / on,
+        displayUnit: 'days', label: `${on}-on/${off}-off`,
+      };
+    }
+  }
+
   const hasCadence =
     /\b(daily|nightly|weekly|every other day|eod|per\s*week|per\s*day|once|twice|thrice|×|x)\s*(daily|weekly|day|week|night|nightly)?/i.test(f) ||
     /\b(once|twice|thrice|1×|2×|3×|1x|2x|3x|[1-9]–[1-9][×x])\s*(daily|weekly)/i.test(f);
@@ -45,13 +61,36 @@ function describeFreq(freq) {
     return { perDay: 1, daysPerDose: 1, displayUnit: 'days', label: raw || 'daily' };
   }
 
+  // Range patterns first so "1–2× daily" doesn't match "2× daily" below.
+  const dailyRange = f.match(/(\d)\s*[–-]\s*(\d)\s*[×x]\s*daily/);
+  if (dailyRange) {
+    const lo = parseInt(dailyRange[1], 10);
+    const hi = parseInt(dailyRange[2], 10);
+    if (lo > 0 && hi >= lo) {
+      return {
+        perDay: hi, daysPerDose: 1 / hi, displayUnit: 'days',
+        label: `${lo}-${hi}/day`, lowerPerDay: lo, upperPerDay: hi,
+      };
+    }
+  }
+  const weeklyRange = f.match(/(\d)\s*[–-]\s*(\d)\s*[×x]\s*weekly/);
+  if (weeklyRange) {
+    const lo = parseInt(weeklyRange[1], 10);
+    const hi = parseInt(weeklyRange[2], 10);
+    if (lo > 0 && hi >= lo) {
+      return {
+        perDay: hi / 7, daysPerDose: 7 / hi, displayUnit: 'weeks',
+        label: `${lo}-${hi}/week`, lowerPerDay: lo / 7, upperPerDay: hi / 7,
+      };
+    }
+  }
   if (f.includes('twice daily') || /\b2[x×]\s*daily/.test(f) || /\b2\s+per\s*day/.test(f))
     return { perDay: 2, daysPerDose: 0.5, displayUnit: 'days', label: '2/day' };
-  if (/\b[1-9]\s*[–-]\s*[1-9][×x]\s*daily/.test(f) || /\b3[x×]\s*daily/.test(f) || f.includes('three times daily'))
-    return { perDay: 3, daysPerDose: 1 / 3, displayUnit: 'days', label: 'multiple/day' };
+  if (/\b3[x×]\s*daily/.test(f) || f.includes('three times daily'))
+    return { perDay: 3, daysPerDose: 1 / 3, displayUnit: 'days', label: '3/day' };
   if (f.includes('twice weekly') || /\b2[x×]\s*week/.test(f) || /\b2\s*\/\s*week/.test(f) || /\b2\s+per\s*week/.test(f))
     return { perDay: 2 / 7, daysPerDose: 7 / 2, displayUnit: 'weeks', label: '2/week' };
-  if (/\b[2-3]\s*[–-]\s*[2-3][×x]\s*weekly/.test(f) || /\b3[x×]\s*week/.test(f) || /\b3\s*\/\s*week/.test(f) || /\b3\s+per\s*week/.test(f) || f.includes('three times weekly'))
+  if (/\b3[x×]\s*week/.test(f) || /\b3\s*\/\s*week/.test(f) || /\b3\s+per\s*week/.test(f) || f.includes('three times weekly'))
     return { perDay: 3 / 7, daysPerDose: 7 / 3, displayUnit: 'weeks', label: '3/week' };
   if (/\b1\s*[–-]\s*2[×x]\s*(per\s*)?week/.test(f))
     return { perDay: 2 / 7, daysPerDose: 7 / 2, displayUnit: 'weeks', label: '1–2/week' };
@@ -72,6 +111,18 @@ function formatDuration(totalDoses, freq) {
   const shape = describeFreq(freq);
   const n = Math.floor(totalDoses);
   if (shape.perDay === 0) return `~${n} doses (as-needed)`;
+  if (shape.lowerPerDay !== undefined && shape.upperPerDay !== undefined && shape.lowerPerDay !== shape.upperPerDay) {
+    if (shape.displayUnit === 'weeks') {
+      const upperWeeks = Math.floor(n / (shape.upperPerDay * 7));
+      const lowerWeeks = Math.floor(n / (shape.lowerPerDay * 7));
+      if (upperWeeks === lowerWeeks) return `~${upperWeeks} week${upperWeeks === 1 ? '' : 's'} @ ${shape.label}`;
+      return `~${upperWeeks}-${lowerWeeks} weeks @ ${shape.label}`;
+    }
+    const upperDays = Math.floor(n / shape.upperPerDay);
+    const lowerDays = Math.floor(n / shape.lowerPerDay);
+    if (upperDays === lowerDays) return `~${upperDays} day${upperDays === 1 ? '' : 's'} @ ${shape.label}`;
+    return `~${upperDays}-${lowerDays} days @ ${shape.label}`;
+  }
   const totalDays = n * shape.daysPerDose;
   if (shape.displayUnit === 'weeks') {
     const weeks = Math.floor(totalDays / 7);

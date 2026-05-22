@@ -1,9 +1,12 @@
-// Settings → Notifications. v1.1 Phase 6.
+// Notifications settings — editorial rebuild.
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronLeft } from '../../components/Icons';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../../lib/design/theme';
 import {
   DEFAULT_NOTIF_PREFS,
   ensurePermission,
@@ -12,11 +15,9 @@ import {
   setNotifPrefs,
   type NotifPrefs,
 } from '../../lib/notifications';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
 
 export default function NotificationsScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
@@ -41,91 +42,154 @@ export default function NotificationsScreen() {
   const masterOff = prefs.mode === 'off';
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
+    <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
       <View
         style={{
-          paddingTop: insets.top + space.md,
-          paddingBottom: space.md,
-          paddingHorizontal: space.xl,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
+          paddingTop: insets.top + 12,
+          paddingBottom: 12,
+          paddingHorizontal: 24,
         }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
-          <IconChevronLeft size={18} color={t.ink} />
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 26,
+              color: ed.colors.ink2,
+              lineHeight: 26,
+            }}
+          >
+            ←
+          </Text>
         </Pressable>
-        <Text style={{ fontSize: 20, fontFamily: font.sansBold, color: t.ink }}>
-          Notifications
-        </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space['2xl'] }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ paddingHorizontal: 24 }}>
+          <Text
+            style={{
+              fontFamily: ed.typography.eyebrow.fontFamily,
+              fontSize: ed.typography.eyebrow.fontSize,
+              letterSpacing: ed.typography.eyebrow.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
+              marginBottom: 14,
+            }}
+          >
+            Notifications
+          </Text>
+          <EditorialHeadline size="title1">{`Reminders, *quietly*.`}</EditorialHeadline>
+        </View>
+
         {loading ? (
-          <Text style={{ paddingHorizontal: space.xl, color: t.ink3 }}>Loading…</Text>
+          <Text
+            style={{
+              paddingHorizontal: 24,
+              marginTop: 28,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              color: ed.colors.ink3,
+            }}
+          >
+            Loading…
+          </Text>
         ) : (
           <>
-            {/* Master mode */}
-            <SectionLabel label="Mode" />
-            <View style={{ marginHorizontal: space.xl, gap: 8 }}>
-              {(
-                [
-                  { key: 'off', label: 'Off', desc: 'No notifications.' },
-                  {
-                    key: 'dose',
-                    label: 'Dose reminders only',
-                    desc: 'Schedule-based nudges from your active cycle.',
-                  },
-                  {
-                    key: 'all',
-                    label: 'All alerts',
-                    desc: 'Dose reminders, expiry warnings, missed-dose nudges.',
-                  },
-                ] as const
-              ).map((o) => {
-                const on = prefs.mode === o.key;
-                return (
-                  <Pressable
-                    key={o.key}
-                    onPress={() => persist({ mode: o.key })}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: on }}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: on ? t.accent : t.line,
-                      backgroundColor: on ? t.accentSoft : t.surface,
-                      padding: space.md,
-                      borderRadius: radius.md,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontFamily: font.sansSemi,
-                        color: on ? t.accentInk : t.ink,
-                      }}
-                    >
-                      {o.label}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{o.desc}</Text>
-                  </Pressable>
-                );
-              })}
+            {/* Mode */}
+            <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+              <EyebrowLabel withRule>Mode</EyebrowLabel>
+              <View style={{ marginTop: 4 }}>
+                {(
+                  [
+                    { key: 'off', label: 'Off', desc: 'No notifications.' },
+                    {
+                      key: 'dose',
+                      label: 'Dose reminders only',
+                      desc: 'Schedule-based nudges from your active cycle.',
+                    },
+                    {
+                      key: 'all',
+                      label: 'All alerts',
+                      desc: 'Dose reminders, expiry warnings, missed-dose nudges.',
+                    },
+                  ] as const
+                ).map((o, idx, arr) => {
+                  const on = prefs.mode === o.key;
+                  return (
+                    <View key={o.key}>
+                      <Pressable
+                        onPress={() => persist({ mode: o.key })}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: on }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'flex-start',
+                          gap: 14,
+                          paddingVertical: 16,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 18,
+                            height: 18,
+                            marginTop: 4,
+                            borderRadius: 9,
+                            borderWidth: 1,
+                            borderColor: on ? ed.colors.brand : ed.colors.lineStrong,
+                            backgroundColor: 'transparent',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {on ? (
+                            <View
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 4,
+                                backgroundColor: ed.colors.brand,
+                              }}
+                            />
+                          ) : null}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{
+                              fontFamily: ed.fraunces('Fraunces_400Regular'),
+                              fontSize: 17,
+                              letterSpacing: -0.2,
+                              color: ed.colors.ink1,
+                            }}
+                          >
+                            {o.label}
+                          </Text>
+                          <Text
+                            style={{
+                              marginTop: 4,
+                              fontFamily: ed.typography.bodySm.fontFamily,
+                              fontSize: ed.typography.bodySm.fontSize,
+                              color: ed.colors.ink3,
+                            }}
+                          >
+                            {o.desc}
+                          </Text>
+                        </View>
+                      </Pressable>
+                      {idx < arr.length - 1 ? <HairlineRow /> : null}
+                    </View>
+                  );
+                })}
+              </View>
             </View>
 
-            {/* Sub-toggles */}
-            <SectionLabel label="Categories" />
+            {/* Categories */}
             <View
-              style={{
-                marginHorizontal: space.xl,
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                overflow: 'hidden',
-                opacity: masterOff ? 0.45 : 1,
-              }}
+              style={{ marginTop: 28, paddingHorizontal: 24, opacity: masterOff ? 0.45 : 1 }}
             >
+              <EyebrowLabel withRule>Categories</EyebrowLabel>
               <ToggleRow
                 label="Dose reminders"
                 desc="From your active cycle schedule."
@@ -133,6 +197,7 @@ export default function NotificationsScreen() {
                 disabled={masterOff}
                 onChange={(v) => persist({ sub: { ...prefs.sub, doseReminders: v } })}
               />
+              <HairlineRow />
               <ToggleRow
                 label="Vial expiry warnings"
                 desc="3 days before a reconstituted vial expires."
@@ -140,6 +205,7 @@ export default function NotificationsScreen() {
                 disabled={masterOff || prefs.mode === 'dose'}
                 onChange={(v) => persist({ sub: { ...prefs.sub, vialExpiry: v } })}
               />
+              <HairlineRow />
               <ToggleRow
                 label="Phase transitions"
                 desc="Day before loading / maintenance / taper switches."
@@ -147,6 +213,7 @@ export default function NotificationsScreen() {
                 disabled={masterOff || prefs.mode === 'dose'}
                 onChange={(v) => persist({ sub: { ...prefs.sub, phaseTransitions: v } })}
               />
+              <HairlineRow />
               <ToggleRow
                 label="Missed-dose nudge"
                 desc="Daily 8pm reminder if nothing was logged."
@@ -157,115 +224,136 @@ export default function NotificationsScreen() {
             </View>
 
             {/* Preferred times */}
-            <SectionLabel label="Preferred times" />
             <View
-              style={{
-                marginHorizontal: space.xl,
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                gap: 8,
-                padding: space.md,
-                opacity: masterOff ? 0.45 : 1,
-              }}
+              style={{ marginTop: 28, paddingHorizontal: 24, opacity: masterOff ? 0.45 : 1 }}
             >
-              {(['morning', 'evening', 'pre-bed', 'pre-workout'] as const).map((key) => (
-                <TimeRow
-                  key={key}
-                  label={key}
-                  value={prefs.times[key]}
-                  disabled={masterOff}
-                  onChange={(v) => persist({ times: { ...prefs.times, [key]: v } })}
-                />
+              <EyebrowLabel withRule>Preferred times</EyebrowLabel>
+              {(['morning', 'evening', 'pre-bed', 'pre-workout'] as const).map((key, idx, arr) => (
+                <View key={key}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 14,
+                      gap: 12,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontFamily: ed.fraunces('Fraunces_400Regular'),
+                        fontSize: 17,
+                        letterSpacing: -0.2,
+                        color: ed.colors.ink1,
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {key}
+                    </Text>
+                    <TimeField
+                      value={prefs.times[key]}
+                      onChange={(v) => persist({ times: { ...prefs.times, [key]: v } })}
+                      disabled={masterOff}
+                    />
+                  </View>
+                  {idx < arr.length - 1 ? <HairlineRow /> : null}
+                </View>
               ))}
             </View>
 
             {/* Quiet hours */}
-            <SectionLabel label="Quiet hours" />
             <View
-              style={{
-                marginHorizontal: space.xl,
-                backgroundColor: t.surface,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: t.line,
-                padding: space.md,
-                gap: 10,
-                opacity: masterOff ? 0.45 : 1,
-              }}
+              style={{ marginTop: 28, paddingHorizontal: 24, opacity: masterOff ? 0.45 : 1 }}
             >
-              <Text style={{ color: t.ink3, fontSize: 12 }}>
-                No notifications during this window. Leave both fields blank to disable.
+              <EyebrowLabel withRule>Quiet hours</EyebrowLabel>
+              <Text
+                style={{
+                  marginTop: 10,
+                  fontFamily: ed.typography.bodySm.fontFamily,
+                  fontSize: ed.typography.bodySm.fontSize,
+                  color: ed.colors.ink3,
+                }}
+              >
+                No notifications during this window. Leave both blank to disable.
               </Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TimeField
-                  label="Start"
-                  value={prefs.quietHours?.start ?? ''}
-                  disabled={masterOff}
-                  onChange={(v) =>
-                    persist({
-                      quietHours: v && prefs.quietHours?.end
-                        ? { start: v, end: prefs.quietHours.end }
-                        : v
-                        ? { start: v, end: '07:00' }
-                        : null,
-                    })
-                  }
-                />
-                <TimeField
-                  label="End"
-                  value={prefs.quietHours?.end ?? ''}
-                  disabled={masterOff}
-                  onChange={(v) =>
-                    persist({
-                      quietHours: v && prefs.quietHours?.start
-                        ? { start: prefs.quietHours.start, end: v }
-                        : v
-                        ? { start: '22:00', end: v }
-                        : null,
-                    })
-                  }
-                />
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink3,
+                      textTransform: 'uppercase',
+                      marginBottom: 6,
+                    }}
+                  >
+                    Start
+                  </Text>
+                  <TimeField
+                    value={prefs.quietHours?.start ?? ''}
+                    onChange={(v) =>
+                      persist({
+                        quietHours: v && prefs.quietHours?.end
+                          ? { start: v, end: prefs.quietHours.end }
+                          : v
+                          ? { start: v, end: '07:00' }
+                          : null,
+                      })
+                    }
+                    disabled={masterOff}
+                    fullWidth
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink3,
+                      textTransform: 'uppercase',
+                      marginBottom: 6,
+                    }}
+                  >
+                    End
+                  </Text>
+                  <TimeField
+                    value={prefs.quietHours?.end ?? ''}
+                    onChange={(v) =>
+                      persist({
+                        quietHours: v && prefs.quietHours?.start
+                          ? { start: prefs.quietHours.start, end: v }
+                          : v
+                          ? { start: '22:00', end: v }
+                          : null,
+                      })
+                    }
+                    disabled={masterOff}
+                    fullWidth
+                  />
+                </View>
               </View>
             </View>
 
             <Text
               style={{
-                paddingHorizontal: space.xl,
-                marginTop: space.lg,
-                fontSize: 11,
-                color: t.ink4,
+                paddingHorizontal: 24,
+                marginTop: 36,
+                fontFamily: ed.typography.labelSm.fontFamily,
+                fontSize: ed.typography.labelSm.fontSize,
+                letterSpacing: ed.typography.labelSm.letterSpacing,
+                color: ed.colors.ink3,
+                textTransform: 'uppercase',
                 lineHeight: 16,
               }}
             >
-              All Helix notifications are local. Nothing is scheduled on a server.
-              Reminders are rebuilt on app launch for the next 7 days.
+              All Helix notifications are local. Reminders are rebuilt on app launch for the next 7 days.
             </Text>
           </>
         )}
       </ScrollView>
     </View>
-  );
-}
-
-function SectionLabel({ label }: { label: string }) {
-  const { t } = useTheme();
-  return (
-    <Text
-      style={{
-        paddingHorizontal: space.xl,
-        marginTop: space.xl,
-        marginBottom: space.sm,
-        fontSize: 11,
-        letterSpacing: 1.2,
-        color: t.ink3,
-        fontFamily: font.sansSemi,
-        textTransform: 'uppercase',
-      }}
-    >
-      {label}
-    </Text>
   );
 }
 
@@ -282,90 +370,80 @@ function ToggleRow({
   onChange: (v: boolean) => void;
   disabled?: boolean;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        padding: space.md,
-        borderTopWidth: 1,
-        borderTopColor: t.line,
-        gap: 10,
+        paddingVertical: 14,
+        gap: 12,
       }}
     >
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>{label}</Text>
-        <Text style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}>{desc}</Text>
+        <Text
+          style={{
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 17,
+            letterSpacing: -0.2,
+            color: ed.colors.ink1,
+          }}
+        >
+          {label}
+        </Text>
+        <Text
+          style={{
+            marginTop: 3,
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            color: ed.colors.ink3,
+          }}
+        >
+          {desc}
+        </Text>
       </View>
       <Switch
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        trackColor={{ false: t.surfaceAlt, true: t.accent }}
+        trackColor={{ false: ed.colors.lineStrong, true: ed.colors.brand }}
+        thumbColor={ed.colors.bg}
       />
     </View>
   );
 }
 
-function TimeRow({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  const { t } = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <Text style={{ flex: 1, color: t.ink, fontSize: 14, textTransform: 'capitalize' }}>
-        {label}
-      </Text>
-      <TimeField label="HH:MM" value={value} onChange={onChange} disabled={disabled} />
-    </View>
-  );
-}
-
 function TimeField({
-  label,
   value,
   onChange,
   disabled,
+  fullWidth,
 }: {
-  label: string;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  fullWidth?: boolean;
 }) {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   return (
     <TextInput
       value={value}
-      onChangeText={(v) => {
-        // Allow empty; otherwise lightly normalise to HH:MM (max 5 chars)
-        const trimmed = v.slice(0, 5);
-        onChange(trimmed);
-      }}
+      onChangeText={(v) => onChange(v.slice(0, 5))}
       editable={!disabled}
-      placeholder={label}
-      placeholderTextColor={t.ink4}
+      placeholder="HH:MM"
+      placeholderTextColor={ed.colors.ink4}
       keyboardType="numbers-and-punctuation"
+      selectionColor={ed.colors.brand}
       style={{
-        borderWidth: 1,
-        borderColor: t.line,
-        borderRadius: radius.sm,
-        paddingVertical: 6,
+        paddingVertical: 8,
         paddingHorizontal: 10,
-        fontSize: 13,
-        fontFamily: font.mono,
-        color: t.ink,
-        width: 80,
+        borderWidth: 1,
+        borderColor: ed.colors.lineStrong,
+        fontFamily: ed.typography.dataMd.fontFamily,
+        fontSize: 14,
+        color: ed.colors.ink1,
+        width: fullWidth ? undefined : 88,
         textAlign: 'center',
-        backgroundColor: t.bg,
       }}
     />
   );

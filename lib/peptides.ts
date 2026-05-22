@@ -27,6 +27,11 @@ export type Peptide = {
   // log-dose / cycle-new / cycle-edit so the parser never has to guess from
   // dose strings like "0.25–2.4 mg weekly". Required.
   defaultDoseMcg: number;
+  // v1.2.3: vial-strength presets shown as chips at the top of the
+  // Reconstitute screen. Falls back to a universal [2, 5, 10, 15] mg if
+  // unset. Override only when those four are misleading for this peptide
+  // (e.g. GHK-Cu typically ships as 50 mg vials, NAD+ as 500 mg).
+  commonVialSizes?: number[];
 };
 
 export const PEPTIDES: Peptide[] = [
@@ -117,6 +122,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ · Topical · (very rarely)',
     dose: '1–3 mg SubQ; topical formulations 0.05–2% w/w',
     defaultDoseMcg: 2000,
+  commonVialSizes: [10, 50, 100, 200],
     freq: 'Daily SubQ or topical 1–2× daily',
     reconstitution: '50 mg + 5 mL BAC = 10 mg/mL · 10 units = 1 mg',
     summary: 'A naturally occurring copper-binding tripeptide present in human plasma, saliva, and urine. Genomic studies suggest GHK-Cu modulates expression of over 4,000 human genes. Most extensively studied in dermatologic and wound-healing contexts.',
@@ -142,6 +148,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ',
     dose: '250–500 mcg/day (same range as BPC-157)',
     defaultDoseMcg: 250,
+  commonVialSizes: [5, 10, 25],
     freq: '1–2× daily',
     reconstitution: '10 mg + 2 mL BAC = 5 mg/mL · 5 units = 250 mcg',
     summary: 'An arginate salt form of the BPC-157 pentadecapeptide introduced in response to compounding restrictions on BPC-157. Proposed to offer improved stability and shelf life; human pharmacokinetic data remains sparse.',
@@ -329,6 +336,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ',
     dose: '1–2 mg daily (FDA label: 2 mg SubQ once daily)',
     defaultDoseMcg: 2000,
+  commonVialSizes: [5, 10, 20],
     freq: 'Once daily',
     reconstitution: '10 mg + 2 mL sterile water = 5 mg/mL · 20 units = 1 mg',
     summary: 'FDA-approved GHRH analog (Egrifta® / Egrifta SV) for reduction of excess abdominal fat in HIV-associated lipodystrophy. The only FDA-approved GH-secretagogue peptide currently in broad use. Strong clinical data for visceral adipose tissue reduction and secondary benefits on liver fat.',
@@ -470,6 +478,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ weekly',
     dose: '2.5–15 mg weekly (titrated)',
     defaultDoseMcg: 2500,
+  commonVialSizes: [5, 10, 20, 50],
     freq: 'Once weekly',
     reconstitution: 'Pre-filled pens (Mounjaro / Zepbound) are standard. Research powder: 10 mg + 2 mL BAC = 5 mg/mL · 5 units = 250 mcg / 50 units = 2.5 mg starting dose. Titrate weekly per clinical protocol.',
     summary: 'The first dual GIP/GLP-1 receptor co-agonist. Built on a GIP-derived peptide backbone with engineered GLP-1R activity, conjugated to a C20 fatty diacid for albumin binding. Produces greater weight loss than semaglutide in head-to-head trials (SURMOUNT-5).',
@@ -494,6 +503,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ weekly',
     dose: 'Phase III trials: 1–12 mg weekly (titrated)',
     defaultDoseMcg: 1000,
+  commonVialSizes: [5, 10, 20, 50],
     freq: 'Once weekly',
     reconstitution: 'Investigational; not commercially available. Research powder: 10 mg + 2 mL BAC = 5 mg/mL · 20 units = 1 mg starting dose. Titrate every 4 weeks; max studied 12 mg/week.',
     summary: 'The first triple agonist targeting GIPR, GLP-1R, and the glucagon receptor (GCGR). Phase II obesity trial (Jastreboff 2023) showed mean weight reduction of 24.2% at 48 weeks with 12 mg weekly. Phase III TRIUMPH program ongoing; not FDA-approved as of April 2026.',
@@ -610,6 +620,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ (reconstitute in 0.9% NaCl BAC to reduce injection welts)',
     dose: '5–10 mg per dose',
     defaultDoseMcg: 7500,
+  commonVialSizes: [5, 10, 25, 50],
     freq: '2–3× weekly',
     reconstitution: '10 mg + 1 mL sterile water or 0.9% saline = 10 mg/mL · 50 units = 5 mg (low-end dose) · 75 units = 7.5 mg · 100 units = 10 mg. BAC water acceptable but may reduce stability past 30 days.',
     summary: 'A 16-amino-acid peptide encoded within the mitochondrial 12S rRNA gene. Released in response to exercise and metabolic stress, MOTS-c is the \'exercise mimetic\' most strongly supported by mitochondrial biology. Activates the AMPK pathway — the same energy-sensor triggered by physical training.',
@@ -726,6 +737,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ · Intranasal',
     dose: '5–10 mg/day for 10–20 days per cycle',
     defaultDoseMcg: 5000,
+  commonVialSizes: [10, 20, 50, 100],
     freq: 'Daily for 10–20 days, 2–4× per year',
     reconstitution: '10 mg + 1 mL BAC = 10 mg/mL · 50 units = 5 mg (typical Khavinson protocol dose)',
     summary: 'A tetrapeptide developed by Vladimir Khavinson at the St. Petersburg Institute of Bioregulation and Gerontology. Long-running Russian studies report telomerase activation and lifespan-extending effects in rodents. Human clinical evidence is primarily from Russian studies with varied methodology.',
@@ -750,6 +762,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ',
     dose: '5–40 mg SubQ daily (clinical trial range)',
     defaultDoseMcg: 5000,
+  commonVialSizes: [5, 10, 25, 50],
     freq: 'Once daily',
     reconstitution: '10 mg + 2 mL BAC = 5 mg/mL · 100 units (1 mL) = 5 mg (low-end clinical dose)',
     summary: 'An aromatic-cationic tetrapeptide that selectively partitions into the inner mitochondrial membrane, binding cardiolipin and stabilizing electron transport chain function. Phase III trials for Barth syndrome and primary mitochondrial myopathy conducted; not FDA-approved as of 2026.',
@@ -773,6 +786,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ · IM · IV (clinical)',
     dose: '100–500 mg SubQ per session (clinic IV: 250–1,000 mg)',
     defaultDoseMcg: 100000,
+  commonVialSizes: [100, 250, 500, 1000],
     freq: 'Weekly to daily SubQ; IV cycles 5–10 days',
     reconstitution: '500 mg + 5 mL BAC = 100 mg/mL · 100 units (1 mL) = 100 mg. Push slowly — flushing/nausea is rate-dependent.',
     summary: 'Not a peptide, but included in most peptide catalogs because it\'s administered injectably alongside peptides. NAD■ is the central redox coenzyme and substrate for sirtuins and PARPs. Supplementation aims to offset the age-related decline in tissue NAD■ levels.',
@@ -842,6 +856,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ (lower abdomen or thigh)',
     dose: '0.75–1.75 mg SubQ per dose (FDA-approved label: 1.75 mg)',
     defaultDoseMcg: 1000,
+  commonVialSizes: [5, 10, 20],
     freq: 'As-needed; max 1 dose / 24h and 8 doses / month',
     reconstitution: '10 mg + 2 mL BAC = 5 mg/mL · 20 units = 1 mg',
     summary: 'FDA-approved for hypoactive sexual desire disorder (HSDD) in premenopausal women (Vyleesi, 2019). Melanocortin-4 receptor agonist acting centrally in the medial preoptic nucleus. Effective in both sexes in research; off-label use in men for erectile dysfunction is common.',
@@ -865,6 +880,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ',
     dose: '0.25–1 mg SubQ (titrate slowly from 0.25 mg)',
     defaultDoseMcg: 250,
+  commonVialSizes: [10, 20, 30],
     freq: 'Daily during loading (7–14 days), then as-needed',
     reconstitution: '10 mg + 2 mL BAC = 5 mg/mL · 2 units = 100 mcg',
     summary: 'A cyclic heptapeptide non-selective melanocortin agonist originally investigated as a pharmacologic tanning agent. Activates MC1R (melanin), MC3R, MC4R (sexual arousal), and MC5R. Side-effect profile (nausea, flushing, darkening of moles) is substantial. Not FDA-approved.',
@@ -887,6 +903,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ · IV',
     dose: '1 nmol/kg IV bolus (clinical research); 200 mcg SubQ (ad-hoc)',
     defaultDoseMcg: 200,
+  commonVialSizes: [1, 2, 5, 10],
     freq: 'Single doses in diagnostic protocols',
     reconstitution: '1 mg + 1 mL BAC = 1 mg/mL · 10 units = 100 mcg',
     summary: 'The physiologic trigger of gonadotropin-releasing hormone (GnRH) release from the hypothalamus. Used investigationally as a diagnostic agent for hypogonadotropic hypogonadism and in fertility induction. Administered for its \'testosterone boost\' effect off-label.',
@@ -956,6 +973,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ (site of desired action or general SubQ)',
     dose: '20–50 mcg/day (research); some protocols 50–80 mcg',
     defaultDoseMcg: 30,
+  commonVialSizes: [1, 2, 5, 10],
     freq: 'Once daily',
     reconstitution: 'IGF-1 LR3 must be reconstituted with 0.6% acetic acid (NOT BAC water — destroys the peptide). 1 mg + 1 mL acetic acid = 1 mg/mL · 2 units = 20 mcg. Refrigerate after reconstitution; use within 30 days.',
     summary: 'A modified IGF-1 analog with an arginine substitution at position 3 and a 13-amino-acid N-terminal extension. These modifications reduce IGF-binding-protein affinity and extend plasma half-life from <15 minutes to ~24 hours. Used for anabolic effects; hypoglycemia risk is real.',
@@ -979,6 +997,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'Intramuscular (local / site injection)',
     dose: '20–75 mcg localized (near target muscle)',
     defaultDoseMcg: 40,
+  commonVialSizes: [1, 2, 5, 10],
     freq: 'Daily or per-training-session',
     reconstitution: '1 mg + 1 mL BAC = 1 mg/mL · 5 units = 50 mcg. BAC water is acceptable; some research protocols prefer 0.6% acetic acid for extended (>30d) storage stability.',
     summary: 'An IGF-1 variant lacking the first three N-terminal amino acids, giving ~10× higher potency than native IGF-1 in vitro due to much weaker IGFBP binding. Short plasma half-life favors local/intramuscular injection for site-specific action.',
@@ -1001,6 +1020,7 @@ export const PEPTIDES: Peptide[] = [
     route: 'SubQ (local or general)',
     dose: '100–400 mcg per dose',
     defaultDoseMcg: 200,
+  commonVialSizes: [2, 5, 10],
     freq: '2–3× weekly',
     reconstitution: '2 mg + 2 mL BAC = 1 mg/mL · 20 units = 200 mcg',
     summary: 'PEGylated form of mechano growth factor, the splice variant of IGF-1 released by muscle in response to mechanical loading. PEGylation extends half-life dramatically. Theoretical role in satellite-cell activation and muscle repair; human clinical data is limited.',
@@ -1060,4 +1080,46 @@ export function peptideClassTopLevel(cls: string): string {
 
 export function findPeptide(id: string): Peptide | undefined {
   return PEPTIDES.find((p) => p.id === id);
+}
+
+/**
+ * Canonical route values used by Log Dose, dose history filters, and
+ * the site-rotation queries. Mirrors the ROUTES tuple in
+ * app/log-dose.tsx — kept in sync intentionally.
+ */
+export type DoseRoute = 'SubQ' | 'IM' | 'Oral' | 'Topical' | 'Intranasal';
+
+/** Routes where an injection site (L.Deltoid, R.Thigh, etc.) is meaningful. */
+export const INJECTION_ROUTES: ReadonlyArray<DoseRoute> = ['SubQ', 'IM'];
+
+export function isInjectionRoute(route: string | null | undefined): boolean {
+  return route === 'SubQ' || route === 'IM';
+}
+
+/**
+ * Parse a catalog peptide.route string into the canonical primary
+ * route. The catalog field is freeform editorial copy ("Intranasal
+ * (primary) · SubQ (occasional)", "SubQ or IM", "Oral (capsule)") so
+ * we look at the first recognizable token. Falls back to 'SubQ' if
+ * nothing matches — that's the catalog majority and the safest
+ * default for an unknown new entry.
+ *
+ * Examples:
+ *   "Intranasal (primary) · SubQ (occasional)" → 'Intranasal'
+ *   "SubQ or IM"                               → 'SubQ'
+ *   "Oral (capsule)"                           → 'Oral'
+ *   "IM · IV infusion"                         → 'IM'
+ *   "Oral · Transdermal"                       → 'Oral'
+ */
+export function derivePrimaryRoute(routeStr: string | null | undefined): DoseRoute {
+  if (!routeStr) return 'SubQ';
+  // Take the first segment before any "·" or " or " separator —
+  // catalog convention is "PRIMARY · secondary · …" or "A or B".
+  const first = routeStr.split(/[·]|\s+or\s+/)[0]?.trim() ?? '';
+  if (/^Intranasal/i.test(first)) return 'Intranasal';
+  if (/^Oral|Sublingual/i.test(first)) return 'Oral';
+  if (/^Topical|Transdermal/i.test(first)) return 'Topical';
+  if (/^Intramuscular|^IM\b/i.test(first)) return 'IM';
+  if (/^Subcutaneous|^SubQ\b|^SC\b/i.test(first)) return 'SubQ';
+  return 'SubQ';
 }

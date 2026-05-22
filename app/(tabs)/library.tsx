@@ -1,17 +1,25 @@
-// Library — spec v2.0 §10 "Library home". Full 42-peptide catalog.
+// Library — editorial rebuild. Same data flow (search, saved filter,
+// class filter) — all visual chrome reworked: hairline search input,
+// mono-uppercase class chips with sharp corners, hairline-divided
+// catalog list with color hairline + serif name + mono metadata.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconChevronRight, IconClose, IconSearch } from '../../components/Icons';
-import { HCodeAvatar, HSectionHeader } from '../../components/Primitives';
+import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { useEditorialTheme } from '../../lib/design/theme';
 import { listSavedPeptides } from '../../lib/db';
-import { PEPTIDE_CLASSES, PEPTIDES, peptideClassTopLevel, type Peptide } from '../../lib/peptides';
-import { useTheme } from '../../theme/ThemeContext';
-import { font, radius, space } from '../../theme/tokens';
+import {
+  PEPTIDE_CLASSES,
+  PEPTIDES,
+  peptideClassTopLevel,
+  type Peptide,
+} from '../../lib/peptides';
 
 export default function LibraryScreen() {
-  const { t } = useTheme();
+  const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -28,8 +36,6 @@ export default function LibraryScreen() {
     }, [])
   );
 
-  // Debounce the search input by 150ms — enough to cut per-keystroke work
-  // while still feeling instant.
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(query), 150);
     return () => clearTimeout(id);
@@ -57,286 +63,339 @@ export default function LibraryScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <ScrollView
-        contentContainerStyle={{
-          paddingTop: insets.top + space.md,
-          paddingBottom: 140,
-        }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={{ paddingHorizontal: space.xl }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: ed.colors.bg }}
+      contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Header */}
+      <View style={{ paddingHorizontal: 24 }}>
+        <Text
+          style={{
+            fontFamily: ed.typography.eyebrow.fontFamily,
+            fontSize: ed.typography.eyebrow.fontSize,
+            letterSpacing: ed.typography.eyebrow.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+            marginBottom: 14,
+          }}
+        >
+          {`Library · ${PEPTIDES.length}`}
+        </Text>
+        <EditorialHeadline size="title1">{`The *catalog*.`}</EditorialHeadline>
+        <Text
+          style={{
+            marginTop: 8,
+            fontFamily: ed.typography.bodySm.fontFamily,
+            fontSize: ed.typography.bodySm.fontSize,
+            lineHeight: ed.typography.bodySm.lineHeight,
+            color: ed.colors.ink3,
+          }}
+        >
+          Research-grade monographs.
+        </Text>
+
+        {/* Search */}
+        <View
+          style={{
+            marginTop: 24,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            borderTopWidth: 1,
+            borderBottomWidth: 1,
+            borderColor: ed.colors.line,
+            paddingVertical: 8,
+          }}
+        >
           <Text
             style={{
-              fontSize: 28,
-              fontFamily: font.sansBold,
-              color: t.ink,
-              letterSpacing: -0.6,
+              fontFamily: ed.typography.label.fontFamily,
+              fontSize: ed.typography.label.fontSize,
+              letterSpacing: ed.typography.label.letterSpacing,
+              color: ed.colors.ink3,
+              textTransform: 'uppercase',
             }}
           >
-            Library
+            ⌕
           </Text>
-          <Text style={{ fontSize: 13, color: t.ink3, marginTop: 2 }}>
-            {PEPTIDES.length} peptides · research-grade monographs
-          </Text>
-
-          {/* Search + saved filter */}
-          <View
+          <TextInput
+            placeholder="SEARCH PEPTIDE, CLASS, EFFECT"
+            placeholderTextColor={ed.colors.ink3}
+            value={query}
+            onChangeText={setQuery}
+            returnKeyType="search"
+            selectionColor={ed.colors.brand}
+            accessibilityLabel="Search peptides"
             style={{
-              marginTop: space.md,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
+              flex: 1,
+              fontFamily: ed.typography.dataMd.fontFamily,
+              fontSize: ed.typography.dataMd.fontSize,
+              lineHeight: ed.typography.dataMd.lineHeight,
+              letterSpacing: 0.4,
+              color: ed.colors.ink1,
+              paddingVertical: 10,
             }}
+            autoCapitalize="characters"
+          />
+          {query.length > 0 ? (
+            <Pressable
+              onPress={() => setQuery('')}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_300Light'),
+                  fontSize: 22,
+                  color: ed.colors.ink3,
+                  lineHeight: 22,
+                }}
+              >
+                ×
+              </Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => setSavedOnly((v) => !v)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: savedOnly }}
+            accessibilityLabel="Saved only"
+            hitSlop={6}
           >
-            <View
+            <Text
               style={{
-                flex: 1,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                backgroundColor: t.surface,
-                borderWidth: 1,
-                borderColor: t.line,
-                borderRadius: radius.md,
-                paddingHorizontal: 14,
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: savedOnly ? ed.colors.brand : ed.colors.ink3,
+                textTransform: 'uppercase',
               }}
             >
-              <IconSearch size={16} color={t.ink3} />
-              <TextInput
-                placeholder="Search peptide, class, or effect"
-                placeholderTextColor={t.ink3}
-                value={query}
-                onChangeText={setQuery}
-                returnKeyType="search"
-                accessibilityLabel="Search peptides"
-                style={{
-                  flex: 1,
-                  color: t.ink,
-                  fontFamily: font.sans,
-                  fontSize: 14,
-                  paddingVertical: 11,
-                }}
-              />
-              {query.length > 0 ? (
-                <Pressable
-                  onPress={() => setQuery('')}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear search"
-                >
-                  <IconClose size={14} color={t.ink3} />
-                </Pressable>
-              ) : null}
-            </View>
+              {savedOnly ? '★ Saved' : '☆ Saved'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Class chips — sharp corners, mono. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 24, gap: 6, marginTop: 18 }}
+        style={{ flexGrow: 0 }}
+      >
+        {PEPTIDE_CLASSES.map((c) => {
+          const active = c === activeCat;
+          return (
             <Pressable
-              onPress={() => setSavedOnly((v) => !v)}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: savedOnly }}
-              accessibilityLabel="Saved only"
+              key={c}
+              onPress={() => setActiveCat(c)}
               style={{
-                paddingHorizontal: 12,
-                paddingVertical: 11,
-                borderRadius: radius.md,
+                paddingVertical: 8,
+                paddingHorizontal: 14,
+                backgroundColor: active ? ed.colors.ink1 : 'transparent',
                 borderWidth: 1,
-                borderColor: savedOnly ? t.accent : t.line,
-                backgroundColor: savedOnly ? t.accentSoft : t.surface,
+                borderColor: active ? ed.colors.ink1 : ed.colors.lineStrong,
               }}
             >
               <Text
                 style={{
-                  fontSize: 13,
-                  fontFamily: font.sansSemi,
-                  color: savedOnly ? t.accentInk : t.ink2,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: active ? ed.colors.bg : ed.colors.ink2,
+                  textTransform: 'uppercase',
                 }}
               >
-                {savedOnly ? '★ Saved' : '☆ Saved'}
+                {c}
               </Text>
             </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* Saved horizontal strip */}
+      {savedPeptides.length > 0 ? (
+        <View style={{ marginTop: 32 }}>
+          <View style={{ paddingHorizontal: 24 }}>
+            <EyebrowLabel withRule>Saved</EyebrowLabel>
           </View>
-        </View>
-
-        {/* Class chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: space.xl,
-            gap: 6,
-            marginTop: space.md,
-          }}
-          style={{ flexGrow: 0 }}
-        >
-          {PEPTIDE_CLASSES.map((c) => {
-            const active = c === activeCat;
-            return (
-              <Pressable
-                key={c}
-                onPress={() => setActiveCat(c)}
-                style={{
-                  paddingVertical: 7,
-                  paddingHorizontal: 13,
-                  borderRadius: radius.pill,
-                  backgroundColor: active ? t.ink : 'transparent',
-                  borderWidth: 1,
-                  borderColor: active ? t.ink : t.line,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontFamily: font.sansMed,
-                    color: active ? t.bg : t.ink2,
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  {c}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {/* Saved section */}
-        {savedPeptides.length > 0 ? (
-          <>
-            <HSectionHeader title="Saved" />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: space.xl, gap: 10 }}
-            >
-              {savedPeptides.map((p) => (
-                <Pressable
-                  key={p.id}
-                  onPress={() => router.push(`/peptide/${p.id}` as any)}
-                  style={{
-                    minWidth: 160,
-                    backgroundColor: t.surface,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: t.line,
-                    padding: space.md,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                    <View
-                      style={{
-                        width: 6,
-                        height: 22,
-                        borderRadius: 3,
-                        backgroundColor: p.color,
-                      }}
-                    />
-                    <Text style={{ fontSize: 14, fontFamily: font.sansSemi, color: t.ink }}>
-                      {p.name}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{ fontSize: 11, color: t.ink3, marginTop: 4 }}
-                    numberOfLines={1}
-                  >
-                    {peptideClassTopLevel(p.class)} · t½ {p.halfLife}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </>
-        ) : null}
-
-        {/* Full catalog */}
-        <HSectionHeader
-          title={
-            query
-              ? `${filtered.length} result${filtered.length === 1 ? '' : 's'}`
-              : 'All peptides'
-          }
-        />
-        {filtered.length === 0 ? (
-          <View
-            style={{
-              marginHorizontal: space.xl,
-              padding: space.xl,
-              borderRadius: radius.md,
-              borderWidth: 1,
-              borderColor: t.line,
-              alignItems: 'center',
-            }}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 24, gap: 14, paddingTop: 16 }}
           >
-            <Text style={{ color: t.ink, fontFamily: font.sansSemi, fontSize: 15 }}>
-              No peptides match.
-            </Text>
-            <Text
-              style={{
-                color: t.ink3,
-                fontSize: 13,
-                marginTop: 4,
-                textAlign: 'center',
-              }}
-            >
-              Try a different search term or clear the filter.
-            </Text>
-          </View>
-        ) : (
-          <View style={{ paddingHorizontal: space.xl, gap: 8 }}>
-            {filtered.map((p) => (
+            {savedPeptides.map((p) => (
               <Pressable
                 key={p.id}
                 onPress={() => router.push(`/peptide/${p.id}` as any)}
-                style={{
-                  backgroundColor: t.surface,
-                  borderRadius: radius.md,
-                  borderWidth: 1,
-                  borderColor: t.line,
-                  padding: 14,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
+                style={{ minWidth: 180, paddingVertical: 4 }}
               >
                 <View
                   style={{
-                    width: 4,
-                    alignSelf: 'stretch',
-                    borderRadius: 2,
+                    height: 2,
                     backgroundColor: p.color,
+                    marginBottom: 12,
                   }}
                 />
-                <HCodeAvatar id={p.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3)} color={p.color} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'baseline' }}>
-                    <Text style={{ fontSize: 15, fontFamily: font.sansSemi, color: t.ink }}>
+                <Text
+                  style={{
+                    fontFamily: ed.fraunces('Fraunces_400Regular'),
+                    fontSize: 19,
+                    letterSpacing: -0.3,
+                    color: ed.colors.ink1,
+                  }}
+                  numberOfLines={1}
+                >
+                  {p.name}
+                </Text>
+                <Text
+                  style={{
+                    marginTop: 4,
+                    fontFamily: ed.typography.labelSm.fontFamily,
+                    fontSize: ed.typography.labelSm.fontSize,
+                    letterSpacing: ed.typography.labelSm.letterSpacing,
+                    color: ed.colors.ink3,
+                    textTransform: 'uppercase',
+                  }}
+                  numberOfLines={1}
+                >
+                  {peptideClassTopLevel(p.class)} · t½ {p.halfLife}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Catalog list */}
+      <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+        <EyebrowLabel withRule>
+          {query
+            ? `${filtered.length} result${filtered.length === 1 ? '' : 's'}`
+            : 'All peptides'}
+        </EyebrowLabel>
+      </View>
+      {filtered.length === 0 ? (
+        <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center' }}>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
+              fontSize: 18,
+              color: ed.colors.ink2,
+            }}
+          >
+            No matches.
+          </Text>
+          <Text
+            style={{
+              marginTop: 6,
+              fontFamily: ed.typography.bodySm.fontFamily,
+              fontSize: ed.typography.bodySm.fontSize,
+              color: ed.colors.ink3,
+              textAlign: 'center',
+            }}
+          >
+            Try a different term or clear the filter.
+          </Text>
+        </View>
+      ) : (
+        <View style={{ paddingHorizontal: 24, marginTop: 4 }}>
+          {filtered.map((p, idx) => (
+            <View key={p.id}>
+              <Pressable
+                onPress={() => router.push(`/peptide/${p.id}` as any)}
+                accessibilityRole="button"
+                accessibilityLabel={p.name}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 18,
+                  gap: 14,
+                }}
+              >
+                {/* Color hairline rule on the left replaces the avatar circle. */}
+                <View
+                  style={{ width: 2, alignSelf: 'stretch', backgroundColor: p.color }}
+                />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_400Regular'),
+                        fontSize: 19,
+                        letterSpacing: -0.3,
+                        color: ed.colors.ink1,
+                      }}
+                    >
                       {p.name}
                     </Text>
-                    <Text style={{ fontSize: 10, color: t.ink3, fontFamily: font.sansSemi, letterSpacing: 0.5 }}>
+                    <Text
+                      style={{
+                        fontFamily: ed.typography.labelSm.fontFamily,
+                        fontSize: ed.typography.labelSm.fontSize,
+                        letterSpacing: ed.typography.labelSm.letterSpacing,
+                        color: ed.colors.ink3,
+                        textTransform: 'uppercase',
+                      }}
+                    >
                       {peptideClassTopLevel(p.class)}
                     </Text>
+                    {savedSet.has(p.id) ? (
+                      <Text
+                        style={{
+                          fontFamily: ed.typography.labelSm.fontFamily,
+                          fontSize: ed.typography.labelSm.fontSize,
+                          color: ed.colors.brand,
+                        }}
+                      >
+                        ★
+                      </Text>
+                    ) : null}
                   </View>
                   <Text
-                    style={{ fontSize: 12, color: t.ink3, marginTop: 2 }}
+                    style={{
+                      fontFamily: ed.typography.bodySm.fontFamily,
+                      fontSize: ed.typography.bodySm.fontSize,
+                      color: ed.colors.ink2,
+                    }}
                     numberOfLines={1}
                   >
                     {p.subtitle}
                   </Text>
-                  <View style={{ flexDirection: 'row', gap: 4, marginTop: 6, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
-                      t½ {p.halfLife}
-                    </Text>
-                    {p.citations.length > 0 ? (
-                      <Text style={{ fontSize: 11, color: t.ink3, fontFamily: font.mono }}>
-                        {' · '}
-                        {p.citations.length} cite{p.citations.length === 1 ? '' : 's'}
-                      </Text>
-                    ) : null}
-                  </View>
+                  <Text
+                    style={{
+                      fontFamily: ed.typography.labelSm.fontFamily,
+                      fontSize: ed.typography.labelSm.fontSize,
+                      letterSpacing: ed.typography.labelSm.letterSpacing,
+                      color: ed.colors.ink3,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    t½ {p.halfLife}
+                    {p.citations.length > 0
+                      ? ` · ${p.citations.length} cite${p.citations.length === 1 ? '' : 's'}`
+                      : ''}
+                  </Text>
                 </View>
-                <IconChevronRight size={14} color={t.ink4} />
+                <Text
+                  style={{
+                    fontFamily: ed.fraunces('Fraunces_300Light'),
+                    fontSize: 24,
+                    color: ed.colors.ink3,
+                  }}
+                >
+                  →
+                </Text>
               </Pressable>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+              {idx < filtered.length - 1 ? <HairlineRow /> : null}
+            </View>
+          ))}
+        </View>
+      )}
+    </ScrollView>
   );
 }

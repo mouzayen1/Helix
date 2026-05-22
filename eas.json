@@ -14,14 +14,32 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
+    "preview-ios": {
+      "distribution": "store",
+      "channel": "preview",
+      "environment": "preview",
+      "autoIncrement": true,
+      "ios": {
+        "simulator": false
       }
     },
     "production": {
-      "autoIncrement": true,
       "channel": "production"
     }
   },
   "submit": {
+    "preview-ios": {
+      "ios": {
+        "appleId": "drpepperandhookah@gmail.com",
+        "ascAppId": "6769559763",
+        "appleTeamId": "PUHZTA99Y2"
+      }
+    },
     "production": {}
   }
 }
