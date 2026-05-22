@@ -42,7 +42,30 @@
       </div>
     </section>
 
-    <hr class="rule strong" />
+    <!-- App showcase -->
+    <section class="showcase" id="inside">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">A look inside</span>
+          <h2>Designed like a <em>research journal</em>.</h2>
+          <p>Cream paper, antique brass, real data &mdash; not another neon dashboard. Here's the app itself: the daily schedule, the reconstitution calculator, and a live cycle.</p>
+        </div>
+        <div class="phones">
+          <div class="phone">
+            <div class="frame"><img src="/app-today.png" alt="Helix Today screen showing the day's dose schedule" /></div>
+            <div class="cap"><span class="eyebrow">Today</span><div class="t">Your day at a glance</div></div>
+          </div>
+          <div class="phone">
+            <div class="frame"><img src="/app-reconstitute.png" alt="Helix reconstitution calculator with syringe diagram" /></div>
+            <div class="cap"><span class="eyebrow">Reconstitute</span><div class="t">The math, done for you</div></div>
+          </div>
+          <div class="phone">
+            <div class="frame"><img src="/app-cycle.png" alt="Helix cycle detail with phase timeline" /></div>
+            <div class="cap"><span class="eyebrow">Cycle</span><div class="t">Track every phase</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- What it is -->
     <section class="block" id="what">
@@ -64,31 +87,80 @@
         </div>
         <div class="grid">
           <div class="cell">
+            <div class="fv">
+              <span class="fv-bar" style="background:#0A8E83;"></span>
+              <div>
+                <div class="fv-eye" style="color:#0A8E83;">Healing / Regenerative</div>
+                <div class="fv-serif">BPC-157</div>
+                <div class="fv-data">1419.53 g/mol &middot; t&frac12; ~15&ndash;30m</div>
+              </div>
+            </div>
             <span class="eyebrow">Catalog</span>
             <h3>43 sourced monographs</h3>
             <p>Sequence, molecular weight, half-life, research dose range, reconstitution, mechanism, and citations for each peptide.</p>
           </div>
           <div class="cell">
+            <div class="fv fv-trio">
+              <div><div class="fv-num" style="color:var(--brand);">2.50</div><div class="fv-lab">mg/mL</div></div>
+              <div><div class="fv-num">10.0</div><div class="fv-lab">units</div></div>
+              <div><div class="fv-num">20</div><div class="fv-lab">doses</div></div>
+            </div>
             <span class="eyebrow">Calculator</span>
             <h3>Reconstitution math</h3>
             <p>Enter vial strength and BAC water; Helix returns concentration, units per draw, and a calibrated syringe diagram. A reverse mode solves for the BAC water that yields a clean draw.</p>
           </div>
           <div class="cell">
+            <div class="fv">
+              <svg width="62" height="62" viewBox="0 0 62 62">
+                <circle cx="31" cy="31" r="28" fill="none" stroke="#e0d7c6" stroke-width="2"/>
+                <circle cx="31" cy="31" r="28" fill="none" stroke="#8b6914" stroke-width="3" stroke-linecap="round" stroke-dasharray="175.9" stroke-dashoffset="119.6" transform="rotate(-90 31 31)"/>
+                <text x="31" y="37" text-anchor="middle" font-family="Fraunces, serif" font-size="18" fill="#1a1714">32</text>
+              </svg>
+              <div>
+                <div class="fv-serif" style="margin-top:0;">Recovery Stack</div>
+                <div class="fv-data">Day 9 of 28 &middot; Loading</div>
+              </div>
+            </div>
             <span class="eyebrow">Cycles</span>
             <h3>Cycle &amp; vial tracking</h3>
             <p>Run multiple concurrent protocols, track vial life and remaining volume, and see today's schedule merged across every active cycle.</p>
           </div>
           <div class="cell">
+            <div class="fv" style="display:block;">
+              <div class="fv-eye">Weight &middot; 12 weeks</div>
+              <svg width="100%" height="56" viewBox="0 0 248 56" preserveAspectRatio="none" style="margin-top:6px;">
+                <line x1="0" y1="52" x2="248" y2="52" stroke="#e0d7c6" stroke-width="1"/>
+                <polyline points="6,16 46,21 86,15 126,26 166,33 206,40 242,46" fill="none" stroke="#8b6914" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
+                <g fill="#8b6914">
+                  <circle cx="6" cy="16" r="2.5"/><circle cx="86" cy="15" r="2.5"/><circle cx="166" cy="33" r="2.5"/><circle cx="242" cy="46" r="3"/>
+                </g>
+              </svg>
+            </div>
             <span class="eyebrow">Records</span>
             <h3>Doses, journal &amp; metrics</h3>
             <p>Log doses with site rotation, keep a research journal, and chart weight, sleep, labs, and other metrics over time.</p>
           </div>
           <div class="cell">
+            <div class="fv">
+              <div class="fv-notif">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z" stroke="#8b6914" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 20a2 2 0 004 0" stroke="#8b6914" stroke-width="1.6" stroke-linecap="round"/></svg>
+                <div class="txt"><div class="n1">BPC-157 &middot; 250 mcg</div><div class="n2">Morning dose</div></div>
+                <span class="due">Due now</span>
+              </div>
+            </div>
             <span class="eyebrow">Reminders</span>
             <h3>On-device reminders</h3>
             <p>Optional local notifications for upcoming doses. Scheduled entirely on your device — no remote push, no tracking.</p>
           </div>
           <div class="cell">
+            <div class="fv fv-center">
+              <svg width="66" height="66" viewBox="0 0 66 66" fill="none">
+                <rect x="20" y="8" width="26" height="50" rx="5" stroke="#544d44" stroke-width="1.6"/>
+                <rect x="27" y="26" width="12" height="11" rx="2" fill="#8b6914"/>
+                <path d="M29 26v-3a4 4 0 018 0v3" stroke="#8b6914" stroke-width="1.6"/>
+                <circle cx="33" cy="31" r="1.6" fill="#fffbf2"/>
+              </svg>
+            </div>
             <span class="eyebrow">Privacy</span>
             <h3>Your data stays with you</h3>
             <p>Your logs &mdash; doses, vials, cycles, journal, metrics &mdash; are stored locally on your device. We never sell data and run no analytics or ad trackers.</p>

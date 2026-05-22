@@ -168,6 +168,47 @@ footer.site .legal { color: var(--ink3); font-size: 13px; margin-top: 28px; max-
   border-left: 2px solid var(--brand); font-size: 15px; color: var(--ink2);
 }
 
+/* ---- App showcase (framed phones) ---- */
+.showcase { background: var(--bg-recessed); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+.showcase .wrap { padding: clamp(48px, 8vw, 84px) 24px; }
+.showcase .section-head { max-width: 56ch; }
+.showcase .section-head h2 { margin-top: 14px; }
+.showcase .section-head p { margin-top: 16px; color: var(--ink2); }
+.phones { display: flex; gap: 26px; margin-top: 44px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x mandatory; }
+.phone { flex: 0 0 auto; width: 236px; scroll-snap-align: center; }
+.phone .frame {
+  border-radius: 34px; background: #fffbf2; padding: 9px;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 28px 64px -24px rgba(26,23,20,.40), 0 2px 0 rgba(26,23,20,.05);
+}
+.phone .frame img { width: 100%; display: block; border-radius: 26px; }
+.phone .cap { margin-top: 16px; }
+.phone .cap .eyebrow { color: var(--brand); }
+.phone .cap .t { font-family: 'Fraunces', Georgia, serif; font-size: 18px; color: var(--ink1); margin-top: 6px; letter-spacing: -.01em; }
+
+/* ---- Per-feature visual snippets ---- */
+.grid .cell .fv {
+  height: 96px; margin: -2px 0 18px; padding-bottom: 18px;
+  border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px;
+}
+.fv-eye { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink3); }
+.fv-serif { font-family: 'Fraunces', Georgia, serif; font-size: 19px; color: var(--ink1); letter-spacing: -.01em; margin: 2px 0 1px; }
+.fv-data { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink3); }
+.fv-num { font-family: 'Fraunces', Georgia, serif; font-size: 25px; color: var(--ink1); line-height: 1; letter-spacing: -.02em; }
+.fv-lab { font-family: 'DM Mono', monospace; font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); margin-top: 5px; }
+.fv-trio { justify-content: space-between; }
+.fv-trio > div { text-align: center; }
+.fv-bar { width: 4px; height: 62px; border-radius: 2px; flex: 0 0 4px; }
+.fv-notif {
+  width: 100%; background: var(--bg-elevated); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; display: flex; align-items: center; gap: 11px;
+}
+.fv-notif .txt { flex: 1; }
+.fv-notif .n1 { font-family: 'Fraunces', Georgia, serif; font-size: 15px; color: var(--ink1); }
+.fv-notif .n2 { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); margin-top: 2px; }
+.fv-notif .due { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--brand); }
+.fv-center { justify-content: center; }
+
 @media (max-width: 600px) {
   body { font-size: 16px; }
   header.site nav a:not(.signin) { display: none; }

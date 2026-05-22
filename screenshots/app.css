@@ -1,0 +1,181 @@
+/* Helix app UI — faithful web recreation of the editorial light (cream)
+   theme from lib/design/tokens.ts, used to render App Store screenshots
+   and the landing-page app visuals. Logical px = on-device px (screen
+   width 412); Playwright renders at 3x for crispness. */
+
+/* ---- Brand fonts (local ttf from @expo-google-fonts) ---- */
+@font-face { font-family:'Fraunces'; src:url('./fonts/Fraunces_400Regular.ttf'); font-weight:400; font-style:normal; }
+@font-face { font-family:'Fraunces'; src:url('./fonts/Fraunces_400Regular_Italic.ttf'); font-weight:400; font-style:italic; }
+@font-face { font-family:'Fraunces'; src:url('./fonts/Fraunces_500Medium.ttf'); font-weight:500; font-style:normal; }
+@font-face { font-family:'Fraunces'; src:url('./fonts/Fraunces_500Medium_Italic.ttf'); font-weight:500; font-style:italic; }
+@font-face { font-family:'Fraunces'; src:url('./fonts/Fraunces_300Light.ttf'); font-weight:300; font-style:normal; }
+@font-face { font-family:'Fraunces'; src:url('./fonts/Fraunces_600SemiBold.ttf'); font-weight:600; font-style:normal; }
+@font-face { font-family:'DM Mono'; src:url('./fonts/DMMono_400Regular.ttf'); font-weight:400; }
+@font-face { font-family:'DM Mono'; src:url('./fonts/DMMono_500Medium.ttf'); font-weight:500; }
+@font-face { font-family:'Inter'; src:url('./fonts/Inter_400Regular.ttf'); font-weight:400; }
+@font-face { font-family:'Inter'; src:url('./fonts/Inter_500Medium.ttf'); font-weight:500; }
+
+:root {
+  --bg:#F5F0E6; --bgCard:#EDE6D7; --bgElevated:#FFFBF2; --bgRecessed:#E5DCC9;
+  --brand:#8B6914; --brandSoft:rgba(139,105,20,0.10); --brandLine:rgba(139,105,20,0.32);
+  --ink1:#1A1714; --ink2:#544D44; --ink3:#857B6E; --ink4:#B5AA9C; --inkDis:#D6CCBC;
+  --line:rgba(26,23,20,0.10); --lineStrong:rgba(26,23,20,0.20);
+  --optimal:#0F766E; --good:#15803D; --moderate:#B45309; --low:#C2410C; --warn:#B91C1C;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { background:#9b9183; }
+
+/* Serif headline weights: light mode bumps 300->400, 400->500.
+   .headline = display (400), .title = title (500). */
+.serif    { font-family:'Fraunces',Georgia,serif; }
+.mono     { font-family:'DM Mono',monospace; }
+.body     { font-family:'Inter',system-ui,sans-serif; }
+
+/* ---- Phone screen frame ---- */
+.screen {
+  width:412px; height:824px; background:var(--bg); position:relative;
+  overflow:hidden; font-family:'Inter',system-ui,sans-serif; color:var(--ink1);
+  display:flex; flex-direction:column;
+}
+
+/* status bar */
+.statusbar {
+  height:44px; flex:0 0 44px; display:flex; align-items:center;
+  justify-content:space-between; padding:0 22px 0 26px;
+}
+.statusbar .time { font-family:'DM Mono',monospace; font-weight:500; font-size:14px; color:var(--ink1); letter-spacing:.5px; }
+.statusbar .sys { display:flex; align-items:center; gap:6px; color:var(--ink1); }
+.statusbar .sys svg { display:block; }
+
+/* scroll body */
+.content { flex:1 1 auto; overflow:hidden; padding:0 22px; }
+.content.pad-bottom { padding-bottom:8px; }
+
+/* ---- top headers (stacked screens) ---- */
+.navbar { display:flex; align-items:center; justify-content:space-between; height:48px; }
+.navbar .nav-btn { font-family:'Fraunces',serif; font-weight:300; font-size:26px; color:var(--ink1); line-height:1; }
+.navbar .nav-title { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:2.5px; text-transform:uppercase; color:var(--ink3); }
+.navbar .nav-link { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brand); }
+.navbar .spacer { width:26px; }
+
+/* ---- type primitives ---- */
+.eyebrow { font-family:'DM Mono',monospace; font-weight:500; font-size:10px; letter-spacing:2.5px; text-transform:uppercase; color:var(--ink3); }
+.eyebrow.brand { color:var(--brand); }
+.eyebrow.warn { color:var(--warn); }
+.eyebrow-row { display:flex; align-items:center; gap:12px; }
+.eyebrow-row .rule { flex:1; height:1px; background:var(--line); }
+
+.label { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); }
+.labelSm { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.8px; text-transform:uppercase; }
+.data { font-family:'DM Mono',monospace; font-weight:500; font-size:14px; color:var(--ink1); }
+.dataLg { font-family:'DM Mono',monospace; font-weight:500; font-size:18px; letter-spacing:-.3px; color:var(--ink1); }
+
+.headline { font-family:'Fraunces',serif; font-weight:400; font-size:30px; line-height:1.05; letter-spacing:-1px; color:var(--ink1); }
+.headline .ital { font-style:italic; color:var(--ink2); }
+.title { font-family:'Fraunces',serif; font-weight:500; font-size:22px; line-height:1.2; letter-spacing:-.4px; color:var(--ink1); }
+.title.lg { font-size:26px; letter-spacing:-.6px; }
+.subtitle { font-family:'Fraunces',serif; font-weight:400; font-style:italic; font-size:16px; color:var(--ink2); line-height:1.35; }
+.bodytext { font-family:'Inter',sans-serif; font-size:14px; line-height:1.55; color:var(--ink2); }
+
+/* hairlines */
+.hairline { height:1px; background:var(--line); }
+.hairline.strong { background:var(--lineStrong); }
+
+/* ---- hero ring (svg drawn inline per screen) ---- */
+.hero-wrap { display:flex; flex-direction:column; align-items:center; }
+.hero-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.hero-center .num { font-family:'Fraunces',serif; font-weight:300; line-height:1; }
+.hero-center .unit { font-family:'Fraunces',serif; font-weight:300; }
+.hero-label { font-family:'DM Mono',monospace; font-weight:500; font-size:10px; letter-spacing:2.5px; text-transform:uppercase; color:var(--ink3); margin-top:14px; }
+
+/* ---- stat pair ---- */
+.statpair { display:flex; }
+.statpair .cell { flex:1; padding:24px 0; text-align:center; }
+.statpair .cell + .cell { border-left:1px solid var(--line); }
+.statpair .cell .lab { font-family:'DM Mono',monospace; font-weight:500; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); margin-bottom:8px; }
+.statpair .cell .v { font-family:'Fraunces',serif; font-weight:400; font-size:38px; letter-spacing:-1px; color:var(--ink1); display:inline-flex; align-items:baseline; }
+.statpair .cell .v .u { font-size:15px; color:var(--ink3); margin-left:2px; }
+
+/* ---- schedule item ---- */
+.sched { display:flex; align-items:flex-start; gap:14px; padding:16px 0; }
+.sched .time { width:42px; flex:0 0 42px; font-family:'DM Mono',monospace; font-weight:500; font-size:13px; color:var(--ink2); padding-top:3px; }
+.sched .mid { flex:1; min-width:0; }
+.sched .cap { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.8px; text-transform:uppercase; color:var(--brand); margin-bottom:3px; }
+.sched .ttl { font-family:'Fraunces',serif; font-weight:400; font-size:19px; line-height:1.15; letter-spacing:-.3px; color:var(--ink1); }
+.sched .det { display:flex; align-items:baseline; gap:7px; margin-top:3px; }
+.sched .det .dose { font-family:'DM Mono',monospace; font-weight:500; font-size:13px; color:var(--ink1); }
+.sched .det .dose .du { color:var(--ink3); font-size:11px; }
+.sched .det .dt { font-family:'Inter',sans-serif; font-size:13px; color:var(--ink3); }
+.sched .right { display:flex; align-items:center; gap:8px; padding-top:3px; }
+.sched .st { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.8px; text-transform:uppercase; }
+.sched .st.next { color:var(--optimal); }
+.sched .st.up { color:var(--ink3); }
+.sched .st.logged { color:var(--ink4); }
+.sched .st.over { color:var(--warn); }
+.sched .chev { font-family:'Fraunces',serif; font-weight:300; font-size:20px; color:var(--brand); }
+.sched.done { opacity:.4; }
+.sched.done .ttl { text-decoration:line-through; }
+
+/* ---- data row ---- */
+.drow { display:flex; align-items:center; justify-content:space-between; padding:20px 0; gap:12px; }
+.drow .k { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); }
+.drow .val { display:flex; align-items:baseline; gap:5px; }
+.drow .val .vv { font-family:'Fraunces',serif; font-weight:400; font-size:22px; letter-spacing:-.4px; color:var(--ink1); }
+.drow .val .uu { font-family:'DM Mono',monospace; font-weight:500; font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink3); }
+.drow .stepper { display:flex; align-items:center; gap:16px; }
+.drow .stepper .pm { font-family:'Fraunces',serif; font-weight:300; font-size:22px; color:var(--ink3); width:18px; text-align:center; }
+
+/* ---- chips / tabs ---- */
+.chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chip { font-family:'DM Mono',monospace; font-weight:500; font-size:12px; letter-spacing:.5px; padding:9px 14px; border:1px solid var(--lineStrong); border-radius:4px; color:var(--ink1); background:transparent; }
+.chip.on { background:var(--ink1); color:var(--bg); border-color:var(--ink1); }
+.tabs2 { display:flex; gap:8px; }
+.tabs2 .t { flex:1; text-align:center; font-family:'DM Mono',monospace; font-weight:500; font-size:12px; letter-spacing:.5px; padding:11px 0; border:1px solid var(--lineStrong); border-radius:4px; color:var(--ink2); }
+.tabs2 .t.on { background:var(--ink1); color:var(--bg); border-color:var(--ink1); }
+
+.tabbar-doc { display:flex; gap:22px; border-bottom:1px solid var(--line); }
+.tabbar-doc .t { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ink3); padding:0 0 12px; position:relative; }
+.tabbar-doc .t.on { color:var(--ink1); }
+.tabbar-doc .t.on::after { content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--ink1); }
+
+/* tags */
+.tags { display:flex; flex-wrap:wrap; gap:8px; }
+.tag { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:.5px; padding:7px 12px; border:1px solid var(--brandLine); border-radius:4px; color:var(--brand); }
+
+/* protocol / list rows */
+.prow { display:flex; align-items:center; gap:12px; padding:15px 0; }
+.prow .dot { width:7px; height:7px; border-radius:50%; flex:0 0 7px; }
+.prow .pname { font-family:'Fraunces',serif; font-weight:400; font-size:18px; letter-spacing:-.2px; color:var(--ink1); flex:1; }
+.prow .pmeta { font-family:'DM Mono',monospace; font-weight:500; font-size:12px; color:var(--ink2); }
+.prow .pmeta .dim { color:var(--ink3); }
+
+/* mini dials row */
+.dials { display:flex; gap:18px; padding:4px 0 2px; }
+.dial { display:flex; flex-direction:column; align-items:center; width:64px; }
+.dial .dlabel { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink3); margin-top:8px; text-align:center; white-space:nowrap; }
+.dial .dnum { font-family:'Fraunces',serif; font-weight:400; font-size:20px; margin-top:8px; }
+
+/* buttons */
+.btn-row { display:flex; gap:12px; }
+.btn { flex:1; text-align:center; font-family:'Inter',sans-serif; font-weight:500; font-size:14px; padding:15px 0; background:var(--ink1); color:var(--bg); border-radius:4px; }
+.btn.sec { background:transparent; color:var(--ink1); border:1px solid var(--lineStrong); }
+.btn.full { width:100%; }
+.btn.brand { background:var(--brand); }
+
+/* draw callout */
+.draw-num { font-family:'Fraunces',serif; font-weight:300; font-size:60px; line-height:1; letter-spacing:-3px; color:var(--ink1); }
+
+/* bottom tab bar */
+.tabbar { flex:0 0 auto; display:flex; border-top:1px solid var(--line); background:var(--bgElevated); padding:10px 0 18px; }
+.tabbar .tb { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; }
+.tabbar .tb .ic { width:22px; height:22px; }
+.tabbar .tb .tl { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink3); }
+.tabbar .tb.on .tl { color:var(--ink1); }
+
+/* misc */
+.warnline { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.6px; text-transform:uppercase; color:var(--warn); }
+.section { margin-top:22px; }
+.mt12{margin-top:12px;} .mt16{margin-top:16px;} .mt20{margin-top:20px;} .mt8{margin-top:8px;} .mt4{margin-top:4px;}
+.colorbar { width:56px; height:3px; border-radius:2px; }
+.center { text-align:center; }

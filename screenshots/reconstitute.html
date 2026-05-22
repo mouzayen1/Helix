@@ -1,0 +1,108 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css">
+<style>.statpair .cell{padding:14px 0;}</style></head>
+<body>
+<div class="screen">
+  <div class="statusbar">
+    <span class="time">9:41</span>
+    <span class="sys">
+      <svg width="18" height="12" viewBox="0 0 18 12"><g fill="#1A1714"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></g></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M8 11l2.2-2.8a3.2 3.2 0 00-4.4 0L8 11z" fill="#1A1714"/><path d="M3 5.4a7.5 7.5 0 0110 0" stroke="#1A1714" stroke-width="1.5" stroke-linecap="round"/><path d="M5.4 7.7a4.2 4.2 0 015.2 0" stroke="#1A1714" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <svg width="26" height="13" viewBox="0 0 26 13"><rect x="0.5" y="0.5" width="22" height="12" rx="3" fill="none" stroke="#1A1714" opacity="0.4"/><rect x="2" y="2" width="18" height="9" rx="1.5" fill="#1A1714"/><rect x="23.5" y="4.5" width="2" height="4" rx="1" fill="#1A1714" opacity="0.5"/></svg>
+    </span>
+  </div>
+
+  <div class="content">
+    <div class="navbar">
+      <span class="nav-btn">×</span>
+      <span class="nav-title">Reconstitute</span>
+      <span class="spacer"></span>
+    </div>
+
+    <div class="headline" style="margin-top:6px;">Mix a <span class="ital">new</span> vial.</div>
+    <div class="bodytext" style="margin-top:8px;">We'll tell you exactly how much BAC water to draw.</div>
+
+    <!-- peptide -->
+    <div class="eyebrow-row section" style="margin-top:12px;"><span class="eyebrow">Peptide</span><span class="rule"></span></div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="prow" style="padding:0;"><span class="dot" style="background:#0A8E83; width:8px; height:8px;"></span></span>
+        <div>
+          <div class="title" style="font-size:24px;">BPC-157</div>
+          <div class="data" style="font-size:12px; color:var(--ink3); margin-top:1px;">Healing / Regenerative</div>
+        </div>
+      </div>
+      <span class="serif" style="font-weight:300; font-size:22px; color:var(--brand);">▾</span>
+    </div>
+
+    <!-- strength -->
+    <div class="eyebrow-row section" style="margin-top:12px;"><span class="eyebrow">Vial strength</span><span class="rule"></span></div>
+    <div class="chips mt12">
+      <span class="chip">2 mg</span><span class="chip on">5 mg</span><span class="chip">10 mg</span><span class="chip">15 mg</span>
+    </div>
+
+    <!-- inputs -->
+    <div class="drow" style="padding:11px 0; margin-top:8px;"><span class="k">Vial strength</span><div class="stepper"><span class="pm">−</span><span class="val"><span class="vv">5</span><span class="uu">mg</span></span><span class="pm">+</span></div></div>
+    <div class="hairline"></div>
+    <div class="drow" style="padding:11px 0;"><span class="k">BAC water</span><div class="stepper"><span class="pm">−</span><span class="val"><span class="vv">2.0</span><span class="uu">mL</span></span><span class="pm">+</span></div></div>
+    <div class="hairline"></div>
+    <div class="drow" style="padding:11px 0;"><span class="k">Target dose</span><div class="stepper"><span class="pm">−</span><span class="val"><span class="vv">250</span><span class="uu">mcg</span></span><span class="pm">+</span></div></div>
+
+    <!-- result -->
+    <div class="hairline strong" style="margin-top:4px;"></div>
+    <div class="statpair">
+      <div class="cell"><div class="lab">Concentration</div><div class="v" style="color:var(--brand);">2.50<span class="u">mg/mL</span></div></div>
+      <div class="cell"><div class="lab">Per 250 mcg</div><div class="v">10.0<span class="u">u</span></div></div>
+      <div class="cell"><div class="lab">Doses</div><div class="v">20</div></div>
+    </div>
+    <div class="hairline strong"></div>
+    <div class="data center" style="font-size:12px; color:var(--ink3); margin-top:8px;">= 0.100 mL per dose · ~20 days</div>
+
+    <!-- draw -->
+    <div class="eyebrow-row section" style="margin-top:12px;"><span class="eyebrow">Draw</span><span class="rule"></span></div>
+    <div style="display:flex; align-items:baseline; gap:12px; margin-top:6px;">
+      <span class="draw-num">10</span>
+      <span class="label" style="font-size:12px;">Units · U-100</span>
+    </div>
+    <div class="data" style="font-size:12px; color:var(--ink3); margin-top:2px;">= 0.10 mL · 250 mcg per dose</div>
+
+    <div style="margin-top:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span class="labelSm" style="color:var(--ink3);">0.3 mL · U-100</span>
+        <div class="chips"><span class="chip" style="padding:5px 9px; font-size:10px;">0.3 ★</span><span class="chip" style="padding:5px 9px; font-size:10px;">0.5</span><span class="chip" style="padding:5px 9px; font-size:10px;">1.0</span></div>
+      </div>
+      <svg style="width:300px; display:block; margin:2px auto 0;" viewBox="0 0 368 96">
+        <!-- needle -->
+        <line x1="6" y1="48" x2="40" y2="48" stroke="#B5AA9C" stroke-width="2"/>
+        <path d="M40 43 h12 v10 h-12 z" fill="#B5AA9C"/>
+        <!-- barrel -->
+        <rect x="52" y="34" width="268" height="28" rx="2" fill="#FFFBF2" stroke="rgba(26,23,20,0.20)"/>
+        <!-- liquid fill to 10u (1/3 of 30u) -->
+        <rect x="55" y="37" width="85" height="22" fill="#8B6914" opacity="0.85"/>
+        <!-- ticks -->
+        <g stroke="#857B6E" stroke-width="1">
+          <line x1="58" y1="34" x2="58" y2="46"/><line x1="100.6" y1="34" x2="100.6" y2="42"/>
+          <line x1="143.3" y1="34" x2="143.3" y2="46"/><line x1="185.9" y1="34" x2="185.9" y2="42"/>
+          <line x1="228.5" y1="34" x2="228.5" y2="46"/><line x1="271.2" y1="34" x2="271.2" y2="42"/>
+          <line x1="313.8" y1="34" x2="313.8" y2="46"/>
+        </g>
+        <!-- plunger at 10u mark -->
+        <rect x="140" y="28" width="7" height="40" fill="#1A1714"/>
+        <rect x="147" y="44" width="200" height="8" fill="none" stroke="#B5AA9C" stroke-width="1.5"/>
+        <rect x="345" y="34" width="14" height="28" rx="2" fill="#B5AA9C"/>
+        <!-- numeric labels -->
+        <g fill="#857B6E" font-family="DM Mono" font-size="9">
+          <text x="58" y="78" text-anchor="middle">0</text>
+          <text x="143.3" y="78" text-anchor="middle">10</text>
+          <text x="228.5" y="78" text-anchor="middle">20</text>
+          <text x="313.8" y="78" text-anchor="middle">30</text>
+        </g>
+        <!-- caption -->
+        <text x="143" y="92" text-anchor="middle" fill="#8B6914" font-family="DM Mono" font-size="9" letter-spacing="1.5">DRAW TO 10 U</text>
+      </svg>
+      <div style="display:flex; justify-content:space-between; margin-top:6px;">
+        <span class="labelSm" style="color:var(--ink3);">1 u = 0.01 mL</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>
