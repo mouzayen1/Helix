@@ -24,8 +24,9 @@
       "package": "com.omniaworks.helix",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#0A8E83",
-        "foregroundImage": "./assets/images/android-icon-foreground.png"
+        "backgroundColor": "#F3EDDE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "intentFilters": [
@@ -61,7 +62,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0A8E83",
+          "backgroundColor": "#F3EDDE",
           "dark": {
             "backgroundColor": "#0E1113"
           }
