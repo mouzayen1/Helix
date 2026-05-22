@@ -229,14 +229,14 @@ export default function SignUpScreen() {
           By continuing, you confirm you&apos;re 18 or older and agree to our{' '}
           <Text
             style={{ color: ed.colors.brand, textDecorationLine: 'underline' }}
-            onPress={() => Linking.openURL('https://gethelix.app/terms').catch(() => {})}
+            onPress={() => Linking.openURL('https://gethelixapp.org/terms').catch(() => {})}
           >
             Terms
           </Text>
           ,{' '}
           <Text
             style={{ color: ed.colors.brand, textDecorationLine: 'underline' }}
-            onPress={() => Linking.openURL('https://gethelix.app/privacy').catch(() => {})}
+            onPress={() => Linking.openURL('https://gethelixapp.org/privacy').catch(() => {})}
           >
             Privacy Policy
           </Text>

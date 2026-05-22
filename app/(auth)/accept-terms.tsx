@@ -156,13 +156,13 @@ export default function AcceptTermsScreen() {
           checked={terms}
           onToggle={() => setTerms((v) => !v)}
           label="I accept the Helix Terms of Service."
-          link={{ label: 'Read Terms', url: 'https://gethelix.app/terms' }}
+          link={{ label: 'Read Terms', url: 'https://gethelixapp.org/terms' }}
         />
         <ToggleRow
           checked={privacy}
           onToggle={() => setPrivacy((v) => !v)}
           label="I accept the Privacy Policy and Research Disclaimer."
-          link={{ label: 'Read Privacy & Disclaimer', url: 'https://gethelix.app/privacy' }}
+          link={{ label: 'Read Privacy & Disclaimer', url: 'https://gethelixapp.org/privacy' }}
         />
       </View>
 
