@@ -3,10 +3,13 @@
 // a square brass tile that aligns with the bar baseline. Icons are
 // retained as 1.2-px hairline glyphs for scan speed.
 import { Tabs, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { getAuthState, subscribeAuth, type AuthState } from '../../lib/auth/session';
+import { isAuthConfigured } from '../../lib/supabase';
 
 type TabItem = {
   name: string;
@@ -146,6 +149,20 @@ function CustomTabBar({ state, navigation }: any) {
 }
 
 export default function TabsLayout() {
+  // Auth guard. Tab screens issue user-scoped SQLite reads via
+  // useFocusEffect on mount; without a current user_id those throw from
+  // requireUserId(). RootGate's redirect to /(auth)/sign-up runs in an
+  // effect AFTER this layout has mounted, so we'd briefly mount the
+  // child screens and surface their rejected promises. Holding the
+  // render here until auth is resolved (signed-in, or unconfigured →
+  // legacy local-only flow) prevents that.
+  const [authState, setAuthState] = useState<AuthState>(getAuthState());
+  useEffect(() => {
+    setAuthState(getAuthState());
+    return subscribeAuth(setAuthState);
+  }, []);
+  if (isAuthConfigured() && authState.status !== 'signed-in') return null;
+
   return (
     <Tabs tabBar={(p) => <CustomTabBar {...p} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" />
