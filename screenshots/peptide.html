@@ -1,4 +1,10 @@
-<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css"></head>
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css">
+<style>
+  .mrow { display:flex; gap:18px; padding:17px 0; align-items:baseline; }
+  .mrow .mk { flex:0 0 96px; font-family:'DM Mono',monospace; font-weight:500; font-size:10px; letter-spacing:1.8px; text-transform:uppercase; color:var(--ink3); line-height:1.4; }
+  .mrow .mv { flex:1; text-align:right; font-family:'Fraunces',serif; font-weight:500; font-size:18px; line-height:1.3; letter-spacing:-.3px; color:var(--ink1); }
+  .recon { font-family:'DM Mono',monospace; font-weight:500; font-size:15px; line-height:1.5; color:var(--ink1); letter-spacing:-.2px; }
+</style></head>
 <body>
 <div class="screen">
   <div class="statusbar">
@@ -11,51 +17,41 @@
   </div>
 
   <div class="content">
-    <div class="navbar">
+    <div class="navbar" style="padding-top:4px;">
       <span class="nav-btn">←</span>
       <span class="nav-link">☆ Save</span>
     </div>
 
-    <div class="colorbar" style="background:#0A8E83; margin-top:4px;"></div>
-    <div class="eyebrow" style="color:#0A8E83; margin-top:12px;">Healing / Regenerative</div>
-    <div class="headline" style="font-size:40px; letter-spacing:-1.5px; margin-top:8px;">BPC-157</div>
-    <div class="subtitle" style="margin-top:6px;">Body Protection Compound 157</div>
-    <div class="data" style="font-size:12px; color:var(--ink2); margin-top:10px;">C₆₂H₉₈N₁₆O₂₂ · 1419.53 g/mol · t½ ~15–30 min</div>
-    <div class="warnline" style="margin-top:10px;">Not FDA-approved · research only</div>
+    <div style="margin-top:6px;">
+      <div class="eyebrow" style="color:#15803D;">Healing / Skin</div>
+      <div class="title lg" style="font-size:42px; line-height:1.02; margin-top:10px;">GHK-Cu</div>
+      <div class="subtitle" style="font-size:18px; margin-top:8px;">Copper tripeptide (Gly-His-Lys)</div>
+      <div class="data" style="font-size:13px; color:var(--ink2); line-height:1.45; margin-top:12px;">C14H24N6O4Cu · ~340 g/mol · t½ Minutes (plasma); sustained tissue effects via copper chelation</div>
+      <div class="warnline" style="margin-top:10px;">Not FDA-approved · Research only</div>
+    </div>
 
-    <!-- quick facts -->
-    <div class="hairline strong" style="margin-top:16px;"></div>
-    <div class="drow" style="padding:15px 0;"><span class="k">Dose · research</span><div class="val"><span class="vv">200–500</span><span class="uu">mcg</span></div></div>
+    <div class="hairline strong mt20"></div>
+    <div class="mrow"><div class="mk">Dose ·<br>Research</div><div class="mv">1–3 mg SubQ; topical formulations 0.05–2% w/w</div></div>
     <div class="hairline"></div>
-    <div class="drow" style="padding:15px 0;"><span class="k">Frequency</span><div class="val"><span class="vv">1–2×</span><span class="uu">daily</span></div></div>
+    <div class="mrow"><div class="mk">Frequency</div><div class="mv">Daily SubQ or topical 1–2× daily</div></div>
     <div class="hairline"></div>
-    <div class="drow" style="padding:15px 0;"><span class="k">Route</span><div class="val"><span class="vv">SubQ</span><span class="uu">· IM</span></div></div>
+    <div class="mrow"><div class="mk">Route</div><div class="mv">SubQ · Topical · (very rarely)</div></div>
     <div class="hairline"></div>
-    <div class="drow" style="padding:15px 0;"><span class="k">Half-life</span><div class="val"><span class="vv">~15–30</span><span class="uu">min</span></div></div>
+    <div class="mrow"><div class="mk">Half-life</div><div class="mv">Minutes (plasma); sustained tissue effects via copper chelation</div></div>
     <div class="hairline strong"></div>
 
-    <!-- suggested reconstitution -->
-    <div class="eyebrow-row section" style="margin-top:16px;"><span class="eyebrow">Suggested reconstitution</span><span class="rule"></span></div>
-    <div class="dataLg" style="margin-top:10px; color:var(--ink1); font-size:15px; line-height:1.5;">5 mg + 2 mL BAC = 2.5 mg/mL<br>· 10 units = 250 mcg</div>
+    <div class="eyebrow-row section"><span class="eyebrow">Suggested reconstitution</span><span class="rule"></span></div>
+    <div class="recon" style="margin-top:14px;">50 mg + 5 mL BAC = 10 mg/mL · 10 units = 1 mg</div>
 
-    <!-- tabs -->
-    <div class="tabbar-doc" style="margin-top:20px;">
-      <span class="t on">Overview</span><span class="t">Dosing</span><span class="t">Research</span><span class="t">Notes</span>
+    <div class="tabbar-doc" style="margin-top:24px;">
+      <span class="t on">Overview</span>
+      <span class="t">Dosing</span>
+      <span class="t">Research</span>
+      <span class="t">Notes</span>
     </div>
 
-    <!-- overview -->
-    <div style="margin-top:18px;">
-      <div class="label" style="color:var(--ink3);">Sequence</div>
-      <div class="data" style="font-size:14px; margin-top:6px; letter-spacing:1px;">GEPPPGKPADDAGLV</div>
-    </div>
-    <div style="margin-top:18px;">
-      <div class="label" style="color:var(--ink3);">Research summary</div>
-      <div class="bodytext" style="margin-top:6px;">A synthetic 15-amino-acid sequence derived from a protein isolated from human gastric juice. Pre-clinical literature describes angiogenic, cyto-protective, and tissue-regenerative effects across a broad range of injury models.</div>
-    </div>
-    <div style="margin-top:18px;">
-      <div class="label" style="color:var(--ink3);">Common stack partners</div>
-      <div class="tags mt12"><span class="tag">TB-500</span><span class="tag">GHK-Cu</span><span class="tag">KPV</span></div>
-    </div>
+    <div class="eyebrow-row" style="margin-top:20px;"><span class="eyebrow">What it does</span><span class="rule"></span></div>
+    <div class="bodytext" style="margin-top:12px; font-size:15px; line-height:1.6;">GHK-Cu is a tripeptide naturally found in your blood that binds copper to form a small healing complex. It signals the body to repair tissue, produce collagen, and reduce inflammation. Levels fall with age — roughly 60–70% lower at 60 than at 20 — which researchers think contributes to slower healing.</div>
   </div>
 </div>
 </body></html>

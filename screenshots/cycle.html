@@ -11,32 +11,44 @@
   </div>
 
   <div class="content">
-    <div class="navbar">
-      <span class="nav-btn">←</span>
-      <span class="nav-link">Edit</span>
+    <div style="padding-top:8px;">
+      <div class="eyebrow">Stacks</div>
+      <div class="headline" style="margin-top:9px;">Cycles you're <span class="ital">running</span>.</div>
     </div>
 
-    <div class="eyebrow brand" style="margin-top:4px;">Active · Loading</div>
-    <div class="headline" style="margin-top:8px;">Recovery Stack</div>
-    <div class="data" style="font-size:13px; color:var(--ink3); margin-top:6px;">Wed, May 15 → Wed, Jun 12</div>
+    <div class="btn-row" style="margin-top:18px;">
+      <div class="btn">+ New cycle</div>
+      <div class="btn sec" style="flex:0 0 38%;">Vials</div>
+    </div>
 
-    <!-- next injection -->
-    <div class="eyebrow-row section" style="margin-top:18px;"><span class="eyebrow">Next injection</span><span class="rule"></span></div>
-    <div class="title" style="font-size:20px; margin-top:10px;">BPC-157 <span style="color:var(--ink3); font-weight:400;">· in 4h 20m</span></div>
+    <div class="eyebrow-row section"><span class="eyebrow">Recent activity</span><span class="rule"></span></div>
+    <div class="sched" style="padding:14px 0;">
+      <div class="time">2h</div>
+      <div class="mid">
+        <div class="ttl" style="font-size:18px;">BPC-157</div>
+        <div class="det"><span class="dose">250</span><span class="du-chip">mcg</span><span class="dt">· SubQ · abdomen</span></div>
+      </div>
+      <div class="right"><span class="chev">›</span></div>
+    </div>
+    <div class="hairline"></div>
 
-    <!-- hero ring -->
+    <div class="section" style="margin-top:22px;">
+      <div class="eyebrow brand">Active cycle · Active</div>
+      <div class="title lg" style="margin-top:8px;">BPC-157 solo</div>
+    </div>
+
     <div class="hero-wrap" style="margin-top:18px;">
-      <div style="position:relative; width:188px; height:188px;">
-        <svg width="188" height="188" viewBox="0 0 188 188">
-          <circle cx="94" cy="94" r="88" fill="none" stroke="rgba(26,23,20,0.10)" stroke-width="1.5"/>
-          <circle cx="94" cy="94" r="88" fill="none" stroke="#8B6914" stroke-width="6" opacity="0.16" stroke-linecap="round" stroke-dasharray="552.9" stroke-dashoffset="375.9" transform="rotate(-90 94 94)"/>
-          <circle cx="94" cy="94" r="88" fill="none" stroke="#8B6914" stroke-width="3" stroke-linecap="round" stroke-dasharray="552.9" stroke-dashoffset="375.9" transform="rotate(-90 94 94)"/>
+      <div style="position:relative; width:150px; height:150px;">
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="68" fill="none" stroke="rgba(26,23,20,0.10)" stroke-width="1.5"/>
+          <circle cx="75" cy="75" r="68" fill="none" stroke="#8B6914" stroke-width="6" opacity="0.16" stroke-linecap="round" stroke-dasharray="427.3" stroke-dashoffset="290.6" transform="rotate(-90 75 75)"/>
+          <circle cx="75" cy="75" r="68" fill="none" stroke="#8B6914" stroke-width="3" stroke-linecap="round" stroke-dasharray="427.3" stroke-dashoffset="290.6" transform="rotate(-90 75 75)"/>
         </svg>
         <div class="hero-center">
-          <span class="num" style="font-size:60px; color:var(--ink1);">32<span class="unit" style="font-size:18px; color:var(--brand);">%</span></span>
+          <span class="num" style="font-size:50px; color:var(--ink1);">32<span class="unit" style="font-size:16px; color:var(--brand);">%</span></span>
+          <span class="hero-label" style="margin-top:8px;">Day 9 of 28</span>
         </div>
       </div>
-      <div class="hero-label">Day 9 of 28</div>
     </div>
 
     <div class="hairline mt20"></div>
@@ -47,31 +59,19 @@
     </div>
     <div class="hairline"></div>
 
-    <!-- phase timeline -->
-    <div class="eyebrow-row section" style="margin-top:16px;"><span class="eyebrow">Phase timeline</span><span class="rule"></span></div>
-    <div style="padding:14px 0;">
-      <div style="display:flex;">
-        <div style="flex:14; text-align:center;" class="serif"><span style="font-style:italic; color:var(--brand); font-size:15px;">Loading</span></div>
-        <div style="flex:10; text-align:center;" class="serif"><span style="color:var(--ink4); font-size:15px;">Active</span></div>
-        <div style="flex:4; text-align:center;" class="serif"><span style="color:var(--ink4); font-size:15px;">Taper</span></div>
-      </div>
-      <div style="display:flex; margin:12px 0;">
-        <div style="flex:14; height:2px; background:var(--brand);"></div>
-        <div style="flex:10; height:1px; background:var(--line); align-self:center;"></div>
-        <div style="flex:4; height:1px; background:var(--line); align-self:center;"></div>
-      </div>
-      <div style="display:flex;">
-        <div style="flex:14; text-align:center;"><span class="labelSm" style="color:var(--ink2);">D1–14</span></div>
-        <div style="flex:10; text-align:center;"><span class="labelSm" style="color:var(--ink4);">D15–24</span></div>
-        <div style="flex:4; text-align:center;"><span class="labelSm" style="color:var(--ink4);">D25–28</span></div>
-      </div>
+    <div class="prow" style="margin-top:6px;">
+      <span class="dot" style="background:#0F766E;"></span>
+      <span class="pname">BPC-157</span>
+      <span class="pmeta">250<span class="du-chip">mcg</span> <span class="dim">· twice daily</span></span>
     </div>
+  </div>
 
-    <!-- protocol -->
-    <div class="eyebrow-row section" style="margin-top:10px;"><span class="eyebrow">Protocol · 2</span><span class="rule"></span></div>
-    <div class="prow"><span class="dot" style="background:#0A8E83;"></span><span class="pname">BPC-157</span><span class="pmeta">250<span class="dim">mcg</span> · 2× daily</span></div>
-    <div class="hairline"></div>
-    <div class="prow"><span class="dot" style="background:#7A4FC9;"></span><span class="pname">Ipamorelin</span><span class="pmeta">250<span class="dim">mcg</span> · 1–3× daily</span></div>
+  <div class="tabbar">
+    <div class="tb"><svg class="ic" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#857B6E" stroke-width="1.6"/><path d="M12 7v5l3.5 2" stroke="#857B6E" stroke-width="1.6" stroke-linecap="round"/></svg><span class="tl">Today</span></div>
+    <div class="tb"><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M5 5h10a2 2 0 012 2v12H7a2 2 0 01-2-2V5z" stroke="#857B6E" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 9h6M9 12h6" stroke="#857B6E" stroke-width="1.6" stroke-linecap="round"/></svg><span class="tl">Library</span></div>
+    <div class="tb add"><div class="add-btn"><span class="plus">+</span></div></div>
+    <div class="tb on"><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 4l8 4-8 4-8-4 8-4z" stroke="#1A1714" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4" stroke="#1A1714" stroke-width="1.6" stroke-linejoin="round"/></svg><span class="tl">Stacks</span></div>
+    <div class="tb"><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6" stroke="#857B6E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tl">Progress</span></div>
   </div>
 </div>
 </body></html>

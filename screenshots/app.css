@@ -166,12 +166,58 @@ html,body { background:#9b9183; }
 /* draw callout */
 .draw-num { font-family:'Fraunces',serif; font-weight:300; font-size:60px; line-height:1; letter-spacing:-3px; color:var(--ink1); }
 
-/* bottom tab bar */
-.tabbar { flex:0 0 auto; display:flex; border-top:1px solid var(--line); background:var(--bgElevated); padding:10px 0 18px; }
+/* bottom tab bar — 5 slots with centre + action button (current UI) */
+.tabbar { flex:0 0 auto; display:flex; align-items:center; border-top:1px solid var(--line); background:var(--bgElevated); padding:9px 0 16px; }
 .tabbar .tb { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; }
 .tabbar .tb .ic { width:22px; height:22px; }
 .tabbar .tb .tl { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink3); }
 .tabbar .tb.on .tl { color:var(--ink1); }
+.tabbar .tb.add { justify-content:center; }
+.tabbar .add-btn { width:50px; height:42px; background:var(--brand); border-radius:7px; display:flex; align-items:center; justify-content:center; }
+.tabbar .add-btn .plus { color:#FFFBF2; font-family:'Fraunces',serif; font-weight:300; font-size:30px; line-height:1; margin-top:-3px; }
+
+/* dose-unit chip (e.g. 250 [MCG]) */
+.du-chip { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--brand); border:1px solid var(--brandLine); border-radius:3px; padding:2px 5px; margin-left:5px; }
+
+/* search field + saved link */
+.searchbar { display:flex; align-items:center; gap:10px; padding:14px 0; }
+.searchbar .sicon { width:15px; height:15px; flex:0 0 15px; }
+.searchbar .sph { flex:1; font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink4); }
+.searchbar .saved { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink3); white-space:nowrap; }
+
+/* catalog row (Library) */
+.catrow { display:flex; align-items:center; gap:14px; padding:16px 0; }
+.catrow .bar { width:3px; align-self:stretch; border-radius:2px; flex:0 0 3px; }
+.catrow .mid { flex:1; min-width:0; }
+.catrow .nm { display:flex; align-items:baseline; gap:9px; }
+.catrow .nm .n { font-family:'Fraunces',serif; font-weight:500; font-size:20px; letter-spacing:-.4px; color:var(--ink1); }
+.catrow .nm .cls { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ink3); }
+.catrow .sub { font-family:'Inter',sans-serif; font-size:13px; color:var(--ink2); margin-top:3px; }
+.catrow .meta { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.4px; text-transform:uppercase; color:var(--ink4); margin-top:5px; }
+.catrow .arr { font-family:'Inter',sans-serif; font-size:20px; color:var(--ink3); flex:0 0 auto; }
+
+/* line chart helpers */
+.chart { width:100%; }
+.metricrow { display:flex; align-items:flex-end; justify-content:space-between; padding:18px 0; }
+.metricrow .mk { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); }
+.metricrow .mv { font-family:'Fraunces',serif; font-weight:400; font-size:30px; letter-spacing:-.6px; color:var(--ink1); display:inline-flex; align-items:baseline; }
+.metricrow .mv .mu { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; color:var(--ink3); margin-left:5px; letter-spacing:1px; }
+
+/* journal entry */
+.jentry { padding:16px 0; }
+.jentry .jtop { display:flex; align-items:baseline; justify-content:space-between; }
+.jentry .jdate { font-family:'DM Mono',monospace; font-weight:500; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); }
+.jentry .jmood { font-family:'DM Mono',monospace; font-weight:500; font-size:12px; color:var(--ink2); }
+.jentry .jttl { font-family:'Fraunces',serif; font-weight:500; font-size:18px; letter-spacing:-.3px; color:var(--ink1); margin-top:6px; }
+.jentry .jtags { display:flex; gap:8px; margin-top:9px; }
+.jentry .jtag { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ink3); border:1px solid var(--lineStrong); border-radius:3px; padding:5px 9px; }
+
+/* history row (metric detail) */
+.hrow { display:flex; align-items:center; justify-content:space-between; padding:13px 0; }
+.hrow .hv { font-family:'Fraunces',serif; font-weight:500; font-size:18px; color:var(--ink1); }
+.hrow .hv .hu { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; color:var(--ink3); letter-spacing:1px; margin-left:4px; }
+.hrow .hd { font-family:'DM Mono',monospace; font-weight:400; font-size:12px; color:var(--ink3); margin-top:2px; }
+.hrow .hdel { font-family:'DM Mono',monospace; font-weight:500; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--low); }
 
 /* misc */
 .warnline { font-family:'DM Mono',monospace; font-weight:500; font-size:9px; letter-spacing:1.6px; text-transform:uppercase; color:var(--warn); }
