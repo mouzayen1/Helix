@@ -205,7 +205,7 @@ function RootGate() {
       !!profile.age_gate_accepted_at &&
       !!profile.disclaimer_accepted_at &&
       !!profile.terms_accepted_at;
-    if (!fullyOnboarded && !inOnboarding && !inAuth) {
+    if (!fullyOnboarded && (!inOnboarding || inAuth)) {
       router.replace('/welcome');
     } else if (fullyOnboarded && (inOnboarding || inAuth)) {
       router.replace('/(tabs)');
