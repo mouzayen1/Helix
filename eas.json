@@ -40,6 +40,11 @@
         "appleTeamId": "PUHZTA99Y2"
       }
     },
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal"
+      }
+    }
   }
 }
