@@ -17,11 +17,7 @@
 //     — cancellation is no longer thrown; it's a non-error response shape.
 //   - Other errors still throw with a `code` property (statusCodes.*).
 
-import {
-  GoogleSignin,
-  statusCodes,
-  isSuccessResponse,
-} from '@react-native-google-signin/google-signin';
+import type * as GoogleSignInModule from '@react-native-google-signin/google-signin';
 import type { Session } from '@supabase/supabase-js';
 import { requireSupabase } from '../supabase';
 
@@ -33,6 +29,29 @@ export class GoogleSignInError extends Error {
 }
 
 let configured = false;
+let googleModule: typeof GoogleSignInModule | null | undefined;
+
+function getGoogleModule(): typeof GoogleSignInModule {
+  if (googleModule !== undefined) {
+    if (googleModule) return googleModule;
+    throw new GoogleSignInError(
+      'Google sign-in is not available in this build. Use a development build or email instead.',
+      'NATIVE_MODULE_UNAVAILABLE',
+    );
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@react-native-google-signin/google-signin') as typeof GoogleSignInModule;
+    googleModule = mod;
+    return mod;
+  } catch {
+    googleModule = null;
+    throw new GoogleSignInError(
+      'Google sign-in is not available in this build. Use a development build or email instead.',
+      'NATIVE_MODULE_UNAVAILABLE',
+    );
+  }
+}
 
 /**
  * Configure the Google Sign-In SDK with our OAuth client IDs. Idempotent.
@@ -41,6 +60,7 @@ let configured = false;
  */
 export function configureGoogle(): void {
   if (configured) return;
+  const { GoogleSignin } = getGoogleModule();
   const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
   if (!webClientId) {
@@ -70,6 +90,7 @@ export function configureGoogle(): void {
  */
 export async function signInWithGoogle(): Promise<Session> {
   configureGoogle();
+  const { GoogleSignin, statusCodes, isSuccessResponse } = getGoogleModule();
 
   try {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -179,6 +200,7 @@ function extractNonceFromIdToken(jwt: string): string | undefined {
 export async function signOutGoogle(): Promise<void> {
   try {
     if (configured) {
+      const { GoogleSignin } = getGoogleModule();
       await GoogleSignin.signOut();
     }
   } catch {

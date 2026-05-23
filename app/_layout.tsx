@@ -17,6 +17,34 @@ import {
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import type * as LocalAuthenticationType from 'expo-local-authentication';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import * as Updates from 'expo-updates';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, AppState, Pressable, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { getProfile, hasLegacyLocalData, initDatabase, setCurrentUserId } from '../lib/db';
+import { scheduleAllSafe } from '../lib/notifications';
+import { ProfileProvider, useProfile } from '../lib/profile-context';
+import { ThemeProvider, useTheme } from '../theme/ThemeContext';
+import { font, radius, space } from '../theme/tokens';
+import {
+  getAuthState,
+  hydrateSession,
+  signOut,
+  subscribeAuth,
+  type AuthState,
+} from '../lib/auth/session';
+import { isAuthConfigured } from '../lib/supabase';
+import { getMyFounderStatus, markFounderBannerSeen } from '../lib/auth/founder';
+import {
+  getCachedTermsStatus,
+  refreshTermsStatus,
+  subscribeTermsStatus,
+  type TermsStatus,
+} from '../lib/auth/terms-status';
+import { FounderCelebrationModal } from '../components/FounderCelebrationModal';
 
 // Lazy + guarded require. The biometric-lock feature was added after the
 // earliest production APKs were built, so the expo-local-authentication
@@ -32,35 +60,6 @@ try {
 } catch {
   LocalAuthentication = null;
 }
-import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
-import * as Updates from 'expo-updates';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, Pressable, Text, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { hasLegacyLocalData, initDatabase } from '../lib/db';
-import { scheduleAllSafe } from '../lib/notifications';
-import { ProfileProvider, useProfile } from '../lib/profile-context';
-import { ThemeProvider, useTheme } from '../theme/ThemeContext';
-import { font, radius, space } from '../theme/tokens';
-import {
-  getAuthState,
-  hydrateSession,
-  signOut,
-  subscribeAuth,
-  type AuthState,
-} from '../lib/auth/session';
-import { isAuthConfigured } from '../lib/supabase';
-import { getMyFounderStatus, markFounderBannerSeen } from '../lib/auth/founder';
-import {
-  clearTermsStatusCache,
-  getCachedTermsStatus,
-  refreshTermsStatus,
-  subscribeTermsStatus,
-  type TermsStatus,
-} from '../lib/auth/terms-status';
-import { FounderCelebrationModal } from '../components/FounderCelebrationModal';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -497,7 +496,13 @@ export default function RootLayout() {
 
   useEffect(() => {
     initDatabase()
-      .then(() => setDbReady(true))
+      .then(async () => {
+        if (!isAuthConfigured()) {
+          const profile = await getProfile();
+          setCurrentUserId(profile?.local_user_id ?? null);
+        }
+        setDbReady(true);
+      })
       .catch((err) => {
         console.error('DB init failed', err);
         setDbReady(true);
