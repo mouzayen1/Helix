@@ -1,7 +1,5 @@
 // Export — editorial rebuild.
-import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +7,9 @@ import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { exportAllData } from '../../lib/db';
+// Platform-split: native writes a file + opens the share sheet; web
+// triggers a browser download. Keeps expo-file-system/sharing off web.
+import { saveExport } from '../../lib/export-file';
 
 function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return '';
@@ -53,15 +54,11 @@ export default function ExportScreen() {
         }
       }
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const dir = FileSystem.documentDirectory ?? '';
       if (format === 'json') {
-        const path = `${dir}helix-export-${ts}.json`;
-        await FileSystem.writeAsStringAsync(path, JSON.stringify(data, null, 2));
-        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(path);
+        const filename = `helix-export-${ts}.json`;
+        await saveExport(filename, JSON.stringify(data, null, 2), 'application/json');
         setStatus(
-          `Exported ${totalRecords} records · schema v${data.schema_version} · ${path
-            .split('/')
-            .pop()}`
+          `Exported ${totalRecords} records · schema v${data.schema_version} · ${filename}`
         );
       } else {
         const sections: string[] = [];
@@ -92,13 +89,10 @@ export default function ExportScreen() {
         sections.push(`# meta`);
         sections.push(`exported_at,schema_version`);
         sections.push(`"${data.exported_at}",${data.schema_version}`);
-        const path = `${dir}helix-export-${ts}.csv`;
-        await FileSystem.writeAsStringAsync(path, sections.join('\n'));
-        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(path);
+        const filename = `helix-export-${ts}.csv`;
+        await saveExport(filename, sections.join('\n'), 'text/csv');
         setStatus(
-          `Exported ${totalRecords} records across ${Object.keys(tableCounts).length} tables · ${path
-            .split('/')
-            .pop()}`
+          `Exported ${totalRecords} records across ${Object.keys(tableCounts).length} tables · ${filename}`
         );
       }
     } catch (err) {
