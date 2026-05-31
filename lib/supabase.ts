@@ -25,6 +25,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -54,7 +55,11 @@ export function supabase(): SupabaseClient | null {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      // Native has no URL session to detect. On web, the social-login
+      // OAuth flow (lib/auth/*.web.ts) is a full-page redirect that returns
+      // to the app origin with the session in the URL; detectSessionInUrl
+      // lets supabase-js complete the exchange automatically on load.
+      detectSessionInUrl: Platform.OS === 'web',
     },
   });
   return client;
