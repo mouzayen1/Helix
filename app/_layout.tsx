@@ -1,3 +1,6 @@
+// Install the web Alert.alert shim before any screen module imports
+// react-native's Alert object. This is a no-op on iOS/Android.
+import '../lib/web-alert';
 import {
   Inter_400Regular,
   Inter_500Medium,
