@@ -155,7 +155,13 @@ function rowToProfile(r: ProfileRow): Profile {
 }
 
 export async function getProfile(): Promise<Profile | null> {
-  const uid = requireUserId();
+  // Pre-auth boot calls this before setCurrentUserId fires (ProfileProvider's
+  // mount effect runs before Supabase session hydrate finishes). On native
+  // there's a local SQLite profile to return; on web there's nothing to
+  // fetch without a user_id, so return null — same shape callers already
+  // handle when the user has no profile row yet.
+  const uid = getCurrentUserId();
+  if (!uid) return null;
   const data = must(
     await sb().from('profiles').select(PROFILE_COLUMNS).eq('user_id', uid).maybeSingle()
   ) as ProfileRow | null;
