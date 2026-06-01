@@ -56,6 +56,13 @@ function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
+/** Exported handle for the sync engine (lib/sync.ts). External callers
+ *  should NOT use this for ad-hoc queries — go through the typed
+ *  helpers below. */
+export function getDb(): SQLite.SQLiteDatabase {
+  return db();
+}
+
 // ---- Current user context -------------------------------------------------
 //
 // Auth-feature scaffolding. The session manager in lib/auth/session.ts
@@ -314,6 +321,62 @@ export async function initDatabase() {
   // "Keep your data?" prompt OR explicitly wipes. Prevents the prompt
   // from re-firing on subsequent launches.
   await addColumnIfMissing(d, 'profile', 'local_data_attributed_at', 'TEXT');
+
+  // v1.5 — cross-device sync metadata. Every user-data table gets an
+  // updated_at TEXT column populated in ISO-Z format (matches Supabase
+  // timestamptz when serialized), plus an AFTER UPDATE trigger that
+  // bumps it on every row change (unless the statement explicitly set
+  // updated_at, which the sync pull does — guard via OLD.updated_at IS
+  // NEW.updated_at to avoid recursive firing).
+  //
+  // We DO NOT touch read paths or write paths in this file — the
+  // updated_at column is read+written only by lib/sync.ts. Stamping
+  // it on INSERT is handled by the column DEFAULT; on UPDATE by the
+  // trigger. Schema-level so every existing write function "just
+  // works" without per-function patching.
+  const SYNC_TABLES = [
+    'profile', 'saved_peptides', 'vials', 'cycles', 'stacks',
+    'doses', 'journal_entries', 'metrics', 'injection_sites_log', 'dose_skips',
+  ];
+  for (const t of SYNC_TABLES) {
+    await addColumnIfMissing(
+      d, t, 'updated_at',
+      "TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+    );
+    // Backfill existing rows where updated_at is still NULL (rows
+    // created before this migration ran on the device). Use a stable
+    // anchor: the table's created_at / saved_at where present, else
+    // a row-specific old timestamp so they don't all collide on now()
+    // and trigger a spurious sync push.
+    const anchorCol =
+      t === 'saved_peptides' ? 'saved_at' :
+      t === 'profile' ? null : 'created_at';
+    if (anchorCol) {
+      await d.runAsync(
+        `UPDATE ${t} SET updated_at = ${anchorCol}
+           WHERE updated_at IS NULL AND ${anchorCol} IS NOT NULL`,
+      );
+    }
+    await d.runAsync(
+      `UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE updated_at IS NULL`,
+    );
+    // AFTER UPDATE trigger — bumps updated_at unless the statement
+    // already wrote a fresh one (sync pull case). The WHEN guard
+    // prevents recursive firing because our inner UPDATE writes a
+    // new value, breaking the OLD IS NEW condition the second time.
+    const pkCol = t === 'saved_peptides' ? 'peptide_id' : 'id';
+    await d.execAsync(
+      `CREATE TRIGGER IF NOT EXISTS ${t}_touch_updated_at
+         AFTER UPDATE ON ${t}
+         FOR EACH ROW
+         WHEN OLD.updated_at IS NEW.updated_at
+         BEGIN
+           UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE ${pkCol} = NEW.${pkCol};
+         END`,
+    );
+  }
 
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
