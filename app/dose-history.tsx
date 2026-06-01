@@ -2,9 +2,7 @@
 // adaptive peptide / site / route / cycle filters, smart stats header,
 // and CSV export. Editorial restyle of the v1.2 screen — same data
 // flow, sharp-corner chips, hairline-divided list, serif numerals.
-import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +15,8 @@ import { useEditorialTheme } from '../lib/design/theme';
 import { DoseValue } from '../components/editorial/DoseUnitChip';
 import { useDoseUnitPref } from '../lib/profile-context';
 import { formatDoseLabel, resolveDoseUnit } from '../lib/dose-format';
+// Platform-split file export (native share sheet / web download).
+import { saveExport } from '../lib/export-file';
 import {
   listActiveCycles,
   listCycles,
@@ -242,11 +242,7 @@ export default function DoseHistoryScreen() {
         .filter(Boolean)
         .join('-');
       const filename = `helix-doses${tag ? '-' + tag : ''}-${ts}.csv`;
-      const dir = FileSystem.documentDirectory ?? '';
-      const path = `${dir}${filename}`;
-      await FileSystem.writeAsStringAsync(path, lines.join('\n'));
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(path);
-      else Alert.alert('Saved', `Wrote ${filtered.length} doses to ${filename}`);
+      await saveExport(filename, lines.join('\n'), 'text/csv');
     } catch (err) {
       Alert.alert('Export failed', err instanceof Error ? err.message : String(err));
     } finally {

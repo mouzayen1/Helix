@@ -1,3 +1,6 @@
+// Install the web Alert.alert shim before any screen module imports
+// react-native's Alert object. This is a no-op on iOS/Android.
+import '../lib/web-alert';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -21,11 +24,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, Pressable, Text, View } from 'react-native';
+import { Alert, AppState, Platform, Pressable, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getProfile, hasLegacyLocalData, initDatabase, setCurrentUserId } from '../lib/db';
 import { scheduleAllSafe } from '../lib/notifications';
+import { syncAll } from '../lib/sync';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
@@ -37,7 +41,7 @@ import {
   type AuthState,
 } from '../lib/auth/session';
 import { isAuthConfigured } from '../lib/supabase';
-import { getMyFounderStatus, markFounderBannerSeen } from '../lib/auth/founder';
+import { getMyFounderStatus, grantFounderIfEligible, markFounderBannerSeen } from '../lib/auth/founder';
 import {
   getCachedTermsStatus,
   refreshTermsStatus,
@@ -253,16 +257,26 @@ function RootGate() {
   useEffect(() => {
     if (authState.status !== 'signed-in') return;
     let cancelled = false;
-    getMyFounderStatus().then((s) => {
+    const userId = authState.session.user.id;
+    (async () => {
+      // Web social sign-in is a full-page OAuth redirect, so the inline
+      // founder grant on the sign-up screen handlers never runs for web
+      // sign-ins. Grant here for web (the RPC is idempotent — it returns
+      // an existing founder's number without re-incrementing) so web
+      // users still claim their slot. Native keeps granting in-handler.
+      if (Platform.OS === 'web') {
+        try {
+          await grantFounderIfEligible(userId);
+        } catch {
+          // Non-fatal — banner just won't fire this session.
+        }
+      }
+      const s = await getMyFounderStatus();
       if (cancelled || !s) return;
       if (s.isFounder && s.founderNumber != null && !s.bannerSeenAt) {
-        setFounderBanner({
-          visible: true,
-          number: s.founderNumber,
-          userId: authState.session.user.id,
-        });
+        setFounderBanner({ visible: true, number: s.founderNumber, userId });
       }
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -537,7 +551,9 @@ export default function RootLayout() {
   // skip this (expo-updates is a no-op in __DEV__). Silent-fails on network
   // errors so it never blocks startup.
   useEffect(() => {
-    if (__DEV__) return;
+    // OTA updates don't apply to the web build (it's served fresh each
+    // load), and expo-updates isn't supported on web.
+    if (__DEV__ || Platform.OS === 'web') return;
     (async () => {
       try {
         const result = await Updates.checkForUpdateAsync();
@@ -550,6 +566,38 @@ export default function RootLayout() {
       }
     })();
   }, []);
+
+  // Cross-device sync — fires whenever the user is signed in and the
+  // app is foreground-active. syncAll() is idempotent and coalesces
+  // overlapping calls, so re-triggering on every AppState change is
+  // safe. Pulls remote → upserts into local SQLite; then pushes any
+  // newer local rows up to Supabase. lib/sync.web.ts is a no-op (web
+  // already reads/writes Supabase directly).
+  useEffect(() => {
+    if (!dbReady) return;
+    if (!isAuthConfigured()) return;
+    const trigger = () => {
+      if (getAuthState().status === 'signed-in') {
+        void syncAll().catch(() => {
+          // Errors are aggregated into the SyncResult.errors array
+          // already; nothing here should abort the app.
+        });
+      }
+    };
+    // Initial fire when this effect mounts (may be too early if auth
+    // hasn't hydrated — covered by the subscribeAuth fire below).
+    trigger();
+    const unsub = subscribeAuth((s) => {
+      if (s.status === 'signed-in') trigger();
+    });
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') trigger();
+    });
+    return () => {
+      unsub();
+      sub.remove();
+    };
+  }, [dbReady]);
 
   useEffect(() => {
     if (fontsLoaded && dbReady) SplashScreen.hideAsync().catch(() => {});

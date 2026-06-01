@@ -35,6 +35,10 @@ attached, can apply them directly.
 
 Quality gate before pushing: `npm run check`. There is no test suite — the catalog/freq verifiers are the regression net for the 42-peptide data.
 
+## Web deployment (Vercel)
+
+This one repo backs **two** Vercel projects, distinguished only by their **Root Directory** setting (the load-bearing, dashboard-only config that keeps them separate — don't change it without understanding this): `helix` builds from `site/` (a static marketing landing page — `site/index.html`, privacy/terms/disclaimer/delete-account, its own `site/vercel.json`) and serves the apex `gethelixapp.org` + `www`; `helix-app` builds from the repo root (`expo export -p web` → `dist`, per the root `vercel.json`) and serves the app at `app.gethelixapp.org`. Because both projects watch the same repo, each `vercel.json` carries an `ignoreCommand` that skips the build when no files in *its* directory changed (`git diff` against `VERCEL_GIT_PREVIOUS_SHA`, the last deployed SHA), so a landing-only commit doesn't rebuild the app and vice versa. OAuth redirect/Site URLs in Supabase point at `app.gethelixapp.org`, never the apex.
+
 ## Architecture
 
 ### Routing — expo-router (file-based)

@@ -54,7 +54,25 @@ function formatHeaderDate(d: Date) {
 }
 
 function daysBetween(a: Date, b: Date) {
-  return Math.floor((b.getTime() - a.getTime()) / 864e5);
+  // Compare at the date level (strip time-of-day) so partial days don't
+  // count and so timezone offsets don't push a same-day start over a
+  // day boundary. Date.UTC of the local date components gives a stable
+  // ms value to subtract.
+  const ms = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())
+           - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  return Math.round(ms / 864e5);
+}
+
+// Parse a YYYY-MM-DD (or YYYY-MM-DDTHH...) string as a LOCAL date. The
+// built-in `new Date('YYYY-MM-DD')` parses date-only strings as UTC
+// midnight, which becomes the *previous* local day in any negative UTC
+// offset — making cycle day counters jump to "Day 2" on the day a user
+// starts a cycle. We always store cycle start/end as local YYYY-MM-DD
+// (see isoDate in app/cycle/new.tsx), so parse them back as local.
+function parseLocalDate(s: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return new Date(s);
+  return new Date(+m[1], +m[2] - 1, +m[3]);
 }
 
 // Day-of-cycle math for a single cycle. Each active cycle has its own
@@ -68,8 +86,8 @@ function cycleDayInfo(c: Cycle): {
   pct: number;
   remaining: number;
 } {
-  const start = new Date(c.starts_on);
-  const end = new Date(c.ends_on);
+  const start = parseLocalDate(c.starts_on);
+  const end = parseLocalDate(c.ends_on);
   const today = new Date();
   const total = Math.max(1, daysBetween(start, end));
   const day = Math.min(total, Math.max(0, daysBetween(start, today)));

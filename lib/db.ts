@@ -7,6 +7,46 @@
 import * as SQLite from 'expo-sqlite';
 import { PEPTIDES } from './peptides';
 
+// Shared, platform-neutral data types + plain constants. Canonical home is
+// lib/db-types.ts so the native (this file) and web (db.web.ts) layers
+// can't drift. Imported for local use below, then re-exported so existing
+// `import { type Vial } from '@/lib/db'` call sites keep working.
+import {
+  METRIC_KINDS,
+  INJECTION_SITES,
+  SCHEMA_VERSION,
+  type Profile,
+  type Vial,
+  type DoseSkip,
+  type Dose,
+  type Cycle,
+  type CycleProtocolItemPhase,
+  type CycleProtocolItem,
+  type StackItem,
+  type Stack,
+  type JournalEntry,
+  type Metric,
+  type SiteSuggestion,
+} from './db-types';
+
+export {
+  METRIC_KINDS,
+  INJECTION_SITES,
+  SCHEMA_VERSION,
+  type Profile,
+  type Vial,
+  type DoseSkip,
+  type Dose,
+  type Cycle,
+  type CycleProtocolItemPhase,
+  type CycleProtocolItem,
+  type StackItem,
+  type Stack,
+  type JournalEntry,
+  type Metric,
+  type SiteSuggestion,
+};
+
 const DB_NAME = 'helix.db';
 
 let _db: SQLite.SQLiteDatabase | null = null;
@@ -14,6 +54,13 @@ let _db: SQLite.SQLiteDatabase | null = null;
 function db(): SQLite.SQLiteDatabase {
   if (!_db) _db = SQLite.openDatabaseSync(DB_NAME);
   return _db;
+}
+
+/** Exported handle for the sync engine (lib/sync.ts). External callers
+ *  should NOT use this for ad-hoc queries — go through the typed
+ *  helpers below. */
+export function getDb(): SQLite.SQLiteDatabase {
+  return db();
 }
 
 // ---- Current user context -------------------------------------------------
@@ -275,6 +322,64 @@ export async function initDatabase() {
   // from re-firing on subsequent launches.
   await addColumnIfMissing(d, 'profile', 'local_data_attributed_at', 'TEXT');
 
+  // v1.5 — cross-device sync metadata. Every user-data table gets an
+  // updated_at TEXT column populated in ISO-Z format (matches Supabase
+  // timestamptz when serialized), plus an AFTER UPDATE trigger that
+  // bumps it on every row change (unless the statement explicitly set
+  // updated_at, which the sync pull does — guard via OLD.updated_at IS
+  // NEW.updated_at to avoid recursive firing).
+  //
+  // We DO NOT touch read paths or write paths in this file — the
+  // updated_at column is read+written only by lib/sync.ts. Stamping
+  // it on INSERT is handled by the column DEFAULT; on UPDATE by the
+  // trigger. Schema-level so every existing write function "just
+  // works" without per-function patching.
+  const SYNC_TABLES = [
+    'profile', 'saved_peptides', 'vials', 'cycles', 'stacks',
+    'doses', 'journal_entries', 'metrics', 'injection_sites_log', 'dose_skips',
+  ];
+  for (const t of SYNC_TABLES) {
+    await addColumnIfMissing(
+      d, t, 'updated_at',
+      "TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+    );
+    // Backfill existing rows where updated_at is still NULL (rows
+    // created before this migration ran on the device). Use a stable
+    // anchor: the table's created_at / saved_at where present, else
+    // a row-specific old timestamp so they don't all collide on now()
+    // and trigger a spurious sync push.
+    const anchorCol =
+      t === 'saved_peptides' ? 'saved_at' :
+      t === 'metrics' ? 'taken_at' :
+      t === 'injection_sites_log' ? 'used_at' :
+      t === 'profile' ? null : 'created_at';
+    if (anchorCol) {
+      await d.runAsync(
+        `UPDATE ${t} SET updated_at = ${anchorCol}
+           WHERE updated_at IS NULL AND ${anchorCol} IS NOT NULL`,
+      );
+    }
+    await d.runAsync(
+      `UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE updated_at IS NULL`,
+    );
+    // AFTER UPDATE trigger — bumps updated_at unless the statement
+    // already wrote a fresh one (sync pull case). The WHEN guard
+    // prevents recursive firing because our inner UPDATE writes a
+    // new value, breaking the OLD IS NEW condition the second time.
+    const pkCol = t === 'saved_peptides' ? 'peptide_id' : 'id';
+    await d.execAsync(
+      `CREATE TRIGGER IF NOT EXISTS ${t}_touch_updated_at
+         AFTER UPDATE ON ${t}
+         FOR EACH ROW
+         WHEN OLD.updated_at IS NEW.updated_at
+         BEGIN
+           UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE ${pkCol} = NEW.${pkCol};
+         END`,
+    );
+  }
+
   // Seed peptides on first run (upsert on id so updates flow through).
   for (const p of PEPTIDES) {
     await d.runAsync(
@@ -301,31 +406,7 @@ export async function initDatabase() {
 
 // ---- Profile ---------------------------------------------------------------
 
-export type Profile = {
-  local_user_id: string;
-  display_name: string | null;
-  birth_year: number | null;
-  unit_weight: 'lb' | 'kg';
-  unit_volume: 'units' | 'mL';
-  theme: 'system' | 'light' | 'dark';
-  terms_version: string | null;
-  terms_accepted_at: string | null;
-  age_gate_accepted_at: string | null;
-  disclaimer_accepted_at: string | null;
-  onboarding_done: 0 | 1;
-  notifications_enabled: 0 | 1;
-  biometric_lock: 0 | 1;
-  // v1.1: JSON blob for notification prefs (sub-toggles, quiet hours,
-  // preferred times per time_of_day). See lib/notifications.ts for schema.
-  notif_prefs_json: string | null;
-  // v1.3: JSON-encoded string[] of dismissed in-app banner keys.
-  dismissed_banners: string;
-  // v1.3: global dose-display preference. See lib/dose-format.ts.
-  dose_unit_pref: 'auto' | 'mcg' | 'mg';
-  // v1.4: stamp set when the Phase C attribution prompt is resolved
-  // (user accepts or wipes). Prevents the prompt from re-firing.
-  local_data_attributed_at: string | null;
-};
+// Profile type lives in lib/db-types.ts (re-exported above).
 
 export async function getProfile(): Promise<Profile | null> {
   return db().getFirstAsync<Profile>('SELECT * FROM profile WHERE id = 1');
@@ -400,38 +481,7 @@ export async function listSavedPeptides(): Promise<string[]> {
 
 // ---- Vials -----------------------------------------------------------------
 
-export type Vial = {
-  id: string;
-  peptide_id: string;
-  strength_mg: number;
-  bac_water_ml: number;
-  concentration: number;
-  remaining_mg: number;
-  reconstituted_at: string;
-  expires_at: string | null;
-  notes: string | null;
-  is_active: 0 | 1;
-  // v1.1 additions
-  cost_usd: number | null;
-  depleted_at: string | null;
-  first_used_at: string | null;
-  total_doses_drawn: number;
-  // v1.2: nullable, single-owner attachment to a cycle. NULL means the
-  // vial is free inventory and any cycle can claim it.
-  cycle_id: string | null;
-};
-
-// v1.1: recorded intentional skip of a scheduled dose.
-export type DoseSkip = {
-  id: string;
-  peptide_id: string;
-  cycle_id: string | null;
-  scheduled_date: string;
-  time_of_day: string | null;
-  reason: string | null;
-  note: string | null;
-  created_at: string;
-};
+// Vial and DoseSkip types live in lib/db-types.ts (re-exported above).
 
 export async function createVial(input: {
   peptide_id: string;
@@ -786,18 +836,7 @@ export async function updateDose(
 
 // ---- Doses -----------------------------------------------------------------
 
-export type Dose = {
-  id: string;
-  peptide_id: string;
-  vial_id: string | null;
-  cycle_id: string | null;
-  amount_mcg: number;
-  volume_units: number | null;
-  route: string;
-  site: string | null;
-  taken_at: string;
-  note: string | null;
-};
+// Dose type lives in lib/db-types.ts (re-exported above).
 
 export async function logDose(input: {
   peptide_id: string;
@@ -923,36 +962,8 @@ export async function deleteDose(id: string) {
 
 // ---- Cycles ----------------------------------------------------------------
 
-export type Cycle = {
-  id: string;
-  name: string;
-  starts_on: string;
-  ends_on: string;
-  phase: 'loading' | 'active' | 'taper' | 'washout';
-  status: 'planned' | 'active' | 'paused' | 'complete' | 'cancelled';
-  stack_id: string | null;
-  protocol_json: string;
-  notes: string | null;
-  created_at: string;
-  // v1.1 additions
-  paused_at: string | null;
-  paused_total_days: number;
-};
-
-export type CycleProtocolItemPhase = {
-  startWeek: number;       // 1-indexed cycle week this phase begins on
-  name?: string;
-  freq: string;            // active freq while this phase is current
-  dose_mcg?: number;       // optional; falls back to item.dose_mcg
-};
-
-export type CycleProtocolItem = {
-  peptide_id: string;
-  dose_mcg: number;
-  freq: string;       // 'daily' | 'weekly' | 'every other day' | etc.
-  time_of_day: string; // 'morning' | 'evening' | 'HH:MM'
-  phases?: CycleProtocolItemPhase[]; // v1.3: optional phase ramp; absent = legacy single-phase
-};
+// Cycle, CycleProtocolItemPhase, CycleProtocolItem types live in
+// lib/db-types.ts (re-exported above).
 
 export async function createCycle(input: {
   name: string;
@@ -1170,22 +1181,7 @@ export async function updateCycle(
 
 // ---- Stacks ----------------------------------------------------------------
 
-export type StackItem = {
-  peptide_id: string;
-  dose_mcg: number;
-  unit: 'mcg' | 'mg';
-  freq: string;
-  time: string;
-};
-
-export type Stack = {
-  id: string;
-  name: string;
-  goal: string | null;
-  items_json: string;
-  synergy_score: number | null;
-  created_at: string;
-};
+// StackItem and Stack types live in lib/db-types.ts (re-exported above).
 
 export async function createStack(input: {
   name: string;
@@ -1227,20 +1223,7 @@ export async function deleteStack(id: string) {
 
 // ---- Journal ---------------------------------------------------------------
 
-export type JournalEntry = {
-  id: string;
-  entry_date: string;
-  mood: number | null;
-  energy: number | null;
-  sleep_hours: number | null;
-  sleep_quality: number | null;
-  libido: number | null;
-  recovery: number | null;
-  tags_json: string;
-  body: string | null;
-  created_at: string;
-  updated_at: string;
-};
+// JournalEntry type lives in lib/db-types.ts (re-exported above).
 
 export async function upsertJournal(input: {
   entry_date: string;
@@ -1302,28 +1285,7 @@ export async function listJournal(limit = 30): Promise<JournalEntry[]> {
 
 // ---- Metrics ---------------------------------------------------------------
 
-export type Metric = {
-  id: string;
-  kind: string;
-  value: number;
-  unit: string | null;
-  taken_at: string;
-  source: string;
-  note: string | null;
-};
-
-export const METRIC_KINDS = [
-  { id: 'weight', label: 'Weight', unit: 'lb' },
-  { id: 'hr_resting', label: 'Resting HR', unit: 'bpm' },
-  { id: 'sleep_hours', label: 'Sleep', unit: 'h' },
-  { id: 'sleep_score', label: 'Sleep score', unit: '/100' },
-  { id: 'igf1', label: 'IGF-1', unit: 'ng/mL' },
-  { id: 'glucose', label: 'Glucose', unit: 'mg/dL' },
-  { id: 'bp_sys', label: 'Blood pressure (sys)', unit: 'mmHg' },
-  { id: 'bp_dia', label: 'Blood pressure (dia)', unit: 'mmHg' },
-  { id: 'waist', label: 'Waist', unit: 'in' },
-  { id: 'body_fat', label: 'Body fat', unit: '%' },
-] as const;
+// Metric type and METRIC_KINDS live in lib/db-types.ts (re-exported above).
 
 export async function insertMetric(input: {
   kind: string;
@@ -1374,22 +1336,8 @@ export async function deleteMetric(id: string) {
 
 // ---- Injection-site rotation -----------------------------------------------
 
-export const INJECTION_SITES = [
-  'L.Deltoid', 'R.Deltoid',
-  'L.Abdomen', 'R.Abdomen',
-  'L.Hip', 'R.Hip',
-  'L.Thigh', 'R.Thigh',
-] as const;
-
-export type SiteSuggestion = {
-  site: string;
-  days_since: number;
-  total_uses: number;
-  /** ISO timestamp of the most recent dose at this site, or null if never
-   *  used. Lets callers render sub-day relative times (e.g. "18h ago")
-   *  instead of the floored "0d ago" that days_since alone produces. */
-  last_used: string | null;
-};
+// INJECTION_SITES and SiteSuggestion type live in lib/db-types.ts
+// (re-exported above).
 
 export async function siteSuggestion(): Promise<SiteSuggestion> {
   const uid = requireUserId();
@@ -1476,7 +1424,7 @@ export async function listDosesAtSite(site: string, limit = 10): Promise<Dose[]>
 
 // ---- Export ----------------------------------------------------------------
 
-export const SCHEMA_VERSION = 2;
+// SCHEMA_VERSION lives in lib/db-types.ts (re-exported above).
 
 export async function exportAllData(): Promise<{
   profile: unknown;

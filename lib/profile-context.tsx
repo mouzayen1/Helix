@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { subscribeAuth } from './auth/session';
 import { getProfile, updateProfile as dbUpdate, type Profile } from './db';
 import { cycleDoseUnitPref, type DoseUnitPref } from './dose-format';
 
@@ -35,7 +36,14 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    refresh();
+    // Initial load + re-fetch on every auth transition. On web the profile
+    // lives in Supabase and is per-user, so sign-in/sign-out must trigger
+    // a refresh. On native subscribeAuth no-ops when Supabase isn't
+    // configured, so this is a harmless single fire there.
+    void refresh();
+    return subscribeAuth(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   return (
