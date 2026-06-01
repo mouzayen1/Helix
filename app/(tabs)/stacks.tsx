@@ -42,7 +42,18 @@ const TEMPLATES = [
 ];
 
 function daysBetween(a: Date, b: Date) {
-  return Math.floor((b.getTime() - a.getTime()) / 864e5);
+  // Date-level diff using local components so partial days and TZ
+  // offsets don't shift day counts. See app/(tabs)/index.tsx for the
+  // full rationale — same fix applied here.
+  const ms = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())
+           - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  return Math.round(ms / 864e5);
+}
+
+function parseLocalDate(s: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return new Date(s);
+  return new Date(+m[1], +m[2] - 1, +m[3]);
 }
 
 export default function StacksScreen() {
@@ -429,8 +440,8 @@ export default function StacksScreen() {
 function ActiveCycleHero({ cycle }: { cycle: Cycle }) {
   const ed = useEditorialTheme();
   const router = useRouter();
-  const start = new Date(cycle.starts_on);
-  const end = new Date(cycle.ends_on);
+  const start = parseLocalDate(cycle.starts_on);
+  const end = parseLocalDate(cycle.ends_on);
   const today = new Date();
   const total = Math.max(1, daysBetween(start, end));
   const day = Math.min(total, Math.max(0, daysBetween(start, today)));
