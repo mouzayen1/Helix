@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
+import { useWideWeb } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { isAppleSignInAvailable, signInWithApple, AppleSignInError } from '../../lib/auth/apple';
 import { signInWithGoogle, GoogleSignInError } from '../../lib/auth/google';
@@ -28,6 +29,11 @@ export default function SignUpScreen() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Wide-viewport (desktop/laptop web) layout. Gated on width, not just
+  // Platform.OS === 'web', so mobile-web and the PWA keep the phone layout
+  // below — the bottom-anchored design only looks broken once the viewport
+  // is tall and wide enough to open a void between headline and buttons.
+  const wide = useWideWeb();
   const [busyProvider, setBusyProvider] = useState<Provider | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [spotsLeft, setSpotsLeft] = useState<number | null>(null);
@@ -103,12 +109,20 @@ export default function SignUpScreen() {
     <ScrollView
       style={{ flex: 1, backgroundColor: ed.colors.bg }}
       contentContainerStyle={{
-        paddingTop: insets.top + 80,
-        paddingBottom: insets.bottom + 32,
-        paddingHorizontal: 32,
+        paddingTop: wide ? 48 : insets.top + 80,
+        paddingBottom: wide ? 48 : insets.bottom + 32,
+        paddingHorizontal: wide ? 24 : 32,
         minHeight: '100%',
+        // Wide web: center the constrained column both axes so it reads as
+        // a card, not a top-left fragment with the buttons stranded at the
+        // bottom of a tall window. Phone layout is untouched.
+        ...(wide ? { alignItems: 'center', justifyContent: 'center' } : null),
       }}
     >
+      {/* Content column. On phone it flexes to fill height so the button
+          block below can anchor to the bottom; on wide web it's a natural-
+          height, max-width centered column. */}
+      <View style={wide ? { width: '100%', maxWidth: 440 } : { flex: 1, width: '100%' }}>
       {/* Marketing surface — "X founder spots left". Hidden if the
           counter read failed or there are no spots remaining; once the
           last founder claims, the message switches. */}
@@ -143,7 +157,7 @@ export default function SignUpScreen() {
         Research tracking, designed for clarity.
       </Text>
 
-      <View style={{ flex: 1, justifyContent: 'flex-end', marginTop: 80 }}>
+      <View style={wide ? { marginTop: 48 } : { flex: 1, justifyContent: 'flex-end', marginTop: 80 }}>
         {/* Apple — top per App Store policy. iOS only; hidden on
             Android and on iOS devices without an Apple ID. */}
         {appleAvailable ? (
@@ -258,6 +272,7 @@ export default function SignUpScreen() {
             Sign in with Apple · iOS only
           </Text>
         ) : null}
+      </View>
       </View>
     </ScrollView>
   );

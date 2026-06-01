@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { WebColumn } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { signUpWithEmail, validateEmail, validatePassword, EmailAuthError } from '../../lib/auth/email';
 import { grantFounderIfEligible } from '../../lib/auth/founder';
@@ -138,6 +139,7 @@ export default function EmailSignUpScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: insets.bottom + 24 }}
       >
+        <WebColumn>
         <EyebrowLabel>Email</EyebrowLabel>
         <View style={{ marginTop: 12 }}>
           <EditorialHeadline size="title1">Create *your account*.</EditorialHeadline>
@@ -316,6 +318,7 @@ export default function EmailSignUpScreen() {
             style={{ marginTop: 24, alignSelf: 'center' }}
           />
         ) : null}
+        </WebColumn>
       </ScrollView>
     </KeyboardAvoidingView>
   );

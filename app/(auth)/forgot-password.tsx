@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { WebColumn } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { sendPasswordReset, validateEmail, EmailAuthError } from '../../lib/auth/email';
 
@@ -74,6 +75,7 @@ export default function ForgotPasswordScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: insets.bottom + 24 }}
       >
+        <WebColumn>
         <EyebrowLabel>Forgot password</EyebrowLabel>
         <View style={{ marginTop: 12 }}>
           <EditorialHeadline size="title1">We&apos;ll *send a link*.</EditorialHeadline>
@@ -147,6 +149,7 @@ export default function ForgotPasswordScreen() {
             {busy ? 'Sending…' : 'Send reset link'}
           </EditorialButton>
         </View>
+        </WebColumn>
       </ScrollView>
     </KeyboardAvoidingView>
   );
