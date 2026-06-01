@@ -29,6 +29,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getProfile, hasLegacyLocalData, initDatabase, setCurrentUserId } from '../lib/db';
 import { scheduleAllSafe } from '../lib/notifications';
+import { syncAll } from '../lib/sync';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
 import { font, radius, space } from '../theme/tokens';
@@ -565,6 +566,38 @@ export default function RootLayout() {
       }
     })();
   }, []);
+
+  // Cross-device sync — fires whenever the user is signed in and the
+  // app is foreground-active. syncAll() is idempotent and coalesces
+  // overlapping calls, so re-triggering on every AppState change is
+  // safe. Pulls remote → upserts into local SQLite; then pushes any
+  // newer local rows up to Supabase. lib/sync.web.ts is a no-op (web
+  // already reads/writes Supabase directly).
+  useEffect(() => {
+    if (!dbReady) return;
+    if (!isAuthConfigured()) return;
+    const trigger = () => {
+      if (getAuthState().status === 'signed-in') {
+        void syncAll().catch(() => {
+          // Errors are aggregated into the SyncResult.errors array
+          // already; nothing here should abort the app.
+        });
+      }
+    };
+    // Initial fire when this effect mounts (may be too early if auth
+    // hasn't hydrated — covered by the subscribeAuth fire below).
+    trigger();
+    const unsub = subscribeAuth((s) => {
+      if (s.status === 'signed-in') trigger();
+    });
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') trigger();
+    });
+    return () => {
+      unsub();
+      sub.remove();
+    };
+  }, [dbReady]);
 
   useEffect(() => {
     if (fontsLoaded && dbReady) SplashScreen.hideAsync().catch(() => {});
