@@ -1,13 +1,15 @@
 // Age gate — editorial rebuild. Mono step indicator, italic-emphasis
 // serif headline, body in serif. CTAs use the editorial pair.
 import { useRouter } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { useWideWeb } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { getCurrentUserId } from '../../lib/db';
 import { useProfile } from '../../lib/profile-context';
+import { isAuthConfigured } from '../../lib/supabase';
 
 export default function AgeGate() {
   const ed = useEditorialTheme();
@@ -17,6 +19,10 @@ export default function AgeGate() {
   const wide = useWideWeb();
 
   const yes = async () => {
+    if ((Platform.OS === 'web' || isAuthConfigured()) && !getCurrentUserId()) {
+      router.replace('/(auth)/sign-up');
+      return;
+    }
     await update({ age_gate_accepted_at: new Date().toISOString() });
     router.push('/(onboarding)/acknowledge');
   };
