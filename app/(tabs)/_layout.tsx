@@ -10,6 +10,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { getAuthState, subscribeAuth, type AuthState } from '../../lib/auth/session';
 import { isAuthConfigured } from '../../lib/supabase';
+import { getCurrentUserId } from '../../lib/db';
 
 type TabItem = {
   name: string;
@@ -161,7 +162,9 @@ export default function TabsLayout() {
     setAuthState(getAuthState());
     return subscribeAuth(setAuthState);
   }, []);
-  if (isAuthConfigured() && authState.status !== 'signed-in') return null;
+  if (isAuthConfigured() && (authState.status !== 'signed-in' || !getCurrentUserId())) {
+    return null;
+  }
 
   return (
     <Tabs tabBar={(p) => <CustomTabBar {...p} />} screenOptions={{ headerShown: false }}>

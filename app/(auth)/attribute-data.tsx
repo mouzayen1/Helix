@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { WebColumn } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import {
   attributeLocalDataToUser,
@@ -122,6 +123,7 @@ export default function AttributeDataScreen() {
         paddingBottom: insets.bottom + 32,
       }}
     >
+      <WebColumn>
       <EyebrowLabel>Welcome back</EyebrowLabel>
       <View style={{ marginTop: 16 }}>
         <EditorialHeadline size="title1">Keep your *Helix data*?</EditorialHeadline>
@@ -183,6 +185,7 @@ export default function AttributeDataScreen() {
           Start fresh — delete local data
         </Text>
       </Pressable>
+      </WebColumn>
     </ScrollView>
   );
 }

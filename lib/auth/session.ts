@@ -30,7 +30,12 @@ let currentState: AuthState = { status: 'loading' };
 const listeners = new Set<(s: AuthState) => void>();
 let supabaseSub: Subscription | null = null;
 
+function syncDbUserContext(state: AuthState): void {
+  setCurrentUserId(state.status === 'signed-in' ? state.session.user.id : null);
+}
+
 function setState(next: AuthState) {
+  syncDbUserContext(next);
   currentState = next;
   for (const l of listeners) l(next);
 }
@@ -95,6 +100,7 @@ function attachListenerOnce(): void {
 
 /** Read the current auth state synchronously. */
 export function getAuthState(): AuthState {
+  syncDbUserContext(currentState);
   return currentState;
 }
 
@@ -103,6 +109,7 @@ export function subscribeAuth(listener: (s: AuthState) => void): () => void {
   listeners.add(listener);
   // Fire immediately with the current state so subscribers don't have
   // to special-case "haven't received an event yet".
+  syncDbUserContext(currentState);
   listener(currentState);
   return () => {
     listeners.delete(listener);

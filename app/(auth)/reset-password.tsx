@@ -40,6 +40,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { WebColumn } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { updatePassword, validatePassword, EmailAuthError } from '../../lib/auth/email';
 import { requireSupabase } from '../../lib/supabase';
@@ -195,6 +196,7 @@ export default function ResetPasswordScreen() {
           paddingBottom: insets.bottom + 24,
         }}
       >
+        <WebColumn>
         <EyebrowLabel>Reset password</EyebrowLabel>
         <View style={{ marginTop: 12 }}>
           <EditorialHeadline size="title1">Set a *new password*.</EditorialHeadline>
@@ -366,6 +368,7 @@ export default function ResetPasswordScreen() {
             </View>
           </>
         ) : null}
+        </WebColumn>
       </ScrollView>
     </KeyboardAvoidingView>
   );

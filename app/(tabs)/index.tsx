@@ -23,6 +23,7 @@ import {
   deleteDose,
   deleteDoseSkip,
   deleteVial,
+  getCurrentUserId,
   listActiveCycles,
   listActiveVials,
   listDoseSkips,
@@ -145,6 +146,7 @@ export default function TodayScreen() {
   const [skipNote, setSkipNote] = useState('');
 
   const refresh = useCallback(async () => {
+    if (!getCurrentUserId()) return;
     const [cs, v] = await Promise.all([listActiveCycles(), listActiveVials()]);
     setCycles(cs);
     setVials(v);

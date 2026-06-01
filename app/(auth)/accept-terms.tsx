@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { WebColumn } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { signOut } from '../../lib/auth/session';
 import { requireSupabase } from '../../lib/supabase';
@@ -128,6 +129,7 @@ export default function AcceptTermsScreen() {
         paddingHorizontal: 32,
       }}
     >
+      <WebColumn>
       <EyebrowLabel>One more step</EyebrowLabel>
       <View style={{ marginTop: 16 }}>
         <EditorialHeadline size="title1">Confirm *and accept*.</EditorialHeadline>
@@ -193,6 +195,7 @@ export default function AcceptTermsScreen() {
           Cancel — sign me out
         </Text>
       </Pressable>
+      </WebColumn>
     </ScrollView>
   );
 }

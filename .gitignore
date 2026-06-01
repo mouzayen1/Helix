@@ -44,3 +44,7 @@ app-example
 
 # JetBrains IDE
 .idea/
+
+# tooling artifacts
+.playwright-mcp/
+supabase/.temp/

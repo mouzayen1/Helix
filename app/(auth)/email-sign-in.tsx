@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
+import { WebColumn } from '../../components/editorial/WebColumn';
 import { useEditorialTheme } from '../../lib/design/theme';
 import { signInWithEmail, validateEmail, EmailAuthError } from '../../lib/auth/email';
 import { nextRouteAfterSignIn } from '../../lib/auth/terms-status';
@@ -81,6 +82,7 @@ export default function EmailSignInScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: insets.bottom + 24 }}
       >
+        <WebColumn>
         <EyebrowLabel>Welcome back</EyebrowLabel>
         <View style={{ marginTop: 12 }}>
           <EditorialHeadline size="title1">Sign in *to Helix*.</EditorialHeadline>
@@ -193,6 +195,7 @@ export default function EmailSignInScreen() {
             {busy ? 'Signing in…' : 'Sign in'}
           </EditorialButton>
         </View>
+        </WebColumn>
       </ScrollView>
     </KeyboardAvoidingView>
   );
