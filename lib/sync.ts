@@ -1,3 +1,33 @@
+// ⚠️ KNOWN BUGS — MUST FIX BEFORE SHIPPING / MERGING TO main ⚠️
+// Split out of the web-app PR (#8) into this branch on 2026-06-01 because
+// the engine is not yet correct. The PULL direction (Supabase → local
+// SQLite) works; the PUSH direction (local → Supabase) does NOT.
+//
+//   1. PUSH IS DEAD CODE. In syncTable() `remoteHigh` is seeded from
+//      `localMaxIso` (= MAX(local updated_at)) and only ever increases.
+//      The push filter keeps rows where `updated_at > remoteHigh`, but
+//      since remoteHigh >= MAX(local updated_at), no local row can ever
+//      satisfy it — `toPush` is always empty. Net effect: local-origin
+//      changes on native NEVER reach Supabase, so the headline use case
+//      ("made a cycle on my phone, opened the web app") does not work.
+//      Fix: track a PERSISTED last-pushed high-water mark per table
+//      (separate from the pull mark), or compare each local row against
+//      its per-row remote timestamp — not the local max.
+//
+//   2. Stacked bugs hidden behind (1) — these only surface once push runs:
+//      • is_active is converted number→boolean for push, but the server
+//        column is INTEGER NOT NULL (0002). Pushing a boolean is wrong.
+//      • journal_entries push uses onConflict:'id', but the server PK is
+//        (user_id, entry_date) and `id` (added in 0007) has no unique
+//        constraint — the upsert will error.
+//
+//   3. 0008_sync_metadata.sql must be applied to Supabase before this
+//      engine runs, or every pull query errors on the missing updated_at
+//      column (caught + swallowed, so sync silently no-ops on native).
+//
+// Three bugs in one never-executed path = the push direction has never
+// been run. Do not merge until push is fixed AND tested end-to-end.
+//
 // Cross-device sync engine — bidirectional delta sync between the local
 // SQLite (lib/db.ts) and Supabase. Runs on app launch and on foreground
 // when the user is signed in. v1 scope:

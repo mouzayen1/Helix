@@ -350,6 +350,8 @@ export async function initDatabase() {
     // and trigger a spurious sync push.
     const anchorCol =
       t === 'saved_peptides' ? 'saved_at' :
+      t === 'metrics' ? 'taken_at' :
+      t === 'injection_sites_log' ? 'used_at' :
       t === 'profile' ? null : 'created_at';
     if (anchorCol) {
       await d.runAsync(
