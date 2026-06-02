@@ -65,6 +65,10 @@ type Goal = {
 
 const SCRATCH_ID = '__scratch__';
 const MAX_START_OFFSET = 30;
+// Allow backdating a cycle that's already underway (e.g. logging one that
+// started a couple weeks ago). The edit screen already permits arbitrary
+// past starts_on, so this just brings creation-time parity.
+const MIN_START_OFFSET = -90;
 
 const GOALS: Goal[] = [
   { id: 'Healing', subtitle: 'Tendons, gut, skin' },
@@ -2207,16 +2211,18 @@ export default function NewCycle() {
         <EyebrowLabel withRule>Starts on</EyebrowLabel>
         <Stepper
           ed={ed}
-          minusDisabled={startOffset === 0}
+          minusDisabled={startOffset === MIN_START_OFFSET}
           plusDisabled={startOffset === MAX_START_OFFSET}
-          onMinus={() => setStartOffset((d) => Math.max(0, d - 1))}
+          onMinus={() => setStartOffset((d) => Math.max(MIN_START_OFFSET, d - 1))}
           onPlus={() => setStartOffset((d) => Math.min(MAX_START_OFFSET, d + 1))}
           display={
             startOffset === 0
               ? `Today · ${formatDate(startDate)}`
               : startOffset === 1
               ? `Tomorrow · ${formatDate(startDate)}`
-              : `${formatDate(startDate)} · +${startOffset}d`
+              : startOffset === -1
+              ? `Yesterday · ${formatDate(startDate)}`
+              : `${formatDate(startDate)} · ${startOffset > 0 ? '+' : ''}${startOffset}d`
           }
         />
       </View>
