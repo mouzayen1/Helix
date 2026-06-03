@@ -31,6 +31,63 @@ export default function Root({ children }: PropsWithChildren) {
         {/* Disable body scrolling on web so the ScrollView behaves like
             native. Required by Expo Router for the root layout. */}
         <ScrollViewStyleReset />
+
+        {/* Mobile-web polish layer. React Native Web exports TextInput as
+            an unstyled <input>, and the native screen layouts were drawn
+            for a fixed-width phone — both look broken in a real mobile
+            browser. This stylesheet:
+              • Stops the page from scrolling sideways when a fixed-width
+                row overflows the viewport (the "content cut off on the
+                left" symptom).
+              • Forces every input to ≥16px font so iOS Safari doesn't
+                auto-zoom the viewport on focus.
+              • Removes Safari's input default styling that misaligns with
+                our editorial type.
+              • Improves tap responsiveness (no 300ms delay).
+            Desktop is unaffected — every override is either viewport-
+            independent or guarded inside a max-width media query. */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              /* Stop horizontal scroll — root cause of "content cut off
+                 on the left" on mobile. Native ScrollViews export as
+                 divs that can overflow their viewport. */
+              html, body, #root {
+                max-width: 100vw;
+                overflow-x: hidden;
+              }
+              /* Better tap behaviour on mobile. */
+              html {
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+              }
+
+              /* Inputs — react-native-web TextInput maps to <input>/<textarea>. */
+              input, textarea, select {
+                -webkit-appearance: none;
+                appearance: none;
+                font-family: inherit;
+              }
+              /* iOS Safari auto-zooms the viewport whenever an input
+                 receives focus and its font-size is < 16px. Force 16px
+                 on small viewports to defeat that. The visual size
+                 difference vs the editorial spec is small enough to
+                 accept; it only kicks in on phone widths. */
+              @media (max-width: 600px) {
+                input, textarea, select {
+                  font-size: 16px !important;
+                }
+                /* Make every input fill the row instead of spilling
+                   out. Components that already cap width override
+                   this via inline style which has higher specificity. */
+                input, textarea {
+                  max-width: 100% !important;
+                  box-sizing: border-box;
+                }
+              }
+            `,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>
