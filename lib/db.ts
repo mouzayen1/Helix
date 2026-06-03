@@ -324,25 +324,25 @@ export async function initDatabase() {
 
   // v1.5 — cross-device sync metadata. Every user-data table gets an
   // updated_at TEXT column populated in ISO-Z format (matches Supabase
-  // timestamptz when serialized), plus an AFTER UPDATE trigger that
-  // bumps it on every row change (unless the statement explicitly set
-  // updated_at, which the sync pull does — guard via OLD.updated_at IS
-  // NEW.updated_at to avoid recursive firing).
+  // timestamptz when serialized), plus AFTER INSERT + AFTER UPDATE
+  // triggers that bump it on every row change (unless the statement
+  // explicitly set updated_at, which the sync pull does — guard via
+  // OLD.updated_at IS NEW.updated_at to avoid recursive firing).
   //
   // We DO NOT touch read paths or write paths in this file — the
   // updated_at column is read+written only by lib/sync.ts. Stamping
-  // it on INSERT is handled by the column DEFAULT; on UPDATE by the
-  // trigger. Schema-level so every existing write function "just
-  // works" without per-function patching.
+  // it on INSERT and UPDATE is handled by the triggers. Schema-level
+  // so every existing write function "just works" without per-function
+  // patching.
   const SYNC_TABLES = [
     'profile', 'saved_peptides', 'vials', 'cycles', 'stacks',
     'doses', 'journal_entries', 'metrics', 'injection_sites_log', 'dose_skips',
   ];
   for (const t of SYNC_TABLES) {
-    await addColumnIfMissing(
-      d, t, 'updated_at',
-      "TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-    );
+    // SQLite restriction: ALTER TABLE ADD COLUMN cannot use a non-constant
+    // DEFAULT like (strftime(...)). We add the column nullable and rely on
+    // the backfill UPDATE below + an AFTER INSERT trigger to populate it.
+    await addColumnIfMissing(d, t, 'updated_at', 'TEXT');
     // Backfill existing rows where updated_at is still NULL (rows
     // created before this migration ran on the device). Use a stable
     // anchor: the table's created_at / saved_at where present, else
@@ -363,11 +363,24 @@ export async function initDatabase() {
       `UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE updated_at IS NULL`,
     );
+    // AFTER INSERT trigger — populates updated_at when the inserting
+    // statement didn't set it explicitly (i.e. NULL after insert). Sync
+    // pull DOES set it, so the WHEN clause keeps the pulled timestamp.
+    const pkCol = t === 'saved_peptides' ? 'peptide_id' : 'id';
+    await d.execAsync(
+      `CREATE TRIGGER IF NOT EXISTS ${t}_set_updated_at_ins
+         AFTER INSERT ON ${t}
+         FOR EACH ROW
+         WHEN NEW.updated_at IS NULL
+         BEGIN
+           UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE ${pkCol} = NEW.${pkCol};
+         END`,
+    );
     // AFTER UPDATE trigger — bumps updated_at unless the statement
     // already wrote a fresh one (sync pull case). The WHEN guard
     // prevents recursive firing because our inner UPDATE writes a
     // new value, breaking the OLD IS NEW condition the second time.
-    const pkCol = t === 'saved_peptides' ? 'peptide_id' : 'id';
     await d.execAsync(
       `CREATE TRIGGER IF NOT EXISTS ${t}_touch_updated_at
          AFTER UPDATE ON ${t}
