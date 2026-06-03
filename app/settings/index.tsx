@@ -15,6 +15,8 @@ import { getAuthState, signOut, subscribeAuth, type AuthState } from '../../lib/
 import { signOutGoogle } from '../../lib/auth/google';
 import { getMyFounderStatus } from '../../lib/auth/founder';
 import { isAuthConfigured } from '../../lib/supabase';
+import { getCurrentUserId } from '../../lib/db';
+import { syncAll } from '../../lib/sync';
 
 export default function Settings() {
   const ed = useEditorialTheme();
@@ -220,6 +222,30 @@ export default function Settings() {
             label="Delete account"
             tone="warn"
             onPress={() => router.push('/settings/delete-account' as any)}
+          />
+          <HairlineRow strong />
+          {/* TEMP DEBUG: surface sync result so we can see why iOS data
+              isn't reaching Supabase. Remove once sync is verified. */}
+          <NavRow
+            label="Run sync now (debug)"
+            onPress={async () => {
+              const uid = getCurrentUserId();
+              try {
+                const result = await syncAll();
+                Alert.alert(
+                  'Sync result',
+                  `user_id: ${uid ?? 'NULL'}\n\n` +
+                    `pulled: ${result.pulled}\n` +
+                    `pushed: ${result.pushed}\n` +
+                    `errors: ${result.errors.length === 0 ? 'none' : '\n' + result.errors.join('\n')}`,
+                );
+              } catch (err) {
+                Alert.alert(
+                  'Sync crashed',
+                  `user_id: ${uid ?? 'NULL'}\n\nerror: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            }}
           />
           <HairlineRow strong />
         </View>
