@@ -1057,6 +1057,7 @@ function TypedField({
         <Text
           style={{
             flex: 1,
+            flexShrink: 1,
             fontFamily: ed.typography.label.fontFamily,
             fontSize: ed.typography.label.fontSize,
             letterSpacing: ed.typography.label.letterSpacing,
@@ -1084,7 +1085,7 @@ function TypedField({
             −
           </Text>
         </Pressable>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', flexShrink: 0 }}>
           <TextInput
             value={value}
             onChangeText={onChangeText}
@@ -1100,7 +1101,10 @@ function TypedField({
               letterSpacing: -0.5,
               color: valueColor,
               padding: 0,
-              minWidth: 64,
+              // Hard width — minWidth allowed browser inputs (which have
+              // a wide default intrinsic width) to expand and push the
+              // +/- buttons off the right edge of small viewports.
+              width: 70,
               textAlign: 'right',
             }}
           />
