@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- ':(top)' ':(top,exclude)site'",
   "framework": null,
   "buildCommand": "expo export -p web",
   "outputDirectory": "dist",
