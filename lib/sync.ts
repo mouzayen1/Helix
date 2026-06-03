@@ -1,11 +1,11 @@
 // Cross-device sync engine — bidirectional delta sync between the local
 // SQLite (lib/db.ts) and Supabase. Runs on app launch and on foreground
 // when the user is signed in. v1 scope:
-//   • PULL: compare Supabase rows against matching local rows by key;
-//     newer remote rows are upserted into local SQLite.
-//   • PUSH: compare local rows against matching remote rows by key;
-//     newer local rows are upserted into Supabase. Best-effort —
-//     errors are logged and the next sync trigger retries.
+//   • PULL: read Supabase rows where remote.updated_at > local high-water
+//     mark, upsert into local SQLite. Remote wins on conflict.
+//   • PUSH: read local rows where local.updated_at > remote high-water
+//     mark, upsert into Supabase. Best-effort — errors are logged and
+//     the next sync trigger retries.
 //   • CONFLICT POLICY: last-write-wins by updated_at. Same-second writes
 //     on two devices race; the loser is silently overwritten. Acceptable
 //     for v1 — peptide tracking is single-user, multi-device, not
@@ -42,8 +42,6 @@ const ROW_TABLES = [
   'dose_skips',
 ] as const;
 
-type RowTable = typeof ROW_TABLES[number];
-
 type SyncResult = {
   pulled: number;
   pushed: number;
@@ -61,61 +59,6 @@ function toIsoZ(ts: string | null | undefined): string | null {
 }
 
 let syncInFlight = false;
-
-const ON_CONFLICT: Record<RowTable, string> = {
-  saved_peptides: 'user_id,peptide_id',
-  journal_entries: 'user_id,entry_date',
-  vials: 'id',
-  cycles: 'id',
-  stacks: 'id',
-  doses: 'id',
-  metrics: 'id',
-  injection_sites_log: 'id',
-  dose_skips: 'id',
-};
-
-const SYNC_COLUMNS: Record<RowTable, readonly string[]> = {
-  saved_peptides: ['user_id', 'peptide_id', 'saved_at', 'updated_at'],
-  vials: [
-    'id', 'user_id', 'peptide_id', 'strength_mg', 'bac_water_ml', 'concentration',
-    'remaining_mg', 'is_active', 'reconstituted_at', 'expires_at', 'cycle_id',
-    'notes', 'cost_usd', 'depleted_at', 'first_used_at', 'total_doses_drawn',
-    'created_at', 'updated_at',
-  ],
-  cycles: [
-    'id', 'user_id', 'name', 'starts_on', 'ends_on', 'phase', 'status', 'stack_id',
-    'protocol_json', 'notes', 'paused_at', 'paused_total_days', 'created_at',
-    'updated_at',
-  ],
-  stacks: [
-    'id', 'user_id', 'name', 'goal', 'items_json', 'synergy_score', 'created_at',
-    'updated_at',
-  ],
-  doses: [
-    'id', 'user_id', 'peptide_id', 'vial_id', 'cycle_id', 'amount_mcg',
-    'volume_units', 'route', 'site', 'taken_at', 'note', 'created_at', 'updated_at',
-  ],
-  journal_entries: [
-    'user_id', 'entry_date', 'mood', 'energy', 'sleep_hours', 'sleep_quality',
-    'id', 'libido', 'recovery', 'tags_json', 'body', 'created_at', 'updated_at',
-  ],
-  metrics: ['id', 'user_id', 'kind', 'value', 'unit', 'taken_at', 'source', 'note', 'updated_at'],
-  injection_sites_log: ['id', 'user_id', 'site', 'used_at', 'dose_id', 'updated_at'],
-  dose_skips: [
-    'id', 'user_id', 'cycle_id', 'peptide_id', 'scheduled_date', 'time_of_day',
-    'reason', 'note', 'created_at', 'updated_at',
-  ],
-};
-
-function rowKey(table: RowTable, row: Record<string, unknown>): string | null {
-  if (table === 'saved_peptides') {
-    return typeof row.peptide_id === 'string' ? row.peptide_id : null;
-  }
-  if (table === 'journal_entries') {
-    return typeof row.entry_date === 'string' ? row.entry_date : null;
-  }
-  return typeof row.id === 'string' ? row.id : null;
-}
 
 /**
  * Run a full bidirectional sync for the current user. Idempotent —
@@ -283,71 +226,72 @@ async function syncProfile(
 
 // ─── Generic per-table sync ───────────────────────────────────────
 async function syncTable(
-  table: RowTable,
+  table: typeof ROW_TABLES[number],
   userId: string,
   sb: NonNullable<ReturnType<typeof supabase>>,
 ): Promise<{ pulled: number; pushed: number }> {
   const d = getDb();
   let pulled = 0;
   let pushed = 0;
-  const columns = SYNC_COLUMNS[table];
-  const columnList = columns.join(', ');
-
-  const localRows = await d.getAllAsync<Record<string, unknown>>(
-    `SELECT ${columnList} FROM ${table} WHERE user_id = ?`,
-    [userId],
-  );
-  const localByKey = new Map<string, Record<string, unknown>>();
-  for (const row of localRows) {
-    const key = rowKey(table, row);
-    if (key) localByKey.set(key, row);
-  }
-
-  const { data: remoteRows, error: pullErr } = await sb
-    .from(table)
-    .select(columnList)
-    .eq('user_id', userId);
-  if (pullErr) throw new Error(pullErr.message);
-
-  const remoteByKey = new Map<string, Record<string, unknown>>();
 
   // --- PULL ---
-  for (const row of remoteRows ?? []) {
-    const remote = row as unknown as Record<string, unknown>;
-    const key = rowKey(table, remote);
-    if (!key) continue;
-    remoteByKey.set(key, remote);
+  const localMaxRaw = (
+    await d.getFirstAsync<{ m: string | null }>(
+      `SELECT MAX(updated_at) AS m FROM ${table} WHERE user_id = ?`,
+      [userId],
+    )
+  )?.m ?? null;
+  const localMaxIso = toIsoZ(localMaxRaw);
 
-    const remoteT = toIsoZ((remote.updated_at as string | null) ?? null);
-    const localT = toIsoZ((localByKey.get(key)?.updated_at as string | null) ?? null);
-    if (remoteT && (!localT || remoteT > localT)) {
-      upsertLocalRow(table, remote);
-      pulled++;
-    }
+  let pullQ = sb.from(table).select('*').eq('user_id', userId);
+  if (localMaxIso) pullQ = pullQ.gt('updated_at', localMaxIso);
+  const { data: remoteRows, error: pullErr } = await pullQ;
+  if (pullErr) throw new Error(pullErr.message);
+
+  for (const row of remoteRows ?? []) {
+    upsertLocalRow(table, row);
+    pulled++;
   }
 
   // --- PUSH ---
+  // remoteHigh = the highest updated_at we actually saw on the remote
+  // for this user this round. Starts at null — only remote rows we
+  // just pulled contribute. Defaulting it to localMaxIso was a bug:
+  // when no remote rows came back AND the freshest local row's
+  // updated_at equalled localMax, the strict-greater push filter
+  // failed and that row was silently never pushed. With null, the
+  // filter becomes "push everything local" on first sync, which is
+  // what we want.
+  let remoteHigh: string | null = null;
+  for (const r of remoteRows ?? []) {
+    const t = toIsoZ((r as { updated_at?: string | null }).updated_at ?? null);
+    if (t && (!remoteHigh || t > remoteHigh)) remoteHigh = t;
+  }
+
+  const localRows = await d.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM ${table} WHERE user_id = ?`,
+    [userId],
+  );
   const toPush = localRows.filter((r) => {
-    const key = rowKey(table, r);
-    if (!key) return false;
-    const localT = toIsoZ((r.updated_at as string | null) ?? null);
-    if (!localT) return false;
-    const remoteT = toIsoZ((remoteByKey.get(key)?.updated_at as string | null) ?? null);
-    return !remoteT || localT > remoteT;
+    const t = toIsoZ((r.updated_at as string | null) ?? null);
+    if (!t) return false; // never push rows without a timestamp
+    return !remoteHigh || t > remoteHigh;
   });
 
   if (toPush.length > 0) {
     const cleaned = toPush.map((row) => {
       const out: Record<string, unknown> = { ...row };
+      if ('is_active' in out && typeof out.is_active === 'number') {
+        out.is_active = out.is_active === 1;
+      }
       // Normalise updated_at to ISO Z form so Supabase accepts it as
       // a timestamptz value (SQLite's text format isn't directly parseable).
       const u = out.updated_at;
       if (typeof u === 'string') out.updated_at = toIsoZ(u) ?? u;
       return out;
     });
-    const { error: pushErr } = await sb.from(table).upsert(cleaned, {
-      onConflict: ON_CONFLICT[table],
-    });
+    const onConflict = table === 'saved_peptides' ? 'user_id,peptide_id' : 'id';
+    const { error: pushErr } = await sb.from(table).upsert(cleaned, { onConflict });
     if (pushErr) throw new Error(pushErr.message);
     pushed = cleaned.length;
   }
