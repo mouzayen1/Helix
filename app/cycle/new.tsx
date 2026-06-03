@@ -763,6 +763,30 @@ function formatDate(d: Date): string {
   });
 }
 
+// Floor to local midnight so day-offset math is exact (no time-of-day or
+// DST drift when subtracting two dates).
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function addMonths(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + n, 1);
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export default function NewCycle() {
   const ed = useEditorialTheme();
   const router = useRouter();
@@ -776,6 +800,7 @@ export default function NewCycle() {
   const [durationWeeks, setDurationWeeks] = useState<number>(4);
   const [phase, setPhase] = useState<Phase>('active');
   const [startOffset, setStartOffset] = useState<number>(0);
+  const [pickerOpen, setPickerOpen] = useState<boolean>(false);
   const [items, setItems] = useState<CycleProtocolItem[]>([]);
   const [showPicker, setShowPicker] = useState<boolean>(false);
   const [pickerQuery, setPickerQuery] = useState<string>('');
@@ -864,11 +889,23 @@ export default function NewCycle() {
     });
   }, [goal, templateQuery]);
 
-  const startDate = useMemo(() => addDays(new Date(), startOffset), [startOffset]);
+  // Single stable "today" (local midnight) drives all start-date math so
+  // the calendar picker, the stepper, and the offset round-trip agree.
+  const today = useMemo(() => startOfDay(new Date()), []);
+  const startDate = useMemo(() => addDays(today, startOffset), [today, startOffset]);
   const endDate = useMemo(
     () => addDays(startDate, durationWeeks * 7),
     [startDate, durationWeeks]
   );
+  const minStartDate = useMemo(() => addDays(today, MIN_START_OFFSET), [today]);
+  const maxStartDate = useMemo(() => addDays(today, MAX_START_OFFSET), [today]);
+  const onPickStartDate = (picked: Date) => {
+    const offset = Math.round(
+      (startOfDay(picked).getTime() - today.getTime()) / 864e5
+    );
+    setStartOffset(Math.max(MIN_START_OFFSET, Math.min(MAX_START_OFFSET, offset)));
+    setPickerOpen(false);
+  };
 
   const conflicts = useMemo(() => {
     const ids = new Set(items.map((i) => i.peptide_id));
@@ -2211,6 +2248,7 @@ export default function NewCycle() {
         <EyebrowLabel withRule>Starts on</EyebrowLabel>
         <Stepper
           ed={ed}
+          onPressDisplay={() => setPickerOpen(true)}
           minusDisabled={startOffset === MIN_START_OFFSET}
           plusDisabled={startOffset === MAX_START_OFFSET}
           onMinus={() => setStartOffset((d) => Math.max(MIN_START_OFFSET, d - 1))}
@@ -3090,6 +3128,18 @@ export default function NewCycle() {
           )}
         </View>
       </View>
+
+      {pickerOpen ? (
+        <CalendarPicker
+          ed={ed}
+          selected={startDate}
+          today={today}
+          minDate={minStartDate}
+          maxDate={maxStartDate}
+          onSelect={onPickStartDate}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -3174,6 +3224,7 @@ function Stepper({
   onPlus,
   minusDisabled,
   plusDisabled,
+  onPressDisplay,
 }: {
   ed: EditorialTheme;
   display: string;
@@ -3181,7 +3232,21 @@ function Stepper({
   onPlus: () => void;
   minusDisabled?: boolean;
   plusDisabled?: boolean;
+  // When provided, the center value becomes tappable (opens a picker).
+  onPressDisplay?: () => void;
 }) {
+  const label = (
+    <Text
+      style={{
+        fontFamily: ed.fraunces('Fraunces_400Regular'),
+        fontSize: 19,
+        letterSpacing: -0.3,
+        color: ed.colors.ink1,
+      }}
+    >
+      {display}
+    </Text>
+  );
   return (
     <View
       style={{
@@ -3203,16 +3268,21 @@ function Stepper({
         </Text>
       </Pressable>
       <View style={{ flex: 1, alignItems: 'center' }}>
-        <Text
-          style={{
-            fontFamily: ed.fraunces('Fraunces_400Regular'),
-            fontSize: 19,
-            letterSpacing: -0.3,
-            color: ed.colors.ink1,
-          }}
-        >
-          {display}
-        </Text>
+        {onPressDisplay ? (
+          <Pressable
+            onPress={onPressDisplay}
+            hitSlop={10}
+            style={{
+              borderBottomWidth: 1,
+              borderBottomColor: ed.colors.brandLine,
+              paddingBottom: 3,
+            }}
+          >
+            {label}
+          </Pressable>
+        ) : (
+          label
+        )}
       </View>
       <Pressable onPress={onPlus} hitSlop={8} disabled={plusDisabled}>
         <Text
@@ -3226,6 +3296,232 @@ function Stepper({
           +
         </Text>
       </Pressable>
+    </View>
+  );
+}
+
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+// Calendar-style date picker rendered as an inline absolute overlay (not a
+// React Native <Modal> — its portal/focus behavior is flaky on
+// react-native-web). Pure View/Pressable/Text so it renders identically on
+// web and native with no native module, keeping auth-screen OTA shipping
+// intact. Days outside [minDate, maxDate] are dimmed and unselectable so the
+// bound is visible rather than silently clamped.
+function CalendarPicker({
+  ed,
+  selected,
+  today,
+  minDate,
+  maxDate,
+  onSelect,
+  onClose,
+}: {
+  ed: EditorialTheme;
+  selected: Date;
+  today: Date;
+  minDate: Date;
+  maxDate: Date;
+  onSelect: (d: Date) => void;
+  onClose: () => void;
+}) {
+  const [viewMonth, setViewMonth] = useState<Date>(() => startOfMonth(selected));
+
+  // Build the month as weeks: leading blanks for the first day's weekday,
+  // then each day, padded out to whole weeks.
+  const weeks = useMemo(() => {
+    const first = startOfMonth(viewMonth);
+    const daysInMonth = new Date(
+      viewMonth.getFullYear(),
+      viewMonth.getMonth() + 1,
+      0
+    ).getDate();
+    const cells: (Date | null)[] = [];
+    for (let i = 0; i < first.getDay(); i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      cells.push(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d));
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    const rows: (Date | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+    return rows;
+  }, [viewMonth]);
+
+  const inRange = (d: Date) =>
+    d.getTime() >= minDate.getTime() && d.getTime() <= maxDate.getTime();
+  const canPrev =
+    startOfMonth(viewMonth).getTime() > startOfMonth(minDate).getTime();
+  const canNext =
+    startOfMonth(viewMonth).getTime() < startOfMonth(maxDate).getTime();
+
+  const monthLabel = viewMonth.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 50,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Pressable
+        onPress={onClose}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+        }}
+      />
+      <View
+        style={{
+          width: 320,
+          maxWidth: '90%',
+          backgroundColor: ed.colors.bgElevated,
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: ed.colors.line,
+          padding: 18,
+        }}
+      >
+        {/* Month header with prev / next */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 10,
+          }}
+        >
+          <Pressable
+            onPress={() => setViewMonth((m) => addMonths(m, -1))}
+            disabled={!canPrev}
+            hitSlop={12}
+          >
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 26,
+                lineHeight: 26,
+                color: canPrev ? ed.colors.ink2 : ed.colors.ink4,
+              }}
+            >
+              ‹
+            </Text>
+          </Pressable>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_400Regular'),
+              fontSize: 18,
+              letterSpacing: -0.3,
+              color: ed.colors.ink1,
+            }}
+          >
+            {monthLabel}
+          </Text>
+          <Pressable
+            onPress={() => setViewMonth((m) => addMonths(m, 1))}
+            disabled={!canNext}
+            hitSlop={12}
+          >
+            <Text
+              style={{
+                fontFamily: ed.fraunces('Fraunces_300Light'),
+                fontSize: 26,
+                lineHeight: 26,
+                color: canNext ? ed.colors.ink2 : ed.colors.ink4,
+              }}
+            >
+              ›
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Weekday header */}
+        <View style={{ flexDirection: 'row' }}>
+          {WEEKDAY_LABELS.map((w, i) => (
+            <View
+              key={i}
+              style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                  color: ed.colors.ink3,
+                }}
+              >
+                {w}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Day grid */}
+        {weeks.map((week, wi) => (
+          <View key={wi} style={{ flexDirection: 'row' }}>
+            {week.map((cell, ci) => {
+              if (!cell) {
+                return <View key={ci} style={{ flex: 1, aspectRatio: 1 }} />;
+              }
+              const isSelected = sameDay(cell, selected);
+              const isToday = sameDay(cell, today);
+              const selectable = inRange(cell);
+              return (
+                <Pressable
+                  key={ci}
+                  onPress={() => onSelect(cell)}
+                  disabled={!selectable}
+                  style={{
+                    flex: 1,
+                    aspectRatio: 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: isSelected ? ed.colors.brand : 'transparent',
+                      borderWidth: isToday && !isSelected ? 1 : 0,
+                      borderColor: ed.colors.brandLine,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: ed.fraunces('Fraunces_400Regular'),
+                        fontSize: 15,
+                        color: isSelected
+                          ? ed.colors.bg
+                          : selectable
+                          ? ed.colors.ink1
+                          : ed.colors.ink4,
+                      }}
+                    >
+                      {cell.getDate()}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
