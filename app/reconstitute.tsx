@@ -23,6 +23,7 @@ import { HairlineRow } from '../components/editorial/HairlineRow';
 import { StatPair } from '../components/editorial/StatPair';
 import { DosingDisclaimer } from '../components/Primitives';
 import { SyringeDiagram } from '../components/SyringeDiagram';
+import { getAuthState, subscribeAuth, type AuthState } from '../lib/auth/session';
 import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
 import { useEditorialTheme } from '../lib/design/theme';
 import { useDoseUnitPref } from '../lib/profile-context';
@@ -32,10 +33,17 @@ import {
   parseDoseInput,
   resolveDoseUnit,
 } from '../lib/dose-format';
-import { attachVialToCycle, createVial, getActiveVial, type Cycle } from '../lib/db';
+import {
+  attachVialToCycle,
+  createVial,
+  getActiveVial,
+  getCurrentUserId,
+  type Cycle,
+} from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
 import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../lib/peptides';
+import { isAuthConfigured } from '../lib/supabase';
 
 // Default vial-strength chip row. Peptides with `commonVialSizes` in the
 // catalog override this — GHK-Cu shows 10/50/100/200, NAD+ shows
@@ -118,13 +126,22 @@ export default function ReconstituteModal() {
   const [calcMode, setCalcMode] = useState<'forward' | 'reverse'>('forward');
   const [targetUnits, setTargetUnits] = useState(20);
   const [targetUnitsText, setTargetUnitsText] = useState('20');
+  const [authState, setAuthState] = useState<AuthState>(getAuthState());
 
   const peptide = findPeptide(peptideId)!;
   const extras = getPeptideExtras(peptideId);
+  const hasUserContext = !!getCurrentUserId();
+  const shouldRenderAccountRoute =
+    !isAuthConfigured() || (authState.status === 'signed-in' && hasUserContext);
   const coReconstituteOptions = useMemo(
     () => extras?.coAdministration.filter((ca) => ca.co_reconstitute) ?? [],
     [extras]
   );
+
+  useEffect(() => {
+    setAuthState(getAuthState());
+    return subscribeAuth(setAuthState);
+  }, []);
 
   useEffect(() => {
     const parsed = parseRecon(peptide.reconstitution, peptide.defaultDoseMcg);
@@ -144,6 +161,7 @@ export default function ReconstituteModal() {
   // at the top with a NEEDED pill, and to default-select the first needy
   // peptide if no `?peptideId=` was passed.
   useEffect(() => {
+    if (!hasUserContext) return;
     let cancelled = false;
     (async () => {
       const byPeptide = await getActiveCyclesByPeptide();
@@ -165,7 +183,7 @@ export default function ReconstituteModal() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasUserContext]);
 
   // Sorted peptide list for the picker — needed (no vial) first, then
   // needed (with vial), then everything else. Restricted to
@@ -225,6 +243,7 @@ export default function ReconstituteModal() {
   };
 
   const save = async () => {
+    if (!hasUserContext) return;
     if (saving) return;
     setSaving(true);
     try {
@@ -260,6 +279,8 @@ export default function ReconstituteModal() {
       Alert.alert('Could not save vial', msg, [{ text: 'OK' }]);
     }
   };
+
+  if (!shouldRenderAccountRoute) return null;
 
   return (
     <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
