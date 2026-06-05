@@ -21,6 +21,7 @@ import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../components/editorial/HairlineRow';
 import { StatPair } from '../components/editorial/StatPair';
+import { IconClose, IconSearch } from '../components/Icons';
 import { DosingDisclaimer } from '../components/Primitives';
 import { SyringeDiagram } from '../components/SyringeDiagram';
 import { getAuthState, subscribeAuth, type AuthState } from '../lib/auth/session';
@@ -109,6 +110,7 @@ export default function ReconstituteModal() {
       ? initialId
       : injectablePeptides[0]?.id ?? PEPTIDES[0].id;
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
+  const [peptideQuery, setPeptideQuery] = useState('');
   const [peptideId, setPeptideId] = useState<string>(initialInjectable);
   const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
   const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
@@ -205,6 +207,13 @@ export default function ReconstituteModal() {
     };
     return [...injectablePeptides].sort((a, b) => bucket(a.id) - bucket(b.id));
   }, [activeCycleByPeptide, injectablePeptides, needyPeptides]);
+  const visiblePeptides = useMemo(() => {
+    const q = peptideQuery.trim().toLowerCase();
+    if (!q) return sortedPeptides;
+    return sortedPeptides.filter((p) =>
+      [p.name, p.class, p.route].some((value) => value.toLowerCase().includes(q))
+    );
+  }, [peptideQuery, sortedPeptides]);
 
   // Reverse mode: BAC water is computed from (target dose, target units,
   // vial strength) and synced into bacMl so save() / result block / soft
@@ -428,17 +437,19 @@ export default function ReconstituteModal() {
         {/* Peptide selector */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
           <EyebrowLabel withRule>Peptide</EyebrowLabel>
-          <Pressable
-            onPress={() => setShowPeptidePicker((v) => !v)}
-            accessibilityRole="button"
+          <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              paddingVertical: 18,
+              paddingVertical: 14,
               gap: 12,
             }}
           >
-            <View style={{ flex: 1 }}>
+            <Pressable
+              onPress={() => setShowPeptidePicker((v) => !v)}
+              accessibilityRole="button"
+              style={{ flex: 1, paddingVertical: 4 }}
+            >
               <Text
                 style={{
                   fontFamily: ed.fraunces('Fraunces_400Regular'),
@@ -459,22 +470,87 @@ export default function ReconstituteModal() {
               >
                 {peptide.class}
               </Text>
-            </View>
-            <Text
+            </Pressable>
+            <Pressable
+              onPress={() => setShowPeptidePicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Search peptides"
+              hitSlop={10}
               style={{
-                fontFamily: ed.fraunces('Fraunces_300Light'),
-                fontSize: 22,
-                color: ed.colors.ink3,
+                width: 36,
+                height: 36,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: ed.colors.lineStrong,
               }}
             >
-              {showPeptidePicker ? '▴' : '▾'}
-            </Text>
-          </Pressable>
+              <IconSearch size={17} color={ed.colors.ink3} />
+            </Pressable>
+            <Pressable
+              onPress={() => setShowPeptidePicker((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showPeptidePicker ? 'Collapse peptide list' : 'Expand peptide list'}
+              hitSlop={10}
+              style={{ width: 24, alignItems: 'flex-end' }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_300Light'),
+                  fontSize: 22,
+                  color: ed.colors.ink3,
+                }}
+              >
+                {showPeptidePicker ? '▴' : '▾'}
+              </Text>
+            </Pressable>
+          </View>
           <HairlineRow strong />
           {showPeptidePicker ? (
             <View style={{ height: 320, marginTop: 4 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  borderBottomWidth: 1,
+                  borderColor: ed.colors.line,
+                  paddingVertical: 8,
+                }}
+              >
+                <IconSearch size={16} color={ed.colors.ink3} />
+                <TextInput
+                  placeholder="SEARCH PEPTIDES"
+                  placeholderTextColor={ed.colors.ink3}
+                  value={peptideQuery}
+                  onChangeText={setPeptideQuery}
+                  returnKeyType="search"
+                  selectionColor={ed.colors.brand}
+                  accessibilityLabel="Search peptides"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={{
+                    flex: 1,
+                    fontFamily: ed.typography.dataMd.fontFamily,
+                    fontSize: ed.typography.dataMd.fontSize,
+                    lineHeight: ed.typography.dataMd.lineHeight,
+                    color: ed.colors.ink1,
+                    paddingVertical: 8,
+                  }}
+                />
+                {peptideQuery.length > 0 ? (
+                  <Pressable
+                    onPress={() => setPeptideQuery('')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear peptide search"
+                    hitSlop={10}
+                  >
+                    <IconClose size={13} color={ed.colors.ink3} />
+                  </Pressable>
+                ) : null}
+              </View>
               <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-                {sortedPeptides.map((p, idx) => {
+                {visiblePeptides.map((p, idx) => {
                   const needed = needyPeptides.has(p.id);
                   const inActiveCycle = activeCycleByPeptide.has(p.id);
                   return (
@@ -483,6 +559,7 @@ export default function ReconstituteModal() {
                         onPress={() => {
                           setPeptideId(p.id);
                           setShowPeptidePicker(false);
+                          setPeptideQuery('');
                         }}
                         style={{
                           paddingVertical: 14,
@@ -547,10 +624,22 @@ export default function ReconstituteModal() {
                           </Text>
                         )}
                       </Pressable>
-                      {idx < sortedPeptides.length - 1 ? <HairlineRow /> : null}
+                      {idx < visiblePeptides.length - 1 ? <HairlineRow /> : null}
                     </View>
                   );
                 })}
+                {visiblePeptides.length === 0 ? (
+                  <Text
+                    style={{
+                      paddingVertical: 18,
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: ed.typography.dataMd.fontSize,
+                      color: ed.colors.ink3,
+                    }}
+                  >
+                    No peptides match “{peptideQuery}”.
+                  </Text>
+                ) : null}
               </ScrollView>
             </View>
           ) : null}
