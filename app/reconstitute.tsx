@@ -5,7 +5,16 @@
 // black card; the syringe SVG is retinted to the editorial palette.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
@@ -1050,13 +1059,102 @@ function TypedField({
   readOnlyHint?: string;
 }) {
   const ed = useEditorialTheme();
+  const { width } = useWindowDimensions();
+  const compact = width < 390;
   const valueColor = readOnly ? ed.colors.ink3 : ed.colors.ink1;
-  return (
-    <View style={{ paddingVertical: 18 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+  const controlRow = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: compact ? 'flex-end' : undefined,
+        flexShrink: 0,
+      }}
+    >
+      <Pressable
+        onPress={onMinus}
+        disabled={readOnly}
+        accessibilityRole="button"
+        accessibilityLabel={`Decrease ${label.toLowerCase()}`}
+        hitSlop={8}
+      >
         <Text
           style={{
+            fontFamily: ed.typography.dataLg.fontFamily,
+            fontSize: 22,
+            color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
+            paddingHorizontal: 10,
+          }}
+        >
+          −
+        </Text>
+      </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', minWidth: 96 }}>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          onBlur={onCommit}
+          onSubmitEditing={onCommit}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          editable={!readOnly}
+          selectionColor={ed.colors.brand}
+          style={{
             flex: 1,
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 28,
+            letterSpacing: -0.5,
+            color: valueColor,
+            padding: 0,
+            textAlign: 'right',
+          }}
+        />
+        <Text
+          style={{
+            marginLeft: 6,
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          {unit}
+        </Text>
+      </View>
+      <Pressable
+        onPress={onPlus}
+        disabled={readOnly}
+        accessibilityRole="button"
+        accessibilityLabel={`Increase ${label.toLowerCase()}`}
+        hitSlop={8}
+      >
+        <Text
+          style={{
+            fontFamily: ed.typography.dataLg.fontFamily,
+            fontSize: 22,
+            color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
+            paddingHorizontal: 10,
+          }}
+        >
+          +
+        </Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <View style={{ paddingVertical: 18 }}>
+      <View
+        style={{
+          flexDirection: compact ? 'column' : 'row',
+          alignItems: compact ? 'stretch' : 'center',
+          gap: compact ? 10 : 12,
+        }}
+      >
+        <Text
+          style={{
+            flex: compact ? undefined : 1,
             fontFamily: ed.typography.label.fontFamily,
             fontSize: ed.typography.label.fontSize,
             letterSpacing: ed.typography.label.letterSpacing,
@@ -1066,75 +1164,7 @@ function TypedField({
         >
           {label}
         </Text>
-        <Pressable
-          onPress={onMinus}
-          disabled={readOnly}
-          accessibilityRole="button"
-          accessibilityLabel={`Decrease ${label.toLowerCase()}`}
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 22,
-              color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
-              paddingHorizontal: 10,
-            }}
-          >
-            −
-          </Text>
-        </Pressable>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          <TextInput
-            value={value}
-            onChangeText={onChangeText}
-            onBlur={onCommit}
-            onSubmitEditing={onCommit}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            editable={!readOnly}
-            selectionColor={ed.colors.brand}
-            style={{
-              fontFamily: ed.fraunces('Fraunces_400Regular'),
-              fontSize: 28,
-              letterSpacing: -0.5,
-              color: valueColor,
-              padding: 0,
-              minWidth: 64,
-              textAlign: 'right',
-            }}
-          />
-          <Text
-            style={{
-              marginLeft: 6,
-              fontFamily: ed.typography.label.fontFamily,
-              fontSize: ed.typography.label.fontSize,
-              letterSpacing: ed.typography.label.letterSpacing,
-              color: ed.colors.ink3,
-              textTransform: 'uppercase',
-            }}
-          >
-            {unit}
-          </Text>
-        </View>
-        <Pressable
-          onPress={onPlus}
-          disabled={readOnly}
-          accessibilityRole="button"
-          accessibilityLabel={`Increase ${label.toLowerCase()}`}
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 22,
-              color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
-              paddingHorizontal: 10,
-            }}
-          >
-            +
-          </Text>
-        </Pressable>
+        {controlRow}
       </View>
       {readOnly && readOnlyHint ? (
         <Text
