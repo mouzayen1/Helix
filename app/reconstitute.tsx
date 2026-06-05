@@ -4,7 +4,7 @@
 // picker preserved; result block uses StatPair instead of an inverted
 // black card; the syringe SVG is retinted to the editorial palette.
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -109,8 +109,10 @@ export default function ReconstituteModal() {
     initialId && injectablePeptides.some((p) => p.id === initialId)
       ? initialId
       : injectablePeptides[0]?.id ?? PEPTIDES[0].id;
+  const peptideSearchInputRef = useRef<TextInput>(null);
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
   const [peptideQuery, setPeptideQuery] = useState('');
+  const [shouldFocusPeptideSearch, setShouldFocusPeptideSearch] = useState(false);
   const [peptideId, setPeptideId] = useState<string>(initialInjectable);
   const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
   const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
@@ -214,6 +216,15 @@ export default function ReconstituteModal() {
       [p.name, p.class, p.route].some((value) => value.toLowerCase().includes(q))
     );
   }, [peptideQuery, sortedPeptides]);
+
+  useEffect(() => {
+    if (!showPeptidePicker || !shouldFocusPeptideSearch) return;
+    const timer = setTimeout(() => {
+      peptideSearchInputRef.current?.focus();
+      setShouldFocusPeptideSearch(false);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [shouldFocusPeptideSearch, showPeptidePicker]);
 
   // Reverse mode: BAC water is computed from (target dose, target units,
   // vial strength) and synced into bacMl so save() / result block / soft
@@ -472,7 +483,10 @@ export default function ReconstituteModal() {
               </Text>
             </Pressable>
             <Pressable
-              onPress={() => setShowPeptidePicker(true)}
+              onPress={() => {
+                setShouldFocusPeptideSearch(true);
+                setShowPeptidePicker(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Search peptides"
               hitSlop={10}
@@ -520,6 +534,7 @@ export default function ReconstituteModal() {
               >
                 <IconSearch size={16} color={ed.colors.ink3} />
                 <TextInput
+                  ref={peptideSearchInputRef}
                   placeholder="SEARCH PEPTIDES"
                   placeholderTextColor={ed.colors.ink3}
                   value={peptideQuery}
