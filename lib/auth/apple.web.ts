@@ -5,14 +5,13 @@
 //
 // Exports mirror apple.ts exactly so app/(auth)/sign-up.tsx is unchanged.
 //
-// Apple is currently HIDDEN on web (isAppleSignInAvailable returns false),
-// so the sign-up screen renders only Google + Email — both of which work
-// for iPhone Safari users. Apple's *web* "Sign in with Apple" needs extra
-// setup the native app doesn't: an Apple Services ID, domain association,
-// return URLs in the Apple Developer portal, and the Apple provider
-// enabled for web in Supabase. The redirect-flow signInWithApple() below
-// is left implemented so enabling it later is a one-line flip of the
-// availability check once that config is done.
+// Apple's *web* "Sign in with Apple" needs setup the native app doesn't:
+// an Apple Services ID, domain association + return URLs in the Apple
+// Developer portal, and the Apple provider enabled for web in Supabase.
+// Because clicking the button before that config exists would just error,
+// it's gated behind the EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN feature flag
+// (see isAppleSignInAvailable). Set the flag to "true" in the web build's
+// env (Vercel) once the Apple + Supabase config is complete, then redeploy.
 
 import type { Session } from '@supabase/supabase-js';
 import { requireSupabase } from '../supabase';
@@ -25,12 +24,18 @@ export class AppleSignInError extends Error {
 }
 
 /**
- * Hidden on web for now — see the file header. Flip to `true` (Apple's web
- * OAuth provider works in any browser) once the Apple-web + Supabase
- * config is in place.
+ * Apple "Sign in with Apple" on web is gated behind an explicit feature
+ * flag so the button only appears once the supporting Apple Developer +
+ * Supabase config is in place (otherwise clicking it errors).
+ *
+ * Set EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN=true in the web build env
+ * (Vercel → Settings → Environment Variables) and redeploy AFTER the
+ * config is complete. The flag is read from the bundle at runtime; the
+ * value is inlined by Expo at export time. Native iOS is unaffected — it
+ * resolves apple.ts (not this file) and keeps its own device check.
  */
 export async function isAppleSignInAvailable(): Promise<boolean> {
-  return false;
+  return process.env.EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN === 'true';
 }
 
 /**
