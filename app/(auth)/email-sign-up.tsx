@@ -28,7 +28,7 @@ export default function EmailSignUpScreen() {
   const [busy, setBusy] = useState(false);
   const webInputFocusReset =
     Platform.OS === 'web'
-      ? ({ outlineWidth: 0 } as TextStyle)
+      ? ({ outlineStyle: 'none', outlineWidth: 0 } as unknown as TextStyle)
       : null;
 
   const onSubmit = async () => {
@@ -184,6 +184,7 @@ export default function EmailSignUpScreen() {
               lineHeight: 24,
               color: ed.colors.ink1,
               paddingVertical: 12,
+              paddingHorizontal: 10,
               borderBottomWidth: 1,
               borderBottomColor: emailErr
                 ? ed.colors.stateWarn
@@ -255,6 +256,7 @@ export default function EmailSignUpScreen() {
               lineHeight: 24,
               color: ed.colors.ink1,
               paddingVertical: 12,
+              paddingHorizontal: 10,
               borderBottomWidth: 1,
               borderBottomColor: passwordErr
                 ? ed.colors.stateWarn
