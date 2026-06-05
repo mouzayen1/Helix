@@ -71,6 +71,15 @@ function parseRecon(recon: string | undefined, fallbackMcg = 250) {
   };
 }
 
+function formatCompactNumber(value: number, precision = 2) {
+  if (!isFinite(value)) return '0';
+  return Number(value.toFixed(precision)).toString();
+}
+
+function formatUnits(value: number) {
+  return formatCompactNumber(value, Number.isInteger(value) ? 0 : 1);
+}
+
 export default function ReconstituteModal() {
   const ed = useEditorialTheme();
   const router = useRouter();
@@ -279,6 +288,13 @@ export default function ReconstituteModal() {
       Alert.alert('Could not save vial', msg, [{ text: 'OK' }]);
     }
   };
+
+  const bacWaterUnits = bacMl * 100;
+  const bacWaterUnitsLabel = formatUnits(bacWaterUnits);
+  const bacWaterMlLabel = formatCompactNumber(bacMl, 2);
+  const doseUnitsLabel = formatUnits(calc.unitsPerDose);
+  const doseMlLabel = formatCompactNumber(calc.volMlPerDose, 3);
+  const targetDoseLabel = formatDoseLabel(targetDoseMcg, doseUnitPref);
 
   if (!shouldRenderAccountRoute) return null;
 
@@ -818,8 +834,56 @@ export default function ReconstituteModal() {
 
         {/* Draw callout */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
-          <EyebrowLabel withRule>Draw</EyebrowLabel>
+          <EyebrowLabel withRule>Step 1 · Reconstitute vial</EyebrowLabel>
+          <View style={{ paddingTop: 16 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink2,
+                textTransform: 'uppercase',
+              }}
+            >
+              Draw {bacWaterUnitsLabel} units of bac water
+            </Text>
+            <Text
+              style={{
+                marginTop: 6,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              {bacWaterUnitsLabel} units = {bacWaterMlLabel} mL on a U-100 syringe.
+            </Text>
+            <Text
+              style={{
+                marginTop: 4,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              Inject this into the vial to mix.
+            </Text>
+          </View>
+
+          <View style={{ marginTop: 22 }}>
+            <EyebrowLabel withRule>Step 2 · Inject dose</EyebrowLabel>
+          </View>
           <View style={{ paddingTop: 18 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink2,
+                textTransform: 'uppercase',
+              }}
+            >
+              After reconstitution
+            </Text>
             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
               <Text
                 style={{
@@ -830,7 +894,7 @@ export default function ReconstituteModal() {
                   color: ed.colors.ink1,
                 }}
               >
-                {calc.unitsPerDose.toFixed(1)}
+                {doseUnitsLabel}
               </Text>
               <Text
                 style={{
@@ -842,7 +906,7 @@ export default function ReconstituteModal() {
                   textTransform: 'uppercase',
                 }}
               >
-                Units · U100
+                Units of mixed solution
               </Text>
             </View>
             <Text
@@ -853,7 +917,7 @@ export default function ReconstituteModal() {
                 color: ed.colors.ink3,
               }}
             >
-              = {calc.volMlPerDose.toFixed(3)} mL · {formatDoseLabel(targetDoseMcg, doseUnitPref)} per dose
+              {doseUnitsLabel} units = {doseMlLabel} mL = {targetDoseLabel} per dose.
             </Text>
           </View>
           {/* Calibrated syringe — auto-picks the smallest U-100 barrel
