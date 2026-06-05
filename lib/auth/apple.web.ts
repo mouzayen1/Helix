@@ -5,14 +5,11 @@
 //
 // Exports mirror apple.ts exactly so app/(auth)/sign-up.tsx is unchanged.
 //
-// Apple is currently HIDDEN on web (isAppleSignInAvailable returns false),
-// so the sign-up screen renders only Google + Email — both of which work
-// for iPhone Safari users. Apple's *web* "Sign in with Apple" needs extra
-// setup the native app doesn't: an Apple Services ID, domain association,
-// return URLs in the Apple Developer portal, and the Apple provider
-// enabled for web in Supabase. The redirect-flow signInWithApple() below
-// is left implemented so enabling it later is a one-line flip of the
-// availability check once that config is done.
+// Apple web sign-in is gated behind EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN.
+// Apple's web provider needs config outside the app bundle: a Services ID,
+// domain association, return URLs in the Apple Developer portal, and the
+// Apple provider enabled in Supabase. Keep the flag off until that config
+// is live, then enable it in the web deployment environment.
 
 import type { Session } from '@supabase/supabase-js';
 import { requireSupabase } from '../supabase';
@@ -24,13 +21,8 @@ export class AppleSignInError extends Error {
   }
 }
 
-/**
- * Hidden on web for now — see the file header. Flip to `true` (Apple's web
- * OAuth provider works in any browser) once the Apple-web + Supabase
- * config is in place.
- */
 export async function isAppleSignInAvailable(): Promise<boolean> {
-  return false;
+  return process.env.EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN === 'true';
 }
 
 /**
