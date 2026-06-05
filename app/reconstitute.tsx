@@ -1081,7 +1081,7 @@ function TypedField({
 }) {
   const ed = useEditorialTheme();
   const { width } = useWindowDimensions();
-  const compact = width < 390;
+  const compact = width < 600;
   const valueColor = readOnly ? ed.colors.ink3 : ed.colors.ink1;
   const controlRow = (
     <View
