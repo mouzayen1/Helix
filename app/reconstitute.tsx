@@ -4,16 +4,27 @@
 // picker preserved; result block uses StatPair instead of an inverted
 // black card; the syringe SVG is retinted to the editorial palette.
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../components/editorial/EyebrowLabel';
 import { HairlineRow } from '../components/editorial/HairlineRow';
 import { StatPair } from '../components/editorial/StatPair';
+import { IconClose, IconSearch } from '../components/Icons';
 import { DosingDisclaimer } from '../components/Primitives';
 import { SyringeDiagram } from '../components/SyringeDiagram';
+import { getAuthState, subscribeAuth, type AuthState } from '../lib/auth/session';
 import { getActiveCyclesByPeptide } from '../lib/cycle-helpers';
 import { useEditorialTheme } from '../lib/design/theme';
 import { useDoseUnitPref } from '../lib/profile-context';
@@ -23,10 +34,17 @@ import {
   parseDoseInput,
   resolveDoseUnit,
 } from '../lib/dose-format';
-import { attachVialToCycle, createVial, getActiveVial, type Cycle } from '../lib/db';
+import {
+  attachVialToCycle,
+  createVial,
+  getActiveVial,
+  getCurrentUserId,
+  type Cycle,
+} from '../lib/db';
 import { formatDuration } from '../lib/freq';
 import { getPeptideExtras } from '../lib/peptide-extras';
 import { derivePrimaryRoute, findPeptide, isInjectionRoute, PEPTIDES } from '../lib/peptides';
+import { isAuthConfigured } from '../lib/supabase';
 
 // Default vial-strength chip row. Peptides with `commonVialSizes` in the
 // catalog override this — GHK-Cu shows 10/50/100/200, NAD+ shows
@@ -52,6 +70,15 @@ function parseRecon(recon: string | undefined, fallbackMcg = 250) {
     bac_water_ml: parseFloat(bacMatch[1]),
     target_dose_mcg,
   };
+}
+
+function formatCompactNumber(value: number, precision = 2) {
+  if (!isFinite(value)) return '0';
+  return Number(value.toFixed(precision)).toString();
+}
+
+function formatUnits(value: number) {
+  return formatCompactNumber(value, Number.isInteger(value) ? 0 : 1);
 }
 
 export default function ReconstituteModal() {
@@ -82,7 +109,10 @@ export default function ReconstituteModal() {
     initialId && injectablePeptides.some((p) => p.id === initialId)
       ? initialId
       : injectablePeptides[0]?.id ?? PEPTIDES[0].id;
+  const peptideSearchInputRef = useRef<TextInput>(null);
   const [showPeptidePicker, setShowPeptidePicker] = useState(false);
+  const [peptideQuery, setPeptideQuery] = useState('');
+  const [shouldFocusPeptideSearch, setShouldFocusPeptideSearch] = useState(false);
   const [peptideId, setPeptideId] = useState<string>(initialInjectable);
   const [activeCycleByPeptide, setActiveCycleByPeptide] = useState<Map<string, Cycle>>(new Map());
   const [needyPeptides, setNeedyPeptides] = useState<Set<string>>(new Set());
@@ -109,13 +139,22 @@ export default function ReconstituteModal() {
   const [calcMode, setCalcMode] = useState<'forward' | 'reverse'>('forward');
   const [targetUnits, setTargetUnits] = useState(20);
   const [targetUnitsText, setTargetUnitsText] = useState('20');
+  const [authState, setAuthState] = useState<AuthState>(getAuthState());
 
   const peptide = findPeptide(peptideId)!;
   const extras = getPeptideExtras(peptideId);
+  const hasUserContext = !!getCurrentUserId();
+  const shouldRenderAccountRoute =
+    !isAuthConfigured() || (authState.status === 'signed-in' && hasUserContext);
   const coReconstituteOptions = useMemo(
     () => extras?.coAdministration.filter((ca) => ca.co_reconstitute) ?? [],
     [extras]
   );
+
+  useEffect(() => {
+    setAuthState(getAuthState());
+    return subscribeAuth(setAuthState);
+  }, []);
 
   useEffect(() => {
     const parsed = parseRecon(peptide.reconstitution, peptide.defaultDoseMcg);
@@ -135,6 +174,7 @@ export default function ReconstituteModal() {
   // at the top with a NEEDED pill, and to default-select the first needy
   // peptide if no `?peptideId=` was passed.
   useEffect(() => {
+    if (!hasUserContext) return;
     let cancelled = false;
     (async () => {
       const byPeptide = await getActiveCyclesByPeptide();
@@ -156,7 +196,7 @@ export default function ReconstituteModal() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasUserContext]);
 
   // Sorted peptide list for the picker — needed (no vial) first, then
   // needed (with vial), then everything else. Restricted to
@@ -169,6 +209,22 @@ export default function ReconstituteModal() {
     };
     return [...injectablePeptides].sort((a, b) => bucket(a.id) - bucket(b.id));
   }, [activeCycleByPeptide, injectablePeptides, needyPeptides]);
+  const visiblePeptides = useMemo(() => {
+    const q = peptideQuery.trim().toLowerCase();
+    if (!q) return sortedPeptides;
+    return sortedPeptides.filter((p) =>
+      [p.name, p.class, p.route].some((value) => value.toLowerCase().includes(q))
+    );
+  }, [peptideQuery, sortedPeptides]);
+
+  useEffect(() => {
+    if (!showPeptidePicker || !shouldFocusPeptideSearch) return;
+    const timer = setTimeout(() => {
+      peptideSearchInputRef.current?.focus();
+      setShouldFocusPeptideSearch(false);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [shouldFocusPeptideSearch, showPeptidePicker]);
 
   // Reverse mode: BAC water is computed from (target dose, target units,
   // vial strength) and synced into bacMl so save() / result block / soft
@@ -216,6 +272,7 @@ export default function ReconstituteModal() {
   };
 
   const save = async () => {
+    if (!hasUserContext) return;
     if (saving) return;
     setSaving(true);
     try {
@@ -251,6 +308,15 @@ export default function ReconstituteModal() {
       Alert.alert('Could not save vial', msg, [{ text: 'OK' }]);
     }
   };
+
+  const bacWaterUnits = bacMl * 100;
+  const bacWaterUnitsLabel = formatUnits(bacWaterUnits);
+  const bacWaterMlLabel = formatCompactNumber(bacMl, 2);
+  const doseUnitsLabel = formatUnits(calc.unitsPerDose);
+  const doseMlLabel = formatCompactNumber(calc.volMlPerDose, 3);
+  const targetDoseLabel = formatDoseLabel(targetDoseMcg, doseUnitPref);
+
+  if (!shouldRenderAccountRoute) return null;
 
   return (
     <View style={{ flex: 1, backgroundColor: ed.colors.bg }}>
@@ -382,17 +448,19 @@ export default function ReconstituteModal() {
         {/* Peptide selector */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
           <EyebrowLabel withRule>Peptide</EyebrowLabel>
-          <Pressable
-            onPress={() => setShowPeptidePicker((v) => !v)}
-            accessibilityRole="button"
+          <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              paddingVertical: 18,
+              paddingVertical: 14,
               gap: 12,
             }}
           >
-            <View style={{ flex: 1 }}>
+            <Pressable
+              onPress={() => setShowPeptidePicker((v) => !v)}
+              accessibilityRole="button"
+              style={{ flex: 1, paddingVertical: 4 }}
+            >
               <Text
                 style={{
                   fontFamily: ed.fraunces('Fraunces_400Regular'),
@@ -413,22 +481,91 @@ export default function ReconstituteModal() {
               >
                 {peptide.class}
               </Text>
-            </View>
-            <Text
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setShouldFocusPeptideSearch(true);
+                setShowPeptidePicker(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Search peptides"
+              hitSlop={10}
               style={{
-                fontFamily: ed.fraunces('Fraunces_300Light'),
-                fontSize: 22,
-                color: ed.colors.ink3,
+                width: 36,
+                height: 36,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: ed.colors.lineStrong,
               }}
             >
-              {showPeptidePicker ? '▴' : '▾'}
-            </Text>
-          </Pressable>
+              <IconSearch size={17} color={ed.colors.ink3} />
+            </Pressable>
+            <Pressable
+              onPress={() => setShowPeptidePicker((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showPeptidePicker ? 'Collapse peptide list' : 'Expand peptide list'}
+              hitSlop={10}
+              style={{ width: 24, alignItems: 'flex-end' }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_300Light'),
+                  fontSize: 22,
+                  color: ed.colors.ink3,
+                }}
+              >
+                {showPeptidePicker ? '▴' : '▾'}
+              </Text>
+            </Pressable>
+          </View>
           <HairlineRow strong />
           {showPeptidePicker ? (
             <View style={{ height: 320, marginTop: 4 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  borderBottomWidth: 1,
+                  borderColor: ed.colors.line,
+                  paddingVertical: 8,
+                }}
+              >
+                <IconSearch size={16} color={ed.colors.ink3} />
+                <TextInput
+                  ref={peptideSearchInputRef}
+                  placeholder="SEARCH PEPTIDES"
+                  placeholderTextColor={ed.colors.ink3}
+                  value={peptideQuery}
+                  onChangeText={setPeptideQuery}
+                  returnKeyType="search"
+                  selectionColor={ed.colors.brand}
+                  accessibilityLabel="Search peptides"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={{
+                    flex: 1,
+                    fontFamily: ed.typography.dataMd.fontFamily,
+                    fontSize: ed.typography.dataMd.fontSize,
+                    lineHeight: ed.typography.dataMd.lineHeight,
+                    color: ed.colors.ink1,
+                    paddingVertical: 8,
+                  }}
+                />
+                {peptideQuery.length > 0 ? (
+                  <Pressable
+                    onPress={() => setPeptideQuery('')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear peptide search"
+                    hitSlop={10}
+                  >
+                    <IconClose size={13} color={ed.colors.ink3} />
+                  </Pressable>
+                ) : null}
+              </View>
               <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-                {sortedPeptides.map((p, idx) => {
+                {visiblePeptides.map((p, idx) => {
                   const needed = needyPeptides.has(p.id);
                   const inActiveCycle = activeCycleByPeptide.has(p.id);
                   return (
@@ -437,6 +574,7 @@ export default function ReconstituteModal() {
                         onPress={() => {
                           setPeptideId(p.id);
                           setShowPeptidePicker(false);
+                          setPeptideQuery('');
                         }}
                         style={{
                           paddingVertical: 14,
@@ -501,10 +639,22 @@ export default function ReconstituteModal() {
                           </Text>
                         )}
                       </Pressable>
-                      {idx < sortedPeptides.length - 1 ? <HairlineRow /> : null}
+                      {idx < visiblePeptides.length - 1 ? <HairlineRow /> : null}
                     </View>
                   );
                 })}
+                {visiblePeptides.length === 0 ? (
+                  <Text
+                    style={{
+                      paddingVertical: 18,
+                      fontFamily: ed.typography.dataMd.fontFamily,
+                      fontSize: ed.typography.dataMd.fontSize,
+                      color: ed.colors.ink3,
+                    }}
+                  >
+                    No peptides match “{peptideQuery}”.
+                  </Text>
+                ) : null}
               </ScrollView>
             </View>
           ) : null}
@@ -788,8 +938,56 @@ export default function ReconstituteModal() {
 
         {/* Draw callout */}
         <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
-          <EyebrowLabel withRule>Draw</EyebrowLabel>
+          <EyebrowLabel withRule>Step 1 · Reconstitute vial</EyebrowLabel>
+          <View style={{ paddingTop: 16 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink2,
+                textTransform: 'uppercase',
+              }}
+            >
+              Draw {bacWaterUnitsLabel} units of bac water
+            </Text>
+            <Text
+              style={{
+                marginTop: 6,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              {bacWaterUnitsLabel} units = {bacWaterMlLabel} mL on a U-100 syringe.
+            </Text>
+            <Text
+              style={{
+                marginTop: 4,
+                fontFamily: ed.typography.dataMd.fontFamily,
+                fontSize: ed.typography.dataMd.fontSize,
+                color: ed.colors.ink3,
+              }}
+            >
+              Inject this into the vial to mix.
+            </Text>
+          </View>
+
+          <View style={{ marginTop: 22 }}>
+            <EyebrowLabel withRule>Step 2 · Inject dose</EyebrowLabel>
+          </View>
           <View style={{ paddingTop: 18 }}>
+            <Text
+              style={{
+                fontFamily: ed.typography.label.fontFamily,
+                fontSize: ed.typography.label.fontSize,
+                letterSpacing: ed.typography.label.letterSpacing,
+                color: ed.colors.ink2,
+                textTransform: 'uppercase',
+              }}
+            >
+              After reconstitution
+            </Text>
             <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
               <Text
                 style={{
@@ -800,7 +998,7 @@ export default function ReconstituteModal() {
                   color: ed.colors.ink1,
                 }}
               >
-                {calc.unitsPerDose.toFixed(1)}
+                {doseUnitsLabel}
               </Text>
               <Text
                 style={{
@@ -812,7 +1010,7 @@ export default function ReconstituteModal() {
                   textTransform: 'uppercase',
                 }}
               >
-                Units · U100
+                Units of mixed solution
               </Text>
             </View>
             <Text
@@ -823,7 +1021,7 @@ export default function ReconstituteModal() {
                 color: ed.colors.ink3,
               }}
             >
-              = {calc.volMlPerDose.toFixed(3)} mL · {formatDoseLabel(targetDoseMcg, doseUnitPref)} per dose
+              {doseUnitsLabel} units = {doseMlLabel} mL = {targetDoseLabel} per dose.
             </Text>
           </View>
           {/* Calibrated syringe — auto-picks the smallest U-100 barrel
@@ -1050,13 +1248,102 @@ function TypedField({
   readOnlyHint?: string;
 }) {
   const ed = useEditorialTheme();
+  const { width } = useWindowDimensions();
+  const compact = width < 600;
   const valueColor = readOnly ? ed.colors.ink3 : ed.colors.ink1;
-  return (
-    <View style={{ paddingVertical: 18 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+  const controlRow = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: compact ? 'flex-end' : undefined,
+        flexShrink: 0,
+      }}
+    >
+      <Pressable
+        onPress={onMinus}
+        disabled={readOnly}
+        accessibilityRole="button"
+        accessibilityLabel={`Decrease ${label.toLowerCase()}`}
+        hitSlop={8}
+      >
         <Text
           style={{
+            fontFamily: ed.typography.dataLg.fontFamily,
+            fontSize: 22,
+            color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
+            paddingHorizontal: 10,
+          }}
+        >
+          −
+        </Text>
+      </Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', minWidth: 96 }}>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          onBlur={onCommit}
+          onSubmitEditing={onCommit}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          editable={!readOnly}
+          selectionColor={ed.colors.brand}
+          style={{
             flex: 1,
+            fontFamily: ed.fraunces('Fraunces_400Regular'),
+            fontSize: 28,
+            letterSpacing: -0.5,
+            color: valueColor,
+            padding: 0,
+            textAlign: 'right',
+          }}
+        />
+        <Text
+          style={{
+            marginLeft: 6,
+            fontFamily: ed.typography.label.fontFamily,
+            fontSize: ed.typography.label.fontSize,
+            letterSpacing: ed.typography.label.letterSpacing,
+            color: ed.colors.ink3,
+            textTransform: 'uppercase',
+          }}
+        >
+          {unit}
+        </Text>
+      </View>
+      <Pressable
+        onPress={onPlus}
+        disabled={readOnly}
+        accessibilityRole="button"
+        accessibilityLabel={`Increase ${label.toLowerCase()}`}
+        hitSlop={8}
+      >
+        <Text
+          style={{
+            fontFamily: ed.typography.dataLg.fontFamily,
+            fontSize: 22,
+            color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
+            paddingHorizontal: 10,
+          }}
+        >
+          +
+        </Text>
+      </Pressable>
+    </View>
+  );
+
+  return (
+    <View style={{ paddingVertical: 18 }}>
+      <View
+        style={{
+          flexDirection: compact ? 'column' : 'row',
+          alignItems: compact ? 'stretch' : 'center',
+          gap: compact ? 10 : 12,
+        }}
+      >
+        <Text
+          style={{
+            flex: compact ? undefined : 1,
             fontFamily: ed.typography.label.fontFamily,
             fontSize: ed.typography.label.fontSize,
             letterSpacing: ed.typography.label.letterSpacing,
@@ -1066,75 +1353,7 @@ function TypedField({
         >
           {label}
         </Text>
-        <Pressable
-          onPress={onMinus}
-          disabled={readOnly}
-          accessibilityRole="button"
-          accessibilityLabel={`Decrease ${label.toLowerCase()}`}
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 22,
-              color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
-              paddingHorizontal: 10,
-            }}
-          >
-            −
-          </Text>
-        </Pressable>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          <TextInput
-            value={value}
-            onChangeText={onChangeText}
-            onBlur={onCommit}
-            onSubmitEditing={onCommit}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            editable={!readOnly}
-            selectionColor={ed.colors.brand}
-            style={{
-              fontFamily: ed.fraunces('Fraunces_400Regular'),
-              fontSize: 28,
-              letterSpacing: -0.5,
-              color: valueColor,
-              padding: 0,
-              minWidth: 64,
-              textAlign: 'right',
-            }}
-          />
-          <Text
-            style={{
-              marginLeft: 6,
-              fontFamily: ed.typography.label.fontFamily,
-              fontSize: ed.typography.label.fontSize,
-              letterSpacing: ed.typography.label.letterSpacing,
-              color: ed.colors.ink3,
-              textTransform: 'uppercase',
-            }}
-          >
-            {unit}
-          </Text>
-        </View>
-        <Pressable
-          onPress={onPlus}
-          disabled={readOnly}
-          accessibilityRole="button"
-          accessibilityLabel={`Increase ${label.toLowerCase()}`}
-          hitSlop={8}
-        >
-          <Text
-            style={{
-              fontFamily: ed.typography.dataLg.fontFamily,
-              fontSize: 22,
-              color: readOnly ? ed.colors.ink4 : ed.colors.ink3,
-              paddingHorizontal: 10,
-            }}
-          >
-            +
-          </Text>
-        </Pressable>
+        {controlRow}
       </View>
       {readOnly && readOnlyHint ? (
         <Text

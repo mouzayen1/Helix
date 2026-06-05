@@ -324,25 +324,22 @@ export async function initDatabase() {
 
   // v1.5 — cross-device sync metadata. Every user-data table gets an
   // updated_at TEXT column populated in ISO-Z format (matches Supabase
-  // timestamptz when serialized), plus an AFTER UPDATE trigger that
-  // bumps it on every row change (unless the statement explicitly set
+  // timestamptz when serialized), plus triggers that stamp inserts and
+  // bump every row change (unless the statement explicitly set
   // updated_at, which the sync pull does — guard via OLD.updated_at IS
   // NEW.updated_at to avoid recursive firing).
   //
   // We DO NOT touch read paths or write paths in this file — the
-  // updated_at column is read+written only by lib/sync.ts. Stamping
-  // it on INSERT is handled by the column DEFAULT; on UPDATE by the
-  // trigger. Schema-level so every existing write function "just
-  // works" without per-function patching.
+  // SQLite rejects ALTER TABLE ADD COLUMN with non-constant defaults like
+  // strftime('now'), so inserts are stamped by trigger instead of a column
+  // DEFAULT. Schema-level so every existing write function "just works"
+  // without per-function patching.
   const SYNC_TABLES = [
     'profile', 'saved_peptides', 'vials', 'cycles', 'stacks',
     'doses', 'journal_entries', 'metrics', 'injection_sites_log', 'dose_skips',
   ];
   for (const t of SYNC_TABLES) {
-    await addColumnIfMissing(
-      d, t, 'updated_at',
-      "TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-    );
+    await addColumnIfMissing(d, t, 'updated_at', 'TEXT');
     // Backfill existing rows where updated_at is still NULL (rows
     // created before this migration ran on the device). Use a stable
     // anchor: the table's created_at / saved_at where present, else
@@ -363,11 +360,24 @@ export async function initDatabase() {
       `UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE updated_at IS NULL`,
     );
+    const pkCol = t === 'saved_peptides' ? 'peptide_id' : 'id';
+    // AFTER INSERT trigger — fills local inserts that don't explicitly
+    // provide updated_at. Sync pulls can still preserve remote updated_at
+    // by inserting it directly.
+    await d.execAsync(
+      `CREATE TRIGGER IF NOT EXISTS ${t}_insert_updated_at
+         AFTER INSERT ON ${t}
+         FOR EACH ROW
+         WHEN NEW.updated_at IS NULL
+         BEGIN
+           UPDATE ${t} SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE ${pkCol} = NEW.${pkCol};
+         END`,
+    );
     // AFTER UPDATE trigger — bumps updated_at unless the statement
     // already wrote a fresh one (sync pull case). The WHEN guard
     // prevents recursive firing because our inner UPDATE writes a
     // new value, breaking the OLD IS NEW condition the second time.
-    const pkCol = t === 'saved_peptides' ? 'peptide_id' : 'id';
     await d.execAsync(
       `CREATE TRIGGER IF NOT EXISTS ${t}_touch_updated_at
          AFTER UPDATE ON ${t}
