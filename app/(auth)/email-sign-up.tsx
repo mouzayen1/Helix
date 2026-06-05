@@ -3,7 +3,7 @@
 // retries as sign-in — see lib/auth/email.ts.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
@@ -22,9 +22,14 @@ export default function EmailSignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
   const [emailErr, setEmailErr] = useState<string | null>(null);
   const [passwordErr, setPasswordErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const webInputFocusReset =
+    Platform.OS === 'web'
+      ? ({ outlineStyle: 'none', outlineWidth: 0 } as unknown as TextStyle)
+      : null;
 
   const onSubmit = async () => {
     if (busy) return;
@@ -171,14 +176,22 @@ export default function EmailSignUpScreen() {
             placeholder="you@example.com"
             placeholderTextColor={ed.colors.ink4}
             selectionColor={ed.colors.brand}
+            onFocus={() => setFocusedField('email')}
+            onBlur={() => setFocusedField(null)}
             style={{
               fontFamily: ed.fraunces('Fraunces_400Regular'),
               fontSize: 18,
               lineHeight: 24,
               color: ed.colors.ink1,
               paddingVertical: 12,
+              paddingHorizontal: 10,
               borderBottomWidth: 1,
-              borderBottomColor: emailErr ? ed.colors.stateWarn : ed.colors.line,
+              borderBottomColor: emailErr
+                ? ed.colors.stateWarn
+                : focusedField === 'email'
+                  ? ed.colors.brand
+                  : ed.colors.line,
+              ...webInputFocusReset,
             }}
           />
           {emailErr ? (
@@ -235,14 +248,22 @@ export default function EmailSignUpScreen() {
             placeholder="At least 8 characters"
             placeholderTextColor={ed.colors.ink4}
             selectionColor={ed.colors.brand}
+            onFocus={() => setFocusedField('password')}
+            onBlur={() => setFocusedField(null)}
             style={{
               fontFamily: ed.fraunces('Fraunces_400Regular'),
               fontSize: 18,
               lineHeight: 24,
               color: ed.colors.ink1,
               paddingVertical: 12,
+              paddingHorizontal: 10,
               borderBottomWidth: 1,
-              borderBottomColor: passwordErr ? ed.colors.stateWarn : ed.colors.line,
+              borderBottomColor: passwordErr
+                ? ed.colors.stateWarn
+                : focusedField === 'password'
+                  ? ed.colors.brand
+                  : ed.colors.line,
+              ...webInputFocusReset,
             }}
           />
           {passwordErr ? (
