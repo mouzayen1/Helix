@@ -5,11 +5,13 @@
 //
 // Exports mirror apple.ts exactly so app/(auth)/sign-up.tsx is unchanged.
 //
-// Apple web sign-in is gated behind EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN.
-// Apple's web provider needs config outside the app bundle: a Services ID,
-// domain association, return URLs in the Apple Developer portal, and the
-// Apple provider enabled in Supabase. Keep the flag off until that config
-// is live, then enable it in the web deployment environment.
+// Apple's *web* "Sign in with Apple" needs setup the native app doesn't:
+// an Apple Services ID, domain association + return URLs in the Apple
+// Developer portal, and the Apple provider enabled for web in Supabase.
+// Because clicking the button before that config exists would just error,
+// it's gated behind the EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN feature flag
+// (see isAppleSignInAvailable). Set the flag to "true" in the web build's
+// env (Vercel) once the Apple + Supabase config is complete, then redeploy.
 
 import type { Session } from '@supabase/supabase-js';
 import { requireSupabase } from '../supabase';
@@ -21,6 +23,17 @@ export class AppleSignInError extends Error {
   }
 }
 
+/**
+ * Apple "Sign in with Apple" on web is gated behind an explicit feature
+ * flag so the button only appears once the supporting Apple Developer +
+ * Supabase config is in place (otherwise clicking it errors).
+ *
+ * Set EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN=true in the web build env
+ * (Vercel -> Settings -> Environment Variables) and redeploy AFTER the
+ * config is complete. The flag is read from the bundle at runtime; the
+ * value is inlined by Expo at export time. Native iOS is unaffected — it
+ * resolves apple.ts (not this file) and keeps its own device check.
+ */
 export async function isAppleSignInAvailable(): Promise<boolean> {
   return process.env.EXPO_PUBLIC_ENABLE_APPLE_WEB_SIGN_IN === 'true';
 }
