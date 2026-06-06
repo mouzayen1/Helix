@@ -69,6 +69,9 @@ Expo enables the native capability for EAS builds. Apple and Supabase still need
 
 ## Verification
 
+For the full Apple / Google / Email new-user checklist, see
+[`docs/auth-signup-testing.md`](./auth-signup-testing.md).
+
 1. Visit `https://app.gethelixapp.org/sign-up`.
 2. Confirm **Sign in with Apple** appears above Google.
 3. Complete Apple auth with a normal email.
