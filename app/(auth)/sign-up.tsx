@@ -11,8 +11,21 @@
 // progress past this screen until the user signs up — which is enforced
 // by the auth gate in app/_layout.tsx (slice A3).
 import { useRouter } from 'expo-router';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { useWideWeb } from '../../components/editorial/WebColumn';
@@ -161,9 +174,7 @@ export default function SignUpScreen() {
         {/* Apple — top per App Store policy. iOS only; hidden on
             Android and on iOS devices without an Apple ID. */}
         {appleAvailable ? (
-          <ProviderButton
-            label="Sign in with Apple"
-            variant="primary"
+          <AppleProviderButton
             disabled={!!busyProvider}
             busy={busyProvider === 'apple'}
             onPress={onApple}
@@ -181,9 +192,7 @@ export default function SignUpScreen() {
             expo-auth-session/providers/google or by patching the
             library. */}
         {Platform.OS !== 'ios' ? (
-          <ProviderButton
-            label="Sign in with Google"
-            variant="secondary"
+          <GoogleProviderButton
             disabled={!!busyProvider}
             busy={busyProvider === 'google'}
             onPress={onGoogle}
@@ -278,59 +287,186 @@ export default function SignUpScreen() {
   );
 }
 
-function ProviderButton({
-  label,
-  variant,
+const PROVIDER_BUTTON_HEIGHT = 48;
+const PROVIDER_BUTTON_RADIUS = 0;
+
+function AppleProviderButton({
   disabled,
   busy,
   onPress,
   style,
 }: {
-  label: string;
-  variant: 'primary' | 'secondary';
   disabled?: boolean;
   busy?: boolean;
   onPress: () => void;
-  style?: object;
+  style?: StyleProp<ViewStyle>;
 }) {
   const ed = useEditorialTheme();
-  const primary = variant === 'primary';
+
+  if (Platform.OS === 'ios') {
+    return (
+      <View style={[{ height: PROVIDER_BUTTON_HEIGHT, opacity: disabled && !busy ? 0.4 : 1 }, style]}>
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+          cornerRadius={PROVIDER_BUTTON_RADIUS}
+          onPress={onPress}
+          style={{ width: '100%', height: PROVIDER_BUTTON_HEIGHT }}
+        />
+        {busy ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: ed.colors.ink1,
+            }}
+          >
+            <ActivityIndicator color="#FFFFFF" />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel="Sign in with Apple"
       accessibilityState={{ disabled, busy }}
       style={[
         {
-          paddingVertical: 18,
-          paddingHorizontal: 24,
+          minHeight: PROVIDER_BUTTON_HEIGHT,
+          paddingHorizontal: 16,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: primary ? ed.colors.ink1 : 'transparent',
-          borderWidth: primary ? 0 : 1,
-          borderColor: ed.colors.lineStrong,
+          flexDirection: 'row',
+          backgroundColor: '#000000',
+          borderRadius: PROVIDER_BUTTON_RADIUS,
           opacity: disabled && !busy ? 0.4 : 1,
         },
         style ?? {},
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={primary ? ed.colors.bg : ed.colors.ink2} />
+        <ActivityIndicator color="#FFFFFF" />
       ) : (
-        <Text
-          style={{
-            fontFamily: ed.typography.label.fontFamily,
-            fontSize: 13,
-            letterSpacing: 1.8,
-            color: primary ? ed.colors.bg : ed.colors.ink2,
-            textTransform: 'uppercase',
-          }}
-        >
-          {label}
-        </Text>
+        <>
+          <AppleLogo color="#FFFFFF" />
+          <Text
+            style={{
+              marginLeft: 12,
+              fontFamily: ed.typography.bodyStrong.fontFamily,
+              fontSize: 15,
+              lineHeight: 20,
+              color: '#FFFFFF',
+              fontWeight: '600',
+            }}
+          >
+            Sign in with Apple
+          </Text>
+        </>
       )}
     </Pressable>
+  );
+}
+
+function GoogleProviderButton({
+  disabled,
+  busy,
+  onPress,
+  style,
+}: {
+  disabled?: boolean;
+  busy?: boolean;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const ed = useEditorialTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel="Sign in with Google"
+      accessibilityState={{ disabled, busy }}
+      style={[
+        {
+          minHeight: PROVIDER_BUTTON_HEIGHT,
+          paddingLeft: Platform.OS === 'ios' ? 16 : 12,
+          paddingRight: Platform.OS === 'ios' ? 16 : 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'row',
+          backgroundColor: '#FFFFFF',
+          borderWidth: 1,
+          borderColor: '#747775',
+          borderRadius: PROVIDER_BUTTON_RADIUS,
+          opacity: disabled && !busy ? 0.4 : 1,
+        },
+        style ?? {},
+      ]}
+    >
+      {busy ? (
+        <ActivityIndicator color="#1F1F1F" />
+      ) : (
+        <>
+          <View style={{ width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+            <GoogleGLogo />
+          </View>
+          <View style={{ width: Platform.OS === 'ios' ? 12 : 10 }} />
+          <Text
+            style={{
+              fontFamily: Platform.OS === 'web' ? 'Roboto, Arial, sans-serif' : ed.typography.bodyStrong.fontFamily,
+              fontSize: 14,
+              lineHeight: 20,
+              color: '#1F1F1F',
+              fontWeight: '500',
+            }}
+          >
+            Sign in with Google
+          </Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+function AppleLogo({ color }: { color: string }) {
+  return (
+    <Svg width={18} height={22} viewBox="0 0 18 22" fill="none">
+      <Path
+        fill={color}
+        d="M14.8 11.5c0-2.5 2.1-3.7 2.2-3.8-1.2-1.7-3-2-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.6 1.3 10.1.9 1.2 1.9 2.6 3.2 2.5 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8 2.3-1.2 3.1-2.4c1-1.4 1.4-2.8 1.4-2.9-.1 0-3-1.1-3-4Zm-2.4-7.4c.7-.8 1.1-1.9 1-3.1-1 .1-2.1.6-2.8 1.4-.6.7-1.2 1.9-1 3 1.1.1 2.1-.5 2.8-1.3Z"
+      />
+    </Svg>
+  );
+}
+
+function GoogleGLogo() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+      <Path
+        fill="#4285F4"
+        d="M17.6 9.2c0-.6-.1-1.2-.2-1.8H9v3.4h4.8c-.2 1.1-.8 2-1.8 2.6v2.1h2.8c1.6-1.5 2.8-3.7 2.8-6.3Z"
+      />
+      <Path
+        fill="#34A853"
+        d="M9 18c2.4 0 4.4-.8 5.9-2.2l-2.8-2.1c-.8.5-1.8.8-3 .8-2.3 0-4.2-1.5-4.9-3.6H1.3v2.2C2.7 16 5.6 18 9 18Z"
+      />
+      <Path
+        fill="#FBBC05"
+        d="M4.1 10.9c-.2-.5-.3-1.1-.3-1.7s.1-1.2.3-1.7V5.2H1.3C.5 6.4 0 7.7 0 9.2s.5 2.8 1.3 4l2.8-2.3Z"
+      />
+      <Path
+        fill="#EA4335"
+        d="M9 3.6c1.3 0 2.5.5 3.4 1.3L15 2.3C13.4.9 11.4 0 9 0 5.6 0 2.7 2 1.3 5.2l2.8 2.2C4.8 5.3 6.7 3.6 9 3.6Z"
+      />
+    </Svg>
   );
 }
