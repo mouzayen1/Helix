@@ -117,6 +117,29 @@ export default function LogDoseModal() {
 
   const peptide = peptideId ? findPeptide(peptideId) : null;
 
+  // Load the active vials for a peptide and keep a sensible one
+  // selected. Functional setVial so this doesn't close over the current
+  // `vial` — that keeps the callback stable and reusable from the focus
+  // effect (used to re-sync after reconstituting a vial mid-log).
+  const syncPeptideVials = useCallback(async (pid: string) => {
+    const active = await getVialsForPeptide(pid, true);
+    setPeptideVials(active);
+    if (active.length === 0) {
+      setVial(null);
+      return;
+    }
+    setVial((prev) => {
+      if (prev && active.find((v) => v.id === prev.id)) return prev;
+      const sorted = [...active].sort((a, b) => {
+        if (!a.expires_at && !b.expires_at) return 0;
+        if (!a.expires_at) return 1;
+        if (!b.expires_at) return -1;
+        return a.expires_at.localeCompare(b.expires_at);
+      });
+      return sorted[0] ?? null;
+    });
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       (async () => {
@@ -149,8 +172,13 @@ export default function LogDoseModal() {
             setSite(initialSite ?? sug.site);
           }
         }
+        // Re-sync this peptide's vials on focus so a vial reconstituted
+        // mid-log (we push /reconstitute and pop back) is picked up and
+        // auto-selected without losing the in-progress entry. Skipped
+        // when peptideId isn't set yet — the effect above handles that.
+        if (peptideId) void syncPeptideVials(peptideId);
       })();
-    }, [initialSite, isEditing, peptideId, site])
+    }, [initialSite, isEditing, peptideId, site, syncPeptideVials])
   );
 
   // Default route from the catalog whenever peptide changes (non-edit
@@ -230,24 +258,8 @@ export default function LogDoseModal() {
 
   useEffect(() => {
     if (!peptideId) return;
-    (async () => {
-      const active = await getVialsForPeptide(peptideId, true);
-      setPeptideVials(active);
-      if (active.length === 0) {
-        setVial(null);
-        return;
-      }
-      const keep = vial && active.find((v) => v.id === vial.id);
-      if (keep) return;
-      const sorted = [...active].sort((a, b) => {
-        if (!a.expires_at && !b.expires_at) return 0;
-        if (!a.expires_at) return 1;
-        if (!b.expires_at) return -1;
-        return a.expires_at.localeCompare(b.expires_at);
-      });
-      setVial(sorted[0] ?? null);
-    })();
-  }, [peptideId, vial]);
+    void syncPeptideVials(peptideId);
+  }, [peptideId, syncPeptideVials]);
 
   useEffect(() => {
     if (!peptideId) return;
@@ -719,8 +731,12 @@ export default function LogDoseModal() {
                 <View key={p.id}>
                   <Pressable
                     onPress={() => {
+                      // Switch the form to this peptide before navigating
+                      // so that when /reconstitute pops back, the focus
+                      // re-sync selects the vial we just made for it.
+                      setPeptideId(p.id);
                       setShowPeptidePicker(false);
-                      router.replace({
+                      router.push({
                         pathname: '/reconstitute',
                         params: { peptideId: p.id },
                       } as any);
@@ -939,7 +955,7 @@ export default function LogDoseModal() {
               </Text>
               <Pressable
                 onPress={() =>
-                  router.replace({ pathname: '/reconstitute', params: { peptideId } } as any)
+                  router.push({ pathname: '/reconstitute', params: { peptideId } } as any)
                 }
                 hitSlop={4}
               >
