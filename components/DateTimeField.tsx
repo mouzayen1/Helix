@@ -53,9 +53,12 @@ export function DateTimeField({
     },
   ];
 
-  const stepDay = (delta: number) => {
-    const d = new Date(value);
-    d.setDate(d.getDate() + delta);
+  // Apply a candidate timestamp only if it falls within
+  // [minDaysBack ago, now] (respecting allowFuture). Shared by every
+  // stepper so dialing the hour/minute can't cross the same bounds the
+  // day stepper enforces — otherwise, e.g. at 3pm, Hour +1 would push a
+  // backdated log into the future even though allowFuture defaults false.
+  const commit = (d: Date) => {
     const earliest = new Date();
     earliest.setDate(earliest.getDate() - minDaysBack);
     earliest.setHours(0, 0, 0, 0);
@@ -64,16 +67,22 @@ export function DateTimeField({
     onChange(d);
   };
 
+  const stepDay = (delta: number) => {
+    const d = new Date(value);
+    d.setDate(d.getDate() + delta);
+    commit(d);
+  };
+
   const stepHour = (delta: number) => {
     const d = new Date(value);
     d.setHours((d.getHours() + delta + 24) % 24);
-    onChange(d);
+    commit(d);
   };
 
   const stepMinute = (delta: number) => {
     const d = new Date(value);
     d.setMinutes((d.getMinutes() + delta + 60) % 60);
-    onChange(d);
+    commit(d);
   };
 
   return (
