@@ -1213,9 +1213,22 @@ export default function LogDoseModal() {
               ? 'Save changes'
               : 'Log dose'}
           </EditorialButton>
+          {vialInsufficient ? (
+            <Text
+              style={{
+                marginTop: 10,
+                fontFamily: ed.typography.bodySm.fontFamily,
+                fontSize: ed.typography.bodySm.fontSize,
+                lineHeight: ed.typography.bodySm.lineHeight,
+                color: ed.colors.stateWarn,
+                textAlign: 'center',
+              }}
+            >
+              Reduce the dose or pick another vial.
+            </Text>
+          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
