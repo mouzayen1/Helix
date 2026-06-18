@@ -23,6 +23,7 @@ import {
   deleteDose,
   deleteDoseSkip,
   deleteVial,
+  parseDismissedBanners,
   endCycle,
   getCurrentUserId,
   listActiveCycles,
@@ -129,7 +130,7 @@ export default function TodayScreen() {
   const ed = useEditorialTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile } = useProfile();
+  const { profile, update: updateProfile } = useProfile();
   const { pref: doseUnitPref } = useDoseUnitPref();
 
   const [cycles, setCycles] = useState<Cycle[]>([]);
@@ -313,6 +314,20 @@ export default function TodayScreen() {
     ).padStart(2, '0')}`;
   }, []);
 
+  const scheduleHintDismissed = useMemo(
+    () => parseDismissedBanners(profile?.dismissed_banners).includes('today_schedule_gestures_v1'),
+    [profile?.dismissed_banners]
+  );
+
+  const dismissScheduleHint = () => {
+    if (scheduleHintDismissed) return;
+    const next = parseDismissedBanners(profile?.dismissed_banners);
+    if (!next.includes('today_schedule_gestures_v1')) {
+      next.push('today_schedule_gestures_v1');
+    }
+    updateProfile({ dismissed_banners: JSON.stringify(next) }).catch(() => {});
+  };
+
   const openSkipSheet = (
     peptideId: string,
     peptideName: string,
@@ -414,6 +429,7 @@ export default function TodayScreen() {
   // Tap behavior: unfinished row → log; logged row → dose sheet; skipped → un-skip.
   // Long-press unfinished row → skip sheet.
   const onScheduleRowPress = (row: (typeof schedule)[number]) => {
+    dismissScheduleHint();
     if (row.skip && !row.logged) {
       const p = findPeptide(row.peptide_id);
       unskipRow(row.skip, p?.name ?? row.peptide_id);
@@ -443,6 +459,7 @@ export default function TodayScreen() {
   };
 
   const onScheduleRowLongPress = (row: (typeof schedule)[number]) => {
+    dismissScheduleHint();
     if (row.logged || row.skip) return;
     const p = findPeptide(row.peptide_id);
     if (!p) return;
@@ -454,6 +471,7 @@ export default function TodayScreen() {
   // confirmation names the cycle and spells out that every row goes with
   // it. Soft end via endCycle: keeps logged history, frees attached vials.
   const onEndCycleFromRow = (row: (typeof schedule)[number]) => {
+    dismissScheduleHint();
     Alert.alert(
       `End ${row.cycleName}?`,
       'This removes all of its scheduled doses from Today and frees any attached vials. Doses you already logged are kept.',
@@ -632,6 +650,20 @@ export default function TodayScreen() {
         {schedule.length > 0 ? (
           <View style={{ marginTop: 36, paddingHorizontal: 24 }}>
             <EyebrowLabel withRule>Today · Schedule</EyebrowLabel>
+            {!scheduleHintDismissed ? (
+              <Text
+                style={{
+                  marginTop: 8,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Hold to skip · swipe to end cycle
+              </Text>
+            ) : null}
             <View style={{ marginTop: 4 }}>
               {schedule.map((row, idx) => {
                 const p = findPeptide(row.peptide_id);
