@@ -28,11 +28,14 @@ export default function LibraryScreen() {
   const [activeCat, setActiveCat] = useState<string>('All');
   const [savedOnly, setSavedOnly] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const savedSet = useMemo(() => new Set(saved), [saved]);
 
   useFocusEffect(
     useCallback(() => {
-      listSavedPeptides().then(setSaved);
+      listSavedPeptides()
+        .then(setSaved)
+        .finally(() => setHydrated(true));
     }, [])
   );
 
@@ -279,7 +282,7 @@ export default function LibraryScreen() {
             : 'All peptides'}
         </EyebrowLabel>
       </View>
-      {filtered.length === 0 ? (
+      {hydrated && filtered.length === 0 ? (
         <View style={{ paddingHorizontal: 24, paddingVertical: 40, alignItems: 'center' }}>
           <Text
             style={{

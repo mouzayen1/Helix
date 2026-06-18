@@ -67,23 +67,28 @@ export default function StacksScreen() {
   // Recomputed on focus so the number always matches what dose-history
   // shows when the user taps through.
   const [doses30d, setDoses30d] = useState<number>(0);
+  const [hydrated, setHydrated] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-        const [a, cs, ss, recent] = await Promise.all([
-          listActiveCycles(),
-          listCycles(),
-          listStacks(),
-          listDoses({ from: since }),
-        ]);
-        setActive(a);
-        // listActiveCycles covers status IN (active, paused); exclude both
-        // from Past so a paused cycle never renders in two sections.
-        setPast(cs.filter((c) => c.status !== 'active' && c.status !== 'paused'));
-        setStacks(ss);
-        setDoses30d(recent.length);
+        try {
+          const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+          const [a, cs, ss, recent] = await Promise.all([
+            listActiveCycles(),
+            listCycles(),
+            listStacks(),
+            listDoses({ from: since }),
+          ]);
+          setActive(a);
+          // listActiveCycles covers status IN (active, paused); exclude both
+          // from Past so a paused cycle never renders in two sections.
+          setPast(cs.filter((c) => c.status !== 'active' && c.status !== 'paused'));
+          setStacks(ss);
+          setDoses30d(recent.length);
+        } finally {
+          setHydrated(true);
+        }
       })();
     }, [])
   );
@@ -172,7 +177,7 @@ export default function StacksScreen() {
             <ActiveCycleHero cycle={c} />
           </View>
         ))
-      ) : (
+      ) : hydrated ? (
         <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
           <HairlineRow strong />
           <View style={{ paddingVertical: 28, alignItems: 'center', gap: 14 }}>
@@ -201,7 +206,7 @@ export default function StacksScreen() {
           </View>
           <HairlineRow strong />
         </View>
-      )}
+      ) : null}
 
       {/* Templates */}
       <View style={{ marginTop: 36, paddingHorizontal: 24 }}>

@@ -136,6 +136,7 @@ export default function TodayScreen() {
   const [vials, setVials] = useState<Vial[]>([]);
   const [todayDoses, setTodayDoses] = useState<Dose[]>([]);
   const [todaySkips, setTodaySkips] = useState<DoseSkip[]>([]);
+  const [hydrated, setHydrated] = useState(false);
   const [doseSheet, setDoseSheet] = useState<Dose | null>(null);
   const [vialSheet, setVialSheet] = useState<Vial | null>(null);
   const [skipSheet, setSkipSheet] = useState<{
@@ -148,21 +149,25 @@ export default function TodayScreen() {
   const [skipNote, setSkipNote] = useState('');
 
   const refresh = useCallback(async () => {
-    if (!getCurrentUserId()) return;
-    const [cs, v] = await Promise.all([listActiveCycles(), listActiveVials()]);
-    setCycles(cs);
-    setVials(v);
-    const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
-      now.getDate()
-    ).padStart(2, '0')}`;
-    const [ds, sk] = await Promise.all([
-      listDoses({ from: midnight.toISOString(), limit: 40 }),
-      listDoseSkips({ from: iso, to: iso }),
-    ]);
-    setTodayDoses(ds);
-    setTodaySkips(sk);
+    try {
+      if (!getCurrentUserId()) return;
+      const [cs, v] = await Promise.all([listActiveCycles(), listActiveVials()]);
+      setCycles(cs);
+      setVials(v);
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+        now.getDate()
+      ).padStart(2, '0')}`;
+      const [ds, sk] = await Promise.all([
+        listDoses({ from: midnight.toISOString(), limit: 40 }),
+        listDoseSkips({ from: iso, to: iso }),
+      ]);
+      setTodayDoses(ds);
+      setTodaySkips(sk);
+    } finally {
+      setHydrated(true);
+    }
   }, []);
 
   useFocusEffect(
@@ -570,15 +575,15 @@ export default function TodayScreen() {
             />
           ) : primaryCycle ? (
             <HeroRing value={0} unit="" label="No doses today" color="brand" />
-          ) : (
+          ) : hydrated ? (
             <HeroRing value={0} unit="" label="No active cycle" color="brand" />
-          )}
+          ) : null}
         </View>
 
         {/* No-cycle CTA — 'Start a cycle' is the dominant action for a new
             user; logging a dose with no cycle is a rare edge, so it's
             demoted to a quiet link beneath rather than a competing button. */}
-        {!primaryCycle ? (
+        {hydrated && !primaryCycle ? (
           <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
             <EditorialButton fullWidth onPress={() => router.push('/cycle/new')}>
               Start a cycle

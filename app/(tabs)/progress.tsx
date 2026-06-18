@@ -32,21 +32,26 @@ export default function ProgressScreen() {
   const [journal, setJournal] = useState<JournalEntry[]>([]);
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [allVials, setAllVials] = useState<Vial[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [ts, js, c, active, past] = await Promise.all([
-          listAllMetricKindsWithLatest(),
-          listJournal(5),
-          getActiveCycle(),
-          listActiveVials(),
-          getVialHistory({ limit: 500 }),
-        ]);
-        setTiles(ts.filter((x) => x.latest));
-        setJournal(js);
-        setActiveCycle(c);
-        setAllVials([...active, ...past]);
+        try {
+          const [ts, js, c, active, past] = await Promise.all([
+            listAllMetricKindsWithLatest(),
+            listJournal(5),
+            getActiveCycle(),
+            listActiveVials(),
+            getVialHistory({ limit: 500 }),
+          ]);
+          setTiles(ts.filter((x) => x.latest));
+          setJournal(js);
+          setActiveCycle(c);
+          setAllVials([...active, ...past]);
+        } finally {
+          setHydrated(true);
+        }
       })();
     }, [])
   );
@@ -152,7 +157,7 @@ export default function ProgressScreen() {
             </Text>
           </Pressable>
         </View>
-        {tiles.length === 0 ? (
+        {hydrated && tiles.length === 0 ? (
           <View style={{ paddingVertical: 28, alignItems: 'center', gap: 14 }}>
             <Text
               style={{
@@ -258,7 +263,7 @@ export default function ProgressScreen() {
           </Pressable>
         </View>
 
-        {journal.length === 0 ? (
+        {hydrated && journal.length === 0 ? (
           <View style={{ paddingVertical: 28, alignItems: 'center', gap: 14 }}>
             <Text
               style={{
