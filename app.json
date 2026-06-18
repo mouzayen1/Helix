@@ -81,6 +81,12 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.1058603300242-phr5kqushvln6ie352e6uu4mo2970sjf"
         }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Helix adds your protocol reminders to your calendar so they sync to your other devices."
+        }
       ]
     ],
     "experiments": {

@@ -34,6 +34,7 @@ import {
   type JournalEntry,
   type Vial,
 } from '../../lib/db';
+import { syncCalendarSafe } from '../../lib/calendar-sync';
 import {
   formatRelativeDue,
   getNextInjectionForCycle,
@@ -273,6 +274,7 @@ export default function CycleDetail() {
         protocol: items,
       });
       setEditing(false);
+      void syncCalendarSafe();
       refresh();
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'Please try again.';
@@ -284,15 +286,18 @@ export default function CycleDetail() {
 
   const onEndCycle = async () => {
     await endCycle(cycle.id);
+    void syncCalendarSafe();
     router.back();
   };
   const onPauseCycle = async () => {
     await pauseCycle(cycle.id);
+    void syncCalendarSafe();
     haptic.warn();
     router.back();
   };
   const onResumeCycle = async () => {
     await resumeCycle(cycle.id);
+    void syncCalendarSafe();
     haptic.success();
     router.back();
   };

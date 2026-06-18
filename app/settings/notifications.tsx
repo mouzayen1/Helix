@@ -15,6 +15,12 @@ import {
   setNotifPrefs,
   type NotifPrefs,
 } from '../../lib/notifications';
+import {
+  disableCalendarSync,
+  enableCalendarSync,
+  getCalendarSyncState,
+  syncCalendarSafe,
+} from '../../lib/calendar-sync';
 
 export default function NotificationsScreen() {
   const ed = useEditorialTheme();
@@ -22,13 +28,33 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
   const [loading, setLoading] = useState(true);
+  const [calSync, setCalSync] = useState(false);
+  const [calBusy, setCalBusy] = useState(false);
 
   useEffect(() => {
     getNotifPrefs().then((p) => {
       setPrefs(p);
       setLoading(false);
     });
+    getCalendarSyncState().then((s) => setCalSync(s.enabled));
   }, []);
+
+  // Calendar sync is independent of the notification mode above — a user can
+  // mirror their schedule into Apple/Google Calendar without in-app alerts.
+  const toggleCalSync = async (next: boolean) => {
+    setCalBusy(true);
+    try {
+      if (next) {
+        const ok = await enableCalendarSync(); // false if permission denied
+        setCalSync(ok);
+      } else {
+        await disableCalendarSync();
+        setCalSync(false);
+      }
+    } finally {
+      setCalBusy(false);
+    }
+  };
 
   const persist = async (patch: Partial<NotifPrefs>) => {
     const next = await setNotifPrefs(patch);
@@ -37,6 +63,10 @@ export default function NotificationsScreen() {
       await ensurePermission();
     }
     await scheduleAllSafe();
+    // Preferred times feed calendar event times too, so keep the calendar in
+    // step with edits here rather than waiting for the daily refresh.
+    // No-ops when calendar sync is disabled.
+    void syncCalendarSafe();
   };
 
   const masterOff = prefs.mode === 'off';
@@ -336,6 +366,18 @@ export default function NotificationsScreen() {
               </View>
             </View>
 
+            {/* Calendar sync — independent of the notification mode above. */}
+            <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
+              <EyebrowLabel withRule>Calendar</EyebrowLabel>
+              <ToggleRow
+                label="Sync to calendar"
+                desc="Adds protocol reminders to your device calendar (Apple or Google)."
+                value={calSync}
+                disabled={calBusy}
+                onChange={(v) => void toggleCalSync(v)}
+              />
+            </View>
+
             <Text
               style={{
                 paddingHorizontal: 24,
@@ -348,7 +390,7 @@ export default function NotificationsScreen() {
                 lineHeight: 16,
               }}
             >
-              All Helix notifications are local. Reminders are rebuilt on app launch for the next 7 days.
+              All Helix notifications are local. Reminders are rebuilt on app launch for the next 7 days. Calendar events cover the next 30 days and refresh daily.
             </Text>
           </>
         )}

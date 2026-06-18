@@ -29,6 +29,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getProfile, hasLegacyLocalData, initDatabase, setCurrentUserId } from '../lib/db';
 import { scheduleAllSafe } from '../lib/notifications';
+import { maybeSyncCalendar } from '../lib/calendar-sync';
 import { syncAll } from '../lib/sync';
 import { ProfileProvider, useProfile } from '../lib/profile-context';
 import { ThemeProvider, useTheme } from '../theme/ThemeContext';
@@ -541,8 +542,15 @@ export default function RootLayout() {
   useEffect(() => {
     if (!dbReady) return;
     scheduleAllSafe();
+    // Calendar sync is throttled to once/day (maybeSyncCalendar) so returning
+    // to the foreground doesn't churn events on the user's other devices —
+    // unlike notifications, calendar writes propagate outward.
+    void maybeSyncCalendar();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') scheduleAllSafe();
+      if (state === 'active') {
+        scheduleAllSafe();
+        void maybeSyncCalendar();
+      }
     });
     return () => sub.remove();
   }, [dbReady]);

@@ -28,6 +28,7 @@ import {
   type CycleProtocolItemPhase,
   type Vial,
 } from '../../lib/db';
+import { syncCalendarSafe } from '../../lib/calendar-sync';
 import { useDoseUnitPref, useProfile } from '../../lib/profile-context';
 import { DoseInputUnitChip, DoseValue } from '../../components/editorial/DoseUnitChip';
 import {
@@ -1106,6 +1107,7 @@ export default function NewCycle() {
           if (__DEV__) console.warn('attachVialToCycle failed', err);
         }
       }
+      void syncCalendarSafe();
       router.replace('/(tabs)/stacks');
     } catch (e) {
       setSaving(false);
