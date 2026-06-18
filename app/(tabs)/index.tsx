@@ -4,7 +4,7 @@
 // stat pair, eyebrow rules).
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DataRow } from '../../components/editorial/DataRow';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
