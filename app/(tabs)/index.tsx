@@ -36,6 +36,7 @@ import {
   type DoseSkip,
   type Vial,
 } from '../../lib/db';
+import { syncCalendarSafe } from '../../lib/calendar-sync';
 import { isItemScheduledOnDay, resolvePhase } from '../../lib/cycle-helpers';
 import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
@@ -349,10 +350,27 @@ export default function TodayScreen() {
     await refresh();
   };
 
-  const onDeleteDose = async (id: string) => {
-    await deleteDose(id);
-    setDoseSheet(null);
-    refresh();
+  // Deleting a dose restores its amount to the vial (see deleteDose).
+  // Confirm first — it's a non-recoverable edit to logged history, and
+  // un-skip / end-cycle on this screen already confirm.
+  const onDeleteDose = (id: string) => {
+    Alert.alert(
+      'Delete this dose?',
+      'This removes it from your log and restores its amount to the vial. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteDose(id);
+            haptic.warn();
+            setDoseSheet(null);
+            refresh();
+          },
+        },
+      ]
+    );
   };
 
   const onMarkDepleted = async (id: string) => {
@@ -361,10 +379,27 @@ export default function TodayScreen() {
     refresh();
   };
 
-  const onDeleteVial = async (id: string) => {
-    await deleteVial(id);
-    setVialSheet(null);
-    refresh();
+  // Deleting a vial is the most destructive action on this screen — it
+  // permanently removes the vial. Doses logged from it are kept (their
+  // vial link is just cleared; see deleteVial). Confirm before firing.
+  const onDeleteVial = (id: string) => {
+    Alert.alert(
+      'Delete this vial?',
+      'This permanently removes the vial and its remaining amount. Doses already logged from it are kept. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteVial(id);
+            haptic.warn();
+            setVialSheet(null);
+            refresh();
+          },
+        },
+      ]
+    );
   };
 
   // Tap behavior: unfinished row → log; logged row → dose sheet; skipped → un-skip.
@@ -420,6 +455,7 @@ export default function TodayScreen() {
           style: 'destructive',
           onPress: async () => {
             await endCycle(row.cycleId);
+            void syncCalendarSafe();
             haptic.warn();
             await refresh();
           },
@@ -551,23 +587,33 @@ export default function TodayScreen() {
           )}
         </View>
 
-        {/* No-cycle CTA pair */}
+        {/* No-cycle CTA — 'Start a cycle' is the dominant action for a new
+            user; logging a dose with no cycle is a rare edge, so it's
+            demoted to a quiet link beneath rather than a competing button. */}
         {!primaryCycle ? (
-          <View
-            style={{
-              marginTop: 32,
-              paddingHorizontal: 24,
-              flexDirection: 'row',
-              gap: 12,
-              justifyContent: 'center',
-            }}
-          >
-            <EditorialButton onPress={() => router.push('/cycle/new')}>
+          <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
+            <EditorialButton fullWidth onPress={() => router.push('/cycle/new')}>
               Start a cycle
             </EditorialButton>
-            <EditorialButton variant="secondary" onPress={() => router.push('/log-dose')}>
-              Log a dose
-            </EditorialButton>
+            <Pressable
+              onPress={() => router.push('/log-dose')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Log a dose"
+              style={{ alignSelf: 'center', marginTop: 16 }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.typography.label.fontFamily,
+                  fontSize: 12,
+                  letterSpacing: 1.8,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Log a dose
+              </Text>
+            </Pressable>
           </View>
         ) : null}
 
