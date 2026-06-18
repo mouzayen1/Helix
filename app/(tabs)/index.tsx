@@ -16,6 +16,7 @@ import { HeroRing } from '../../components/editorial/HeroRing';
 import { MiniDial } from '../../components/editorial/MiniDial';
 import { ScheduleItem, type ScheduleStatus } from '../../components/editorial/ScheduleItem';
 import { StatPair } from '../../components/editorial/StatPair';
+import { SwipeableRow } from '../../components/editorial/SwipeableRow';
 import { useEditorialTheme } from '../../lib/design/theme';
 import {
   createDoseSkip,
@@ -23,6 +24,7 @@ import {
   deleteDose,
   deleteDoseSkip,
   deleteVial,
+  endCycle,
   getCurrentUserId,
   listActiveCycles,
   listActiveVials,
@@ -403,6 +405,29 @@ export default function TodayScreen() {
     openSkipSheet(p.id, p.name, row.window, row.cycleId);
   };
 
+  // Swipe a schedule row → end the whole cycle it belongs to. A cycle
+  // shows as several rows (AM/PM splits, multiple peptides), so the
+  // confirmation names the cycle and spells out that every row goes with
+  // it. Soft end via endCycle: keeps logged history, frees attached vials.
+  const onEndCycleFromRow = (row: (typeof schedule)[number]) => {
+    Alert.alert(
+      `End ${row.cycleName}?`,
+      'This removes all of its scheduled doses from Today and frees any attached vials. Doses you already logged are kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'End cycle',
+          style: 'destructive',
+          onPress: async () => {
+            await endCycle(row.cycleId);
+            haptic.warn();
+            await refresh();
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <>
       <ScrollView
@@ -580,19 +605,25 @@ export default function TodayScreen() {
                   : row.resolvedFreq;
                 return (
                   <View key={`${row.peptide_id}-${row.window}-${idx}`}>
-                    <ScheduleItem
-                      time={time}
-                      title={p.name}
-                      detail={detail}
-                      doseMcg={row.resolvedDose}
-                      caption={row.caption}
-                      // Status keyword stays as-is; ScheduleItem renders
-                      // "OVERDUE" for skipped rows but the dim row + skip
-                      // detail line carry the meaning.
-                      status={status}
-                      onPress={() => onScheduleRowPress(row)}
-                      onLongPress={() => onScheduleRowLongPress(row)}
-                    />
+                    <SwipeableRow
+                      actionLabel="End cycle"
+                      accessibilityActionLabel={`End ${row.cycleName}`}
+                      onAction={() => onEndCycleFromRow(row)}
+                    >
+                      <ScheduleItem
+                        time={time}
+                        title={p.name}
+                        detail={detail}
+                        doseMcg={row.resolvedDose}
+                        caption={row.caption}
+                        // Status keyword stays as-is; ScheduleItem renders
+                        // "OVERDUE" for skipped rows but the dim row + skip
+                        // detail line carry the meaning.
+                        status={status}
+                        onPress={() => onScheduleRowPress(row)}
+                        onLongPress={() => onScheduleRowLongPress(row)}
+                      />
+                    </SwipeableRow>
                     {idx < schedule.length - 1 ? <HairlineRow /> : null}
                   </View>
                 );
