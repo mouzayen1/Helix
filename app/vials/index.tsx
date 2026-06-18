@@ -2,13 +2,15 @@
 // hairline-divided list of vials grouped by peptide.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { HairlineRow } from '../../components/editorial/HairlineRow';
+import { SwipeableRow } from '../../components/editorial/SwipeableRow';
 import { useEditorialTheme } from '../../lib/design/theme';
-import { getVialHistory, listActiveVials, listDoses, type Dose, type Vial } from '../../lib/db';
+import { deleteVial, getVialHistory, listActiveVials, listDoses, type Dose, type Vial } from '../../lib/db';
+import { haptic } from '../../lib/haptics';
 import { findPeptide } from '../../lib/peptides';
 
 type Tab = 'active' | 'history';
@@ -37,32 +39,58 @@ export default function VialsScreen() {
   const [history, setHistory] = useState<Vial[]>([]);
   const [dosesByVial, setDosesByVial] = useState<Record<string, Dose[]>>({});
 
+  const load = useCallback(async () => {
+    const [a, h, allDoses] = await Promise.all([
+      listActiveVials(),
+      getVialHistory({ limit: 200 }),
+      listDoses({ limit: 1000 }),
+    ]);
+    const byVial: Record<string, Dose[]> = {};
+    for (const d of allDoses) {
+      if (!d.vial_id) continue;
+      (byVial[d.vial_id] ||= []).push(d);
+    }
+    setActive(a);
+    setHistory(h);
+    setDosesByVial(byVial);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       let alive = true;
       (async () => {
         setLoading(true);
-        const [a, h, allDoses] = await Promise.all([
-          listActiveVials(),
-          getVialHistory({ limit: 200 }),
-          listDoses({ limit: 1000 }),
-        ]);
-        if (!alive) return;
-        const byVial: Record<string, Dose[]> = {};
-        for (const d of allDoses) {
-          if (!d.vial_id) continue;
-          (byVial[d.vial_id] ||= []).push(d);
-        }
-        setActive(a);
-        setHistory(h);
-        setDosesByVial(byVial);
-        setLoading(false);
+        await load();
+        if (alive) setLoading(false);
       })();
       return () => {
         alive = false;
       };
-    }, [])
+    }, [load])
   );
+
+  // Swipe an active vial → delete it. Hard delete (deleteVial): doses keep
+  // their history, they just lose the vial link. Confirm names the peptide
+  // so an accidental swipe can't wipe a vial silently.
+  const onDeleteVial = (v: Vial) => {
+    const p = findPeptide(v.peptide_id);
+    Alert.alert(
+      `Delete ${p?.name ?? v.peptide_id} vial?`,
+      'This permanently removes the vial. Doses you logged from it are kept — they just lose the vial link.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteVial(v.id);
+            haptic.warn();
+            await load();
+          },
+        },
+      ]
+    );
+  };
 
   const activeByPeptide = useMemo(() => {
     const groups: Record<string, Vial[]> = {};
@@ -223,10 +251,16 @@ export default function VialsScreen() {
                     </View>
                     {vs.map((v, idx) => (
                       <View key={v.id}>
-                        <ActiveVialRow
-                          vial={v}
-                          onPress={() => router.push(`/vials/${v.id}` as any)}
-                        />
+                        <SwipeableRow
+                          actionLabel="Delete"
+                          accessibilityActionLabel={`Delete ${p?.name ?? pid} vial`}
+                          onAction={() => onDeleteVial(v)}
+                        >
+                          <ActiveVialRow
+                            vial={v}
+                            onPress={() => router.push(`/vials/${v.id}` as any)}
+                          />
+                        </SwipeableRow>
                         {idx < vs.length - 1 ? <HairlineRow /> : null}
                       </View>
                     ))}
