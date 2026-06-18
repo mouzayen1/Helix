@@ -1,7 +1,7 @@
 // Today — editorial v1 visual rebuild. Data layer + modals untouched
 // from the v1.2 implementation; only the scroll content is rebuilt with
 // the editorial primitives (hero ring, mini dial row, schedule items,
-// stat pair, eyebrow rules).
+// eyebrow rules).
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -15,7 +15,6 @@ import { HairlineRow } from '../../components/editorial/HairlineRow';
 import { HeroRing } from '../../components/editorial/HeroRing';
 import { MiniDial } from '../../components/editorial/MiniDial';
 import { ScheduleItem, type ScheduleStatus } from '../../components/editorial/ScheduleItem';
-import { StatPair } from '../../components/editorial/StatPair';
 import { SwipeableRow } from '../../components/editorial/SwipeableRow';
 import { useEditorialTheme } from '../../lib/design/theme';
 import {
@@ -184,11 +183,6 @@ export default function TodayScreen() {
     () => cycles.find((c) => c.status === 'active') ?? cycles[0] ?? null,
     [cycles]
   );
-
-  const cycleView = useMemo(() => {
-    if (!primaryCycle) return null;
-    return cycleDayInfo(primaryCycle);
-  }, [primaryCycle]);
 
   // Today's scheduled protocol rows. Twice-daily items split into AM + PM
   // rows so each half can be independently logged.
@@ -559,9 +553,8 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
-        {/* Hero ring — compliance % when there's a schedule, otherwise cycle
-            day progress when there's a cycle but nothing scheduled today,
-            otherwise a brand-tinted "no cycle" prompt. */}
+        {/* Hero ring — Today stays focused on schedule completion. Cycle
+            progress lives on Stacks and cycle detail. */}
         <View style={{ alignItems: 'center', marginTop: 36 }}>
           {schedule.length > 0 ? (
             <HeroRing
@@ -575,13 +568,8 @@ export default function TodayScreen() {
                   : 'brand'
               }
             />
-          ) : primaryCycle && cycleView ? (
-            <HeroRing
-              value={cycleView.pct}
-              unit="%"
-              label={`Day ${cycleView.displayDay} of ${cycleView.total}`}
-              color="brand"
-            />
+          ) : primaryCycle ? (
+            <HeroRing value={0} unit="" label="No doses today" color="brand" />
           ) : (
             <HeroRing value={0} unit="" label="No active cycle" color="brand" />
           )}
@@ -614,21 +602,6 @@ export default function TodayScreen() {
                 Log a dose
               </Text>
             </Pressable>
-          </View>
-        ) : null}
-
-        {/* Cycle stats — day / progress / remaining (primary cycle) */}
-        {primaryCycle && cycleView ? (
-          <View style={{ marginTop: 32, marginHorizontal: 24 }}>
-            <HairlineRow strong />
-            <StatPair
-              cells={[
-                { value: cycleView.displayDay, unit: `/${cycleView.total}`, label: 'Day' },
-                { value: `${cycleView.pct}`, unit: '%', label: 'Progress' },
-                { value: cycleView.remaining, unit: 'd', label: 'Remaining' },
-              ]}
-            />
-            <HairlineRow strong />
           </View>
         ) : null}
 
