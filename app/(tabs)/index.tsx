@@ -615,33 +615,13 @@ export default function TodayScreen() {
           ) : null}
         </View>
 
-        {/* No-cycle CTA — 'Start a cycle' is the dominant action for a new
-            user; logging a dose with no cycle is a rare edge, so it's
-            demoted to a quiet link beneath rather than a competing button. */}
+        {/* No-cycle CTA: one obvious prompt for a brand-new user. Logging
+            a dose stays available from the global + chooser. */}
         {hydrated && !primaryCycle ? (
           <View style={{ marginTop: 32, paddingHorizontal: 24 }}>
             <EditorialButton fullWidth onPress={() => router.push('/cycle/new')}>
               Start a cycle
             </EditorialButton>
-            <Pressable
-              onPress={() => router.push('/log-dose')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Log a dose"
-              style={{ alignSelf: 'center', marginTop: 16 }}
-            >
-              <Text
-                style={{
-                  fontFamily: ed.typography.label.fontFamily,
-                  fontSize: 12,
-                  letterSpacing: 1.8,
-                  color: ed.colors.ink3,
-                  textTransform: 'uppercase',
-                }}
-              >
-                Log a dose
-              </Text>
-            </Pressable>
           </View>
         ) : null}
 

@@ -8,9 +8,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useEditorialTheme } from '../../lib/design/theme';
+import { EditorialSheet, SheetHeader } from '../../components/editorial/EditorialSheet';
 import { getAuthState, subscribeAuth, type AuthState } from '../../lib/auth/session';
 import { isAuthConfigured } from '../../lib/supabase';
-import { getCurrentUserId } from '../../lib/db';
+import { getCurrentUserId, listActiveCycles } from '../../lib/db';
 
 type TabItem = {
   name: string;
@@ -85,6 +86,40 @@ function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
   const currentName = state.routes[state.index]?.name;
 
+  // The center + is the single "add" entry point on every tab. It opens a
+  // chooser so any user - none, one, or several cycles - can either log a
+  // dose or start another cycle without hunting through the Stacks tab.
+  // We query active/paused cycles when opening only to ORDER the options:
+  // a user with a cycle most often wants to log, a user with none to start.
+  const [addOpen, setAddOpen] = useState(false);
+  const [hasCycle, setHasCycle] = useState(false);
+
+  const openAddSheet = async () => {
+    let active = false;
+    try {
+      active = (await listActiveCycles()).length > 0;
+    } catch {
+      active = false;
+    }
+    setHasCycle(active);
+    setAddOpen(true);
+  };
+
+  const goFromSheet = (route: string) => {
+    setAddOpen(false);
+    router.push(route as never);
+  };
+
+  const addActions = hasCycle
+    ? [
+        { label: 'Log a dose', sub: 'Record a dose for an active cycle', route: '/log-dose' },
+        { label: 'Start a cycle', sub: 'Add another protocol', route: '/cycle/new' },
+      ]
+    : [
+        { label: 'Start a cycle', sub: 'Pick a template or build your own', route: '/cycle/new' },
+        { label: 'Log a dose', sub: 'Record a one-off dose', route: '/log-dose' },
+      ];
+
   const renderTab = (item: TabItem) => {
     const active = item.name === currentName;
     return (
@@ -115,37 +150,81 @@ function CustomTabBar({ state, navigation }: any) {
   };
 
   return (
-    <View
-      style={[
-        styles.bar,
-        {
-          backgroundColor: ed.colors.bg,
-          borderTopColor: ed.colors.line,
-          paddingBottom: Math.max(insets.bottom, 10),
-        },
-      ]}
-    >
-      {LEFT.map(renderTab)}
-      <Pressable
-        onPress={() => router.push('/log-dose')}
-        accessibilityRole="button"
-        accessibilityLabel="Log a dose"
-        hitSlop={8}
-        style={[styles.fab, { backgroundColor: ed.colors.brand }]}
+    <>
+      <View
+        style={[
+          styles.bar,
+          {
+            backgroundColor: ed.colors.bg,
+            borderTopColor: ed.colors.line,
+            paddingBottom: Math.max(insets.bottom, 10),
+          },
+        ]}
       >
-        <Text
-          style={{
-            fontFamily: ed.fraunces('Fraunces_300Light'),
-            fontSize: 32,
-            color: ed.colors.bg,
-            lineHeight: 32,
-          }}
+        {LEFT.map(renderTab)}
+        <Pressable
+          onPress={openAddSheet}
+          accessibilityRole="button"
+          accessibilityLabel="Add"
+          hitSlop={8}
+          style={[styles.fab, { backgroundColor: ed.colors.brand }]}
         >
-          +
-        </Text>
-      </Pressable>
-      {RIGHT.map(renderTab)}
-    </View>
+          <Text
+            style={{
+              fontFamily: ed.fraunces('Fraunces_300Light'),
+              fontSize: 32,
+              color: ed.colors.bg,
+              lineHeight: 32,
+            }}
+          >
+            +
+          </Text>
+        </Pressable>
+        {RIGHT.map(renderTab)}
+      </View>
+
+      <EditorialSheet visible={addOpen} onClose={() => setAddOpen(false)}>
+        <SheetHeader title="Add" detail="Log a dose or start a new cycle" />
+        <View style={{ marginTop: 12 }}>
+          {addActions.map((a, i) => (
+            <Pressable
+              key={a.route}
+              onPress={() => goFromSheet(a.route)}
+              accessibilityRole="button"
+              accessibilityLabel={a.label}
+              style={{
+                paddingVertical: 18,
+                borderTopWidth: i === 0 ? 0 : 1,
+                borderTopColor: ed.colors.line,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 20,
+                  letterSpacing: -0.3,
+                  color: ed.colors.ink1,
+                }}
+              >
+                {a.label}
+              </Text>
+              <Text
+                style={{
+                  marginTop: 3,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {a.sub}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </EditorialSheet>
+    </>
   );
 }
 
