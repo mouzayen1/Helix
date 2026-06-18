@@ -164,7 +164,7 @@ export default function LibraryScreen() {
               color: ed.colors.ink1,
               paddingVertical: 10,
             }}
-            autoCapitalize="characters"
+            autoCapitalize="none"
           />
           {query.length > 0 ? (
             <Pressable
