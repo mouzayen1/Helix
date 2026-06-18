@@ -6,6 +6,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { IconCog } from '../../components/Icons';
 import { DataRow } from '../../components/editorial/DataRow';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
@@ -537,18 +538,16 @@ export default function TodayScreen() {
             accessibilityRole="button"
             accessibilityLabel="Open settings"
             hitSlop={10}
-            style={{ paddingTop: 4 }}
+            style={{
+              width: 36,
+              height: 36,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: ed.colors.line,
+            }}
           >
-            <Text
-              style={{
-                fontFamily: ed.typography.dataLg.fontFamily,
-                fontSize: 24,
-                letterSpacing: 4,
-                color: ed.colors.ink2,
-              }}
-            >
-              ····
-            </Text>
+            <IconCog size={18} color={ed.colors.ink2} />
           </Pressable>
         </View>
 
