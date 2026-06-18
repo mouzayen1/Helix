@@ -4,7 +4,7 @@
 // eyebrow rules).
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DataRow } from '../../components/editorial/DataRow';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
@@ -137,6 +137,7 @@ export default function TodayScreen() {
   const [todayDoses, setTodayDoses] = useState<Dose[]>([]);
   const [todaySkips, setTodaySkips] = useState<DoseSkip[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [doseSheet, setDoseSheet] = useState<Dose | null>(null);
   const [vialSheet, setVialSheet] = useState<Vial | null>(null);
   const [skipSheet, setSkipSheet] = useState<{
@@ -175,6 +176,15 @@ export default function TodayScreen() {
       refresh();
     }, [refresh])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
 
   const displayName = profile?.display_name?.trim() || 'there';
 
@@ -469,6 +479,14 @@ export default function TodayScreen() {
         style={{ flex: 1, backgroundColor: ed.colors.bg }}
         contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={ed.colors.ink3}
+            colors={[ed.colors.brand]}
+          />
+        }
       >
         {/* Header — eyebrow date + serif greeting + ···· settings */}
         <View

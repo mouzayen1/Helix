@@ -4,7 +4,7 @@
 // catalog list with color hairline + serif name + mono metadata.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
 import { EyebrowLabel } from '../../components/editorial/EyebrowLabel';
@@ -29,15 +29,31 @@ export default function LibraryScreen() {
   const [savedOnly, setSavedOnly] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const savedSet = useMemo(() => new Set(saved), [saved]);
+
+  const refresh = useCallback(async () => {
+    try {
+      setSaved(await listSavedPeptides());
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      listSavedPeptides()
-        .then(setSaved)
-        .finally(() => setHydrated(true));
-    }, [])
+      refresh();
+    }, [refresh])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(query), 150);
@@ -71,6 +87,14 @@ export default function LibraryScreen() {
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={ed.colors.ink3}
+          colors={[ed.colors.brand]}
+        />
+      }
     >
       {/* Header */}
       <View style={{ paddingHorizontal: 24 }}>

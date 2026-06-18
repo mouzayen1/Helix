@@ -4,7 +4,7 @@
 // header rail.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
@@ -68,36 +68,56 @@ export default function StacksScreen() {
   // shows when the user taps through.
   const [doses30d, setDoses30d] = useState<number>(0);
   const [hydrated, setHydrated] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      const [a, cs, ss, recent] = await Promise.all([
+        listActiveCycles(),
+        listCycles(),
+        listStacks(),
+        listDoses({ from: since }),
+      ]);
+      setActive(a);
+      // listActiveCycles covers status IN (active, paused); exclude both
+      // from Past so a paused cycle never renders in two sections.
+      setPast(cs.filter((c) => c.status !== 'active' && c.status !== 'paused'));
+      setStacks(ss);
+      setDoses30d(recent.length);
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        try {
-          const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-          const [a, cs, ss, recent] = await Promise.all([
-            listActiveCycles(),
-            listCycles(),
-            listStacks(),
-            listDoses({ from: since }),
-          ]);
-          setActive(a);
-          // listActiveCycles covers status IN (active, paused); exclude both
-          // from Past so a paused cycle never renders in two sections.
-          setPast(cs.filter((c) => c.status !== 'active' && c.status !== 'paused'));
-          setStacks(ss);
-          setDoses30d(recent.length);
-        } finally {
-          setHydrated(true);
-        }
-      })();
-    }, [])
+      refresh();
+    }, [refresh])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: ed.colors.bg }}
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={ed.colors.ink3}
+          colors={[ed.colors.brand]}
+        />
+      }
     >
       {/* Header */}
       <View style={{ paddingHorizontal: 24 }}>

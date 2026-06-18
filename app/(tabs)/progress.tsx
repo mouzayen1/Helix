@@ -3,7 +3,7 @@
 // journal preview matches the Cycle Detail / Today schedule rhythm.
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
@@ -33,28 +33,40 @@ export default function ProgressScreen() {
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [allVials, setAllVials] = useState<Vial[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [ts, js, c, active, past] = await Promise.all([
+        listAllMetricKindsWithLatest(),
+        listJournal(5),
+        getActiveCycle(),
+        listActiveVials(),
+        getVialHistory({ limit: 500 }),
+      ]);
+      setTiles(ts.filter((x) => x.latest));
+      setJournal(js);
+      setActiveCycle(c);
+      setAllVials([...active, ...past]);
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        try {
-          const [ts, js, c, active, past] = await Promise.all([
-            listAllMetricKindsWithLatest(),
-            listJournal(5),
-            getActiveCycle(),
-            listActiveVials(),
-            getVialHistory({ limit: 500 }),
-          ]);
-          setTiles(ts.filter((x) => x.latest));
-          setJournal(js);
-          setActiveCycle(c);
-          setAllVials([...active, ...past]);
-        } finally {
-          setHydrated(true);
-        }
-      })();
-    }, [])
+      refresh();
+    }, [refresh])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
 
   const costSummary = useMemo(() => {
     const withCost = allVials.filter((v) => v.cost_usd != null && v.cost_usd > 0);
@@ -79,6 +91,14 @@ export default function ProgressScreen() {
       style={{ flex: 1, backgroundColor: ed.colors.bg }}
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 140 }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={ed.colors.ink3}
+          colors={[ed.colors.brand]}
+        />
+      }
     >
       {/* Header */}
       <View style={{ paddingHorizontal: 24 }}>
