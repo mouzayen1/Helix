@@ -72,11 +72,11 @@ const MAX_START_OFFSET = 30;
 const MIN_START_OFFSET = -90;
 
 const GOALS: Goal[] = [
-  { id: 'Healing', subtitle: 'Tendons, gut, skin' },
-  { id: 'Growth', subtitle: 'GH / IGF-1 axis' },
-  { id: 'Fat-loss', subtitle: 'GLP-1, lipolytic' },
-  { id: 'Cognitive', subtitle: 'Focus, anxiolytic' },
-  { id: 'Longevity', subtitle: 'Mitochondria, pineal' },
+  { id: 'Healing', subtitle: 'Repair and recovery' },
+  { id: 'Growth', subtitle: 'Recovery and sleep' },
+  { id: 'Fat-loss', subtitle: 'Weight-management' },
+  { id: 'Cognitive', subtitle: 'Focus and calm' },
+  { id: 'Longevity', subtitle: 'Energy and aging' },
   { id: 'Custom', subtitle: 'Build from scratch' },
 ];
 
@@ -718,6 +718,35 @@ const TEMPLATES: Template[] = [
   },
 ];
 
+const TEMPLATE_SUMMARIES: Record<string, string> = {
+  healing_bpc_solo: 'A simple BPC-157 starting point for repair-focused tracking.',
+  healing_classic: 'A common two-peptide repair template with BPC-157 and TB-500.',
+  healing_plus: 'Repair support with an added skin and scalp component.',
+  healing_ghkcu_solo: 'A skin and scalp template using GHK-Cu only.',
+  healing_kpv_gut: 'A gut-inflammation template using KPV only.',
+  growth_classic: 'A recovery and sleep template using Ipamorelin with CJC no-DAC.',
+  growth_cjc_dac: 'A low-frequency CJC-DAC template with weekly dosing.',
+  growth_cjc_dac_ipamor: 'A combined long-acting and daily-pulse growth template.',
+  growth_tesamor: 'A Tesamorelin template based on the standard daily schedule.',
+  growth_sermor: 'A simple pre-bed Sermorelin template.',
+  growth_mk677: 'An oral daily template with no injections.',
+  fatloss_sema: 'A gradual weekly Semaglutide ramp.',
+  fatloss_tirz: 'A gradual weekly Tirzepatide ramp.',
+  fatloss_reta: 'A gradual weekly Retatrutide research ramp.',
+  fatloss_cagrisema: 'A paired weekly Semaglutide and Cagrilintide template.',
+  fatloss_aod: 'A simple morning AOD-9604 template.',
+  fatloss_amq: 'An oral daily 5-amino-1MQ template.',
+  cognitive_selank: 'A short intranasal Selank course.',
+  cognitive_semax: 'A short intranasal Semax course.',
+  cognitive_cerebro: 'A short Cerebrolysin course with daily logging.',
+  cognitive_dihexa: 'A short oral Dihexa research course.',
+  longevity_epi: 'A short pre-bed Epitalon course.',
+  longevity_motsc: 'A weekly MOTS-c template.',
+  longevity_ta1: 'A twice-weekly immune-support template.',
+  longevity_nad: 'A NAD+ template with two or three sessions per week.',
+  longevity_mito: 'A combined mitochondrial-support template.',
+};
+
 function parseDefaultDose(dose: string): number {
   const m = dose.match(/(\d+(?:\.\d+)?)/);
   if (!m || m[1] === undefined) return 250;
@@ -762,6 +791,23 @@ function formatDate(d: Date): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function templateSummary(tpl: Template): string {
+  return TEMPLATE_SUMMARIES[tpl.id] ?? tpl.description;
+}
+
+function templateCadence(tpl: Template): string {
+  const unique = Array.from(new Set(tpl.items.map((it) => it.freq)));
+  if (unique.length === 0) return 'Custom timing';
+  if (unique.length === 1) return unique[0] ?? 'Custom timing';
+  if (unique.length === 2) return unique.join(' + ');
+  return `${unique.length} schedules`;
+}
+
+function templateItemCount(tpl: Template): string {
+  const count = tpl.items.length;
+  return `${count} ${count === 1 ? 'item' : 'items'}`;
 }
 
 // Floor to local midnight so day-offset math is exact (no time-of-day or
@@ -1341,147 +1387,45 @@ export default function NewCycle() {
     </View>
   );
 
-  const TemplateRow = ({ tpl, selected }: { tpl: Template; selected: boolean }) => (
-    <Pressable
-      onPress={() => setSelectionId(tpl.id)}
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      style={{
-        paddingVertical: 18,
-        gap: 10,
-      }}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
-        <RadioDot active={selected} ed={ed} />
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <Text
+  const TemplateRow = ({ tpl, selected }: { tpl: Template; selected: boolean }) => {
+    const choose = (): void => {
+      setSelectionId(tpl.id);
+      applySelection(tpl.id);
+      setStep(3);
+    };
+    return (
+      <Pressable
+        onPress={choose}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        style={{
+          minHeight: 92,
+          paddingVertical: 16,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <RadioDot active={selected} ed={ed} />
+          <View style={{ flex: 1 }}>
+            <View
               style={{
-                fontFamily: ed.fraunces('Fraunces_400Regular'),
-                fontSize: 19,
-                letterSpacing: -0.3,
-                color: selected ? ed.colors.ink1 : ed.colors.ink2,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
               }}
             >
-              {tpl.name}
-            </Text>
-            {tpl.popular ? (
               <Text
                 style={{
-                  fontFamily: ed.typography.labelSm.fontFamily,
-                  fontSize: ed.typography.labelSm.fontSize,
-                  letterSpacing: ed.typography.labelSm.letterSpacing,
-                  color: ed.colors.brand,
-                  textTransform: 'uppercase',
+                  flexShrink: 1,
+                  fontFamily: ed.fraunces('Fraunces_400Regular'),
+                  fontSize: 19,
+                  letterSpacing: 0,
+                  color: selected ? ed.colors.ink1 : ed.colors.ink2,
                 }}
               >
-                ★ Popular
+                {tpl.name}
               </Text>
-            ) : null}
-          </View>
-          <Text
-            style={{
-              marginTop: 4,
-              fontFamily: ed.typography.bodySm.fontFamily,
-              fontSize: ed.typography.bodySm.fontSize,
-              lineHeight: ed.typography.bodySm.lineHeight,
-              color: ed.colors.ink3,
-            }}
-          >
-            {tpl.description}
-          </Text>
-          <Text
-            style={{
-              marginTop: 4,
-              fontFamily: ed.typography.labelSm.fontFamily,
-              fontSize: ed.typography.labelSm.fontSize,
-              letterSpacing: ed.typography.labelSm.letterSpacing,
-              color: ed.colors.ink3,
-              textTransform: 'uppercase',
-            }}
-          >
-            {tpl.duration_weeks} weeks · {tpl.phase}
-          </Text>
-          {/* Benefits preview — first 2 only on the card so the row stays scannable. */}
-          {tpl.benefits.length > 0 ? (
-            <View style={{ marginTop: 8, gap: 3 }}>
-              {tpl.benefits.slice(0, 2).map((b) => (
-                <Text
-                  key={b}
-                  style={{
-                    fontFamily: ed.typography.bodySm.fontFamily,
-                    fontSize: 13,
-                    lineHeight: 18,
-                    color: ed.colors.ink2,
-                  }}
-                >
-                  · {b}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {tpl.rampUp ? (
-            <Text
-              style={{
-                marginTop: 8,
-                fontFamily: ed.fraunces('Fraunces_400Regular_Italic'),
-                fontSize: 13,
-                lineHeight: 18,
-                color: ed.colors.brand,
-              }}
-            >
-              {tpl.rampUp}
-            </Text>
-          ) : null}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-            {tpl.items.map((it, i) => {
-              const p = findPeptide(it.peptide_id);
-              return (
-                <View
-                  key={`${it.peptide_id}-${i}`}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderWidth: 1,
-                    borderColor: ed.colors.lineStrong,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: 3,
-                      backgroundColor: p?.color ?? ed.colors.brand,
-                    }}
-                  />
-                  <Text
-                    style={{
-                      fontFamily: ed.typography.labelSm.fontFamily,
-                      fontSize: ed.typography.labelSm.fontSize,
-                      letterSpacing: ed.typography.labelSm.letterSpacing,
-                      color: ed.colors.ink2,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {p?.name ?? it.peptide_id}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-          {(() => {
-            const phased = tpl.items
-              .map((it) => ({
-                peptide: findPeptide(it.peptide_id),
-                phases: getPeptideExtras(it.peptide_id)?.cycleTemplate?.phases ?? [],
-              }))
-              .filter((x) => x.phases.length > 1);
-            if (phased.length === 0) return null;
-            return (
-              <View style={{ marginTop: 10, gap: 4 }}>
+              {tpl.popular ? (
                 <Text
                   style={{
                     fontFamily: ed.typography.labelSm.fontFamily,
@@ -1491,41 +1435,66 @@ export default function NewCycle() {
                     textTransform: 'uppercase',
                   }}
                 >
-                  Multi-phase
+                  Popular
                 </Text>
-                {phased.map(({ peptide, phases }) => (
-                  <Text
-                    key={peptide?.id ?? 'x'}
-                    style={{
-                      fontFamily: ed.typography.dataMd.fontFamily,
-                      fontSize: 12,
-                      lineHeight: 16,
-                      color: ed.colors.ink2,
-                    }}
-                  >
-                    {peptide?.name ?? ''}:{' '}
-                    {phases
-                      .map(
-                        (ph) =>
-                          `${ph.name} ${ph.weeks}w${ph.dose_modifier ? ` (${ph.dose_modifier})` : ''}`
-                      )
-                      .join(' → ')}
-                  </Text>
-                ))}
-              </View>
-            );
-          })()}
+              ) : null}
+            </View>
+            <Text
+              style={{
+                marginTop: 5,
+                fontFamily: ed.typography.bodySm.fontFamily,
+                fontSize: ed.typography.bodySm.fontSize,
+                lineHeight: ed.typography.bodySm.lineHeight,
+                color: ed.colors.ink3,
+              }}
+            >
+              {templateSummary(tpl)}
+            </Text>
+            <View
+              style={{
+                marginTop: 8,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              <Text
+                style={{
+                  flex: 1,
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.ink3,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {tpl.duration_weeks} weeks · {templateItemCount(tpl)} · {templateCadence(tpl)}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: ed.typography.labelSm.fontFamily,
+                  fontSize: ed.typography.labelSm.fontSize,
+                  letterSpacing: ed.typography.labelSm.letterSpacing,
+                  color: ed.colors.brand,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Customize
+              </Text>
+            </View>
+          </View>
         </View>
-      </View>
-    </Pressable>
-  );
+      </Pressable>
+    );
+  };
 
   const Step2 = () => {
     const scratchSelected = selectionId === SCRATCH_ID;
     return (
       <View>
         <View style={{ marginTop: 14 }}>
-          <EditorialHeadline size="title1">{`Pick a *template*.`}</EditorialHeadline>
+          <EditorialHeadline size="title1">{`Choose a *start*.`}</EditorialHeadline>
           <Text
             style={{
               marginTop: 8,
@@ -1535,7 +1504,7 @@ export default function NewCycle() {
               color: ed.colors.ink3,
             }}
           >
-            Or start blank and build your own.
+            Tap any option to review and adjust it.
           </Text>
         </View>
         {/* Template search */}
@@ -1563,7 +1532,7 @@ export default function NewCycle() {
             ⌕
           </Text>
           <TextInput
-            placeholder="SEARCH BY NAME, BENEFIT, PEPTIDE"
+            placeholder="SEARCH BY NAME OR ITEM"
             placeholderTextColor={ed.colors.ink3}
             value={templateQuery}
             onChangeText={setTemplateQuery}
@@ -1607,7 +1576,7 @@ export default function NewCycle() {
               No pre-built templates for {goal}. Start from scratch below.
             </Text>
           ) : (
-            filteredTemplates.map((tpl, idx) => (
+            filteredTemplates.map((tpl) => (
               <View key={tpl.id}>
                 <TemplateRow tpl={tpl} selected={selectionId === tpl.id} />
                 <HairlineRow />
@@ -1615,8 +1584,12 @@ export default function NewCycle() {
             ))
           )}
           <Pressable
-            onPress={() => setSelectionId(SCRATCH_ID)}
-            accessibilityRole="radio"
+            onPress={() => {
+              setSelectionId(SCRATCH_ID);
+              applySelection(SCRATCH_ID);
+              setStep(3);
+            }}
+            accessibilityRole="button"
             accessibilityState={{ selected: scratchSelected }}
             style={{
               flexDirection: 'row',
@@ -1647,7 +1620,7 @@ export default function NewCycle() {
                   textTransform: 'uppercase',
                 }}
               >
-                Build your own protocol
+                Add each item yourself
               </Text>
             </View>
           </Pressable>
