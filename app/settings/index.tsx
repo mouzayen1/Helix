@@ -295,6 +295,8 @@ export default function Settings() {
       {/* Data */}
       <View style={{ marginTop: 28, paddingHorizontal: 24 }}>
         <EyebrowLabel withRule>Data</EyebrowLabel>
+        <NavRow label="Calendar" onPress={() => router.push('/calendar' as any)} />
+        <HairlineRow />
         <NavRow label="Dose history" onPress={() => router.push('/dose-history' as any)} />
         <HairlineRow />
         <NavRow label="Export data" onPress={() => router.push('/settings/export')} />

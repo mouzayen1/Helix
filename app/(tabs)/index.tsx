@@ -6,7 +6,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconCog } from '../../components/Icons';
+import { IconCalendar, IconCog } from '../../components/Icons';
 import { DataRow } from '../../components/editorial/DataRow';
 import { EditorialButton } from '../../components/editorial/EditorialButton';
 import { EditorialHeadline } from '../../components/editorial/EditorialHeadline';
@@ -533,22 +533,40 @@ export default function TodayScreen() {
               {`${greet(new Date())}, *${displayName}*.`}
             </EditorialHeadline>
           </View>
-          <Pressable
-            onPress={() => router.push('/settings')}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-            hitSlop={10}
-            style={{
-              width: 36,
-              height: 36,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: ed.colors.line,
-            }}
-          >
-            <IconCog size={18} color={ed.colors.ink2} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Pressable
+              onPress={() => router.push('/calendar' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Open calendar"
+              hitSlop={10}
+              style={{
+                width: 36,
+                height: 36,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: ed.colors.line,
+              }}
+            >
+              <IconCalendar size={18} color={ed.colors.ink2} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/settings')}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              hitSlop={10}
+              style={{
+                width: 36,
+                height: 36,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: ed.colors.line,
+              }}
+            >
+              <IconCog size={18} color={ed.colors.ink2} />
+            </Pressable>
+          </View>
         </View>
 
         {/* Paused-cycle notice — keep visible because it's a critical state.

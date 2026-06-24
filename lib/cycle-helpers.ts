@@ -14,7 +14,7 @@
 // start day, NOT a calendar week. If a phase begins on a Wednesday, the
 // first on-window runs Wed–Sun. (See lib/freq.ts isScheduledOnDay.)
 
-import { getActiveVial, getLastDoseForCyclePeptide, listCycles } from './db';
+import { getActiveVial, getLastDoseForCyclePeptide, listActiveCycles, listCycles } from './db';
 import type { Cycle, CycleProtocolItem, CycleProtocolItemPhase } from './db';
 import { describeFreq, isScheduledOnDay } from './freq';
 import { PEPTIDES } from './peptides';
@@ -251,4 +251,99 @@ export function formatRelativeDue(isoDate: string): string {
   else if (abs < 36 * 3_600_000) out = `${hr}h`;
   else out = `${day}d`;
   return ms < 0 ? `${out} ago` : `in ${out}`;
+}
+
+// ── Calendar projection ────────────────────────────────────────────────────
+// getScheduledDosesInRange expands every active cycle into the concrete
+// scheduled doses that fall inside a date window — the data behind the
+// in-app calendar's day cells. It walks the same phase resolver +
+// isItemScheduledOnDay path as the Today screen and the notification/OS
+// calendar schedulers, so phase ramps and N-on/M-off windows stay
+// consistent. No freq re-parsing lives here.
+
+// Parse a date-only string as LOCAL midnight. `new Date('YYYY-MM-DD')` parses
+// as UTC, which lands on the previous local day in any negative-UTC offset and
+// shifts the cycle-day counter. starts_on/ends_on are stored local (see
+// app/cycle/new.tsx isoDate), so they must be read back local. Mirrors the
+// helper in app/(tabs)/index.tsx — kept private here to avoid a circular import.
+function parseLocalDate(s: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return new Date(s);
+  return new Date(+m[1], +m[2] - 1, +m[3]);
+}
+
+// Whole-day delta compared at date granularity (time-of-day stripped) via
+// Date.UTC of the local Y/M/D, so DST and timezone offsets can't push a
+// same-day pair across a boundary. Same math as the Today screen.
+function daysBetween(a: Date, b: Date): number {
+  const ms =
+    Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) -
+    Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  return Math.round(ms / 864e5);
+}
+
+function isoLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate()
+  ).padStart(2, '0')}`;
+}
+
+export type ScheduledDose = {
+  date: string; // local YYYY-MM-DD
+  peptide_id: string;
+  peptide_name: string;
+  dose_mcg: number;
+  freq: string;
+  time_of_day: string;
+  cycle_id: string;
+  cycle_name: string;
+};
+
+/** Project scheduled doses across every ACTIVE cycle for each local day in
+ *  [from, to] (inclusive, compared at date granularity).
+ *
+ *  Bounding is intentional and differs from the Today screen: a dose is
+ *  emitted only on days inside the cycle's own window (dayOfCycle in
+ *  [0, total]). Today keeps showing an active cycle's schedule past its end
+ *  date; a forward-looking calendar should stop at ends_on rather than paint
+ *  a stale cycle across future months. Paused cycles dose nothing, matching
+ *  the Today schedule and the schedulers. */
+export async function getScheduledDosesInRange(from: Date, to: Date): Promise<ScheduledDose[]> {
+  const cycles = (await listActiveCycles()).filter((c) => c.status === 'active');
+  const out: ScheduledDose[] = [];
+  // Normalize the walk bounds to local midnights so the cursor steps cleanly
+  // one calendar day at a time regardless of the caller's time-of-day.
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+
+  for (const cycle of cycles) {
+    const items = parseProtocol(cycle);
+    if (items.length === 0) continue;
+    const cycleStart = parseLocalDate(cycle.starts_on);
+    const total = Math.max(0, daysBetween(cycleStart, parseLocalDate(cycle.ends_on)));
+
+    const cursor = new Date(start);
+    while (cursor.getTime() <= end.getTime()) {
+      const day = daysBetween(cycleStart, cursor);
+      if (day >= 0 && day <= total) {
+        const dateIso = isoLocalDate(cursor);
+        for (const item of items) {
+          if (!isItemScheduledOnDay(item, day)) continue;
+          const rp = resolvePhase(item, day);
+          out.push({
+            date: dateIso,
+            peptide_id: item.peptide_id,
+            peptide_name: peptideName(item.peptide_id),
+            dose_mcg: rp.dose_mcg,
+            freq: rp.freq,
+            time_of_day: item.time_of_day,
+            cycle_id: cycle.id,
+            cycle_name: cycle.name,
+          });
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+  return out;
 }

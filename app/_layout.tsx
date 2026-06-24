@@ -310,6 +310,7 @@ function RootGate() {
         <Stack.Screen name="stack/new" />
         <Stack.Screen name="stack/[id]" />
         <Stack.Screen name="metric/[kind]" />
+        <Stack.Screen name="calendar" />
         <Stack.Screen name="settings" />
         <Stack.Screen
           name="log-dose"

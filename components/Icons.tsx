@@ -85,6 +85,13 @@ export const IconCog = ({ size = 18, color = 'currentColor' }: Props) => (
   </Svg>
 );
 
+export const IconCalendar = ({ size = 18, color = 'currentColor' }: Props) => (
+  <Svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M3 4.5h12v11H3z" />
+    <Path d="M3 7.5h12M6 2.5v3M12 2.5v3" />
+  </Svg>
+);
+
 export const IconClose = ({ size = 14, color = 'currentColor' }: Props) => (
   <Svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round">
     <Path d="M2 2l10 10M12 2L2 12" />
